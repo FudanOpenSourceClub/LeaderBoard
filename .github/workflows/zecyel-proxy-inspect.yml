@@ -1,0 +1,28 @@
+name: Inspect Zecyel export proxy
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/zecyel-proxy-inspect.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 3
+    steps:
+      - name: Inspect proxy timeout and recent export errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== Service state ==="
+          systemctl is-active leadboard.service
+          echo "=== Nginx proxy settings ==="
+          sudo nginx -T 2>&1 | grep -E 'proxy_read_timeout|proxy_send_timeout|proxy_pass|location /|proxy_buffering|server_name' | head -n 60 || true
+          echo "=== Recent Nginx upstream errors (redacted) ==="
+          sudo tail -n 100 /var/log/nginx/error.log 2>/dev/null | grep -E 'upstream|timed out|prematurely' | tail -n 20 | sed -E 's/client: [^,]*/client: [redacted]/g' || true
+          echo "=== Recent LeadBoard exceptions (no environment printed) ==="
+          sudo journalctl -u leadboard.service --since '-10 min' --no-pager --output=cat | grep -Ei 'Error:|TimeoutError|rate limit|HTTP 403|HTTP 429|HTTP 5[0-9][0-9]' | tail -n 25 || true

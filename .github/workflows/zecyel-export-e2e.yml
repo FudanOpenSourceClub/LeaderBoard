@@ -2,6 +2,9 @@ name: Zecyel Public Export E2E
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Deploy LeadBoard"]
+    types: [completed]
   push:
     paths:
       - ".github/workflows/zecyel-export-e2e.yml"
@@ -12,7 +15,8 @@ permissions:
 jobs:
   public-export:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    timeout-minutes: 12
     steps:
       - name: Verify deployed application and export actual public GitHub events
         shell: bash
@@ -28,7 +32,7 @@ jobs:
           curl -kfsSL --connect-timeout 10 --max-time 20 "$base/contributors" | grep -q '<!doctype html>'
 
           echo "Downloading live Zecyel public contribution CSV"
-          status="$(curl -kLsS --connect-timeout 10 --max-time 240 \
+          status="$(curl -kLsS --connect-timeout 10 --max-time 480 \
             -o "$tmp/zecyel.csv" -w '%{http_code}' \
             "$base/api/v1/public-contributors/Zecyel/export.csv")"
           echo "Export HTTP status: $status"
@@ -45,6 +49,8 @@ jobs:
           assert all(r["仓库"] and r["时间(UTC)"] and r["SHA或编号"] for r in rows)
           assert all("公开 GitHub" in r["统计口径"] for r in rows)
           kinds = Counter(r["类型"] for r in rows)
+          assert kinds["commit"] > 1000, "Date-window collection did not pass the old 1000-commit cap"
+          assert kinds["commit"] <= 5000, "Exceeded configured per-kind limit"
           assert kinds["pull_request"] > 0, "No public PRs in export"
           assert kinds["issue"] > 0, "No public issues in export"
           print("Export verified: %d total public source-linked events" % len(rows))

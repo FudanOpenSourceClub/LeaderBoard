@@ -23,7 +23,7 @@ it.each([
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response()));
   await expect(fetchHealth()).rejects.toThrow();
 });
-it("renders the campus project board and service status", () => {
+it("renders the campus project board without a header status widget", () => {
   const html = renderToStaticMarkup(
     createElement(MemoryRouter, null,
       createElement(FiltersProvider, null,
@@ -31,8 +31,10 @@ it("renders the campus project board and service status", () => {
       ),
     ),
   );
-  expect(html).toContain('role="status"');
+  expect(html).not.toContain("服务正常");
+  expect(html).not.toContain("服务异常");
   expect(html).toContain("校内开源项目");
   expect(html).toContain("加上我的项目");
-  expect(html).toContain("项目顺序只是展示顺序，不代表排名");
+  expect(html).toContain("精选开源项目");
+  expect(html).not.toContain("先放几个我们能核验的");
 });

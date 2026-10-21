@@ -1,0 +1,53 @@
+name: Zecyel Public Export E2E
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/zecyel-export-e2e.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  public-export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Verify deployed application and export actual public GitHub events
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="http://47.116.20.196"
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+
+          echo "Checking application health"
+          curl -kfsSL --connect-timeout 10 --max-time 20 "$base/health" | grep -q '"status":"ok"'
+          echo "Checking LeaderBoard contributor page"
+          curl -kfsSL --connect-timeout 10 --max-time 20 "$base/contributors" | grep -q '<!doctype html>'
+
+          echo "Downloading live Zecyel public contribution CSV"
+          status="$(curl -kLsS --connect-timeout 10 --max-time 240 \
+            -o "$tmp/zecyel.csv" -w '%{http_code}' \
+            "$base/api/v1/public-contributors/Zecyel/export.csv")"
+          echo "Export HTTP status: $status"
+          test "$status" = "200"
+          python3 - "$tmp/zecyel.csv" <<'PY'
+          import csv
+          import sys
+          from collections import Counter
+          path = sys.argv[1]
+          with open(path, encoding="utf-8-sig", newline="") as file:
+              rows = list(csv.DictReader(file))
+          assert rows, "Export has no contribution records"
+          assert all(r["原始链接"].startswith("https://github.com/") for r in rows)
+          assert all(r["仓库"] and r["时间(UTC)"] and r["SHA或编号"] for r in rows)
+          assert all("公开 GitHub" in r["统计口径"] for r in rows)
+          kinds = Counter(r["类型"] for r in rows)
+          assert kinds["pull_request"] > 0, "No public PRs in export"
+          assert kinds["issue"] > 0, "No public issues in export"
+          print("Export verified: %d total public source-linked events" % len(rows))
+          print("Events by type: " + str(dict(kinds)))
+          print("Sample verified URL: " + rows[0]["原始链接"])
+          PY

@@ -100,7 +100,7 @@ export async function collectPublicContributions(
           repository,
           occurredAt,
           identifier,
-          title: kind === "commit" ? (item.commit?.message ?? "").split("\n")[0] : (item.title ?? ""),
+          title: kind === "commit" ? ((item.commit?.message ?? "").split("\n")[0] ?? "") : (item.title ?? ""),
           url,
         });
       }

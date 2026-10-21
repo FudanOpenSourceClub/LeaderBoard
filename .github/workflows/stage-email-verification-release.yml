@@ -28,7 +28,7 @@ jobs:
           set -euo pipefail
           tar --exclude=.git -czf /tmp/leadboard-release.tgz .
           (cd /tmp && sha256sum leadboard-release.tgz > leadboard-release.sha256)
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: leadboard-release
           path: |

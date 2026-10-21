@@ -65,4 +65,44 @@ describe("Zecyel public contribution pilot", () => {
     const fetcher = vi.fn().mockResolvedValue(new Response("rate limited", { status: 403 })) as unknown as typeof fetch;
     await expect(collectPublicContributions("Zecyel", "token", fetcher)).rejects.toThrow("HTTP 403");
   });
+
+  it("retrieves more than GitHub's per-query 1000 cap by splitting date windows", async () => {
+    const commits = Array.from({ length: 1200 }, (_, i) => {
+      const day = i < 600 ? "2025-01-12" : "2026-02-02";
+      return {
+        html_url: "https://github.com/test/project/commit/" + String(i).padStart(40, "0"),
+        sha: String(i).padStart(40, "0"),
+        repository: { full_name: "test/project" },
+        commit: { author: { date: day + "T10:00:00Z" }, message: "Change " + i },
+      };
+    });
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/issues")) {
+        const type = url.searchParams.get("q")?.includes("is:pr") ? "pr" : "issue";
+        return new Response(JSON.stringify(endpointPayloads[type]), { status: 200 });
+      }
+      const query = url.searchParams.get("q") ?? "";
+      const match = /author-date:(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})/.exec(query);
+      const subset = match
+        ? commits.filter((item) =>
+            item.commit.author.date.slice(0, 10) >= match[1]! &&
+            item.commit.author.date.slice(0, 10) <= match[2]!)
+        : commits;
+      const page = Number(url.searchParams.get("page") ?? 1);
+      return new Response(JSON.stringify({
+        total_count: subset.length, incomplete_results: false,
+        items: subset.slice((page - 1) * 100, page * 100),
+      }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const result = await collectPublicContributions("Zecyel", "token", fetcher);
+    expect(result.totals.commit).toBe(1200);
+    expect(result.rows.filter((item) => item.kind === "commit")).toHaveLength(1200);
+    expect(new Set(result.rows.map((item) => item.kind + item.url)).size).toBe(result.rows.length);
+    expect(result.truncated).toBe(false);
+    expect(vi.mocked(fetcher).mock.calls.some(([url]) => 
+      String(url).includes("author-date%3A"))).toBe(true);
+  });
+
 });

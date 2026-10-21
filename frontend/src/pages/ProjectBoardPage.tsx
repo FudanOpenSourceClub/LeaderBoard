@@ -108,7 +108,7 @@ export function ProjectBoardPage() {
         <div>
           <span className="hero-badge">FUDAN · OPEN SOURCE</span>
           <h1>复旦开源项目</h1>
-          <p>先从能通过公开来源核验的实验室项目开始。这里不做排行榜，也不拿 Star 给项目排座次，只把值得被看见的复旦开源项目认真收进来。</p>
+          <p>复旦校内仓库必吃榜</p>
         </div>
       </section>
 

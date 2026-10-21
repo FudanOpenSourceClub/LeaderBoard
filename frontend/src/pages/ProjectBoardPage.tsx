@@ -139,7 +139,7 @@ export function ProjectBoardPage() {
         <div className="section-title-row">
           <div>
             <p className="section-kicker">FUDAN PROJECTS</p>
-            <h2>精选复旦开源项目</h2>
+            <h2>复旦开源仓库必吃榜</h2>
             <p>项目顺序只是展示顺序，不代表排名。</p>
           </div>
           <span className="count-pill">{campusProjects.length} 个已核验项目</span>

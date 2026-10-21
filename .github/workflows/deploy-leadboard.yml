@@ -147,12 +147,12 @@ jobs:
       - name: Install OAuth settings from encrypted repository secret
         shell: bash
         env:
-          OAUTH_CLIENT_SECRET: ${{ secrets.LEADERBOARD_GITHUB_OAUTH_CLIENT_SECRET }}
+          OAUTH_CLIENT_SECRET: ${{ secrets.LEADERBOARD }}
         run: |
           set -euo pipefail
           umask 077
           if [ -z "$OAUTH_CLIENT_SECRET" ]; then
-            echo "::error::Set LEADERBOARD_GITHUB_OAUTH_CLIENT_SECRET in repository Actions secrets first."
+            echo "::error::Set LEADERBOARD in repository Actions secrets first."
             exit 1
           fi
           [[ "$OAUTH_CLIENT_SECRET" =~ ^[A-Za-z0-9_]{20,128}$ ]]

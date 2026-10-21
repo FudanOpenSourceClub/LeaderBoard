@@ -1,0 +1,22 @@
+name: Verify Public HTTPS
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/verify-public-https.yml"
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Public TLS verification from external GitHub runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://47.116.20.196
+          echo "Checking public HTTPS trust and reachability"
+          curl -fSs --retry 2 --retry-delay 2 --connect-timeout 8 --max-time 20 "$base/health" | grep -q '"status":"ok"'
+          curl -fSs --retry 2 --retry-delay 2 --connect-timeout 8 --max-time 20 -H 'Accept: text/html' "$base/join" | grep -qi '<!doctype html>'
+          echo "Public HTTPS and /join page: OK"

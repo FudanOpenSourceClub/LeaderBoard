@@ -139,7 +139,7 @@ export function ProjectBoardPage() {
         <div className="section-title-row">
           <div>
             <p className="section-kicker">CAMPUS PROJECTS</p>
-            <h2>先放几个我们能核验的</h2>
+            <h2>精选开源项目</h2>
             <p>项目顺序只是展示顺序，不代表排名。</p>
           </div>
           <span className="count-pill">{campusProjects.length} 个已核验项目</span>

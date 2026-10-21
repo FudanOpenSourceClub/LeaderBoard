@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react";
 import { Link, NavLink, Route, Routes } from "react-router";
 import type { LeadBoardApiClient } from "./api/client";
 import { ContributorDetailPage } from "./pages/ContributorDetailPage";
 import { ContributorLeaderboardPage } from "./pages/ContributorLeaderboardPage";
 import { ProjectBoardPage } from "./pages/ProjectBoardPage";
 import { IdentityVerificationPage } from "./pages/IdentityVerificationPage";
-import { fetchHealth } from "./health";
 import "./enhancements.css";
 
 function navClass({ isActive }: { isActive: boolean }) {
@@ -13,17 +11,6 @@ function navClass({ isActive }: { isActive: boolean }) {
 }
 
 export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient; isMock?: boolean }) {
-  const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetchHealth(controller.signal).then(
-      (health) => setStatus(health.status),
-      () => { if (!controller.signal.aborted) setStatus("error"); },
-    );
-    return () => controller.abort();
-  }, []);
-
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -41,10 +28,6 @@ export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient;
           <NavLink className={navClass} to="/join">加入贡献榜</NavLink>
         </nav>
 
-        <span className={`service-pill service-${status}`} role="status">
-          <span className="service-dot" aria-hidden="true" />
-          {status === "loading" ? "连接中" : status === "ok" ? "服务正常" : "服务异常"}
-        </span>
       </header>
 
       <div className="workspace">
@@ -60,12 +43,6 @@ export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient;
             <a className="nav-link" href="https://github.com/swiftgorge5-eng/LeadBoard" target="_blank" rel="noreferrer">
               <span aria-hidden="true">↗</span> 项目仓库
             </a>
-          </div>
-          <div className="side-spacer" />
-          <div className="side-card">
-            <span className="side-card-kicker">LEADBOARD</span>
-            <strong>让每一份微小贡献都被看见。</strong>
-            <p>基于真实 GitHub 活动持续更新。</p>
           </div>
         </aside>
 

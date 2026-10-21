@@ -1,0 +1,64 @@
+name: UI Review Screenshots
+
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/ui-review-screenshots.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    if: github.head_ref == 'ui/phase1-copy-status' || github.ref_name == 'ui/phase1-copy-status'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm run build --workspace=@leadboard/contracts
+      - name: Launch isolated mocked preview
+        shell: bash
+        env:
+          VITE_LEADBOARD_API_MODE: mock
+        run: |
+          set -euo pipefail
+          nohup npm run dev --workspace=@leadboard/frontend -- --port 5175 --strictPort > /tmp/leadboard-preview.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:5175/projects >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/leadboard-preview.log
+          exit 1
+      - name: Install Chinese font for accurate screenshot rendering
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq fonts-noto-cjk
+          fc-cache -f
+          fc-list :lang=zh family | head -n 3
+      - name: Capture before and after on desktop and mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || true)"
+          if [[ -z "$browser" ]]; then
+            echo "::error::Chrome/Chromium executable missing on runner"
+            exit 1
+          fi
+          mkdir -p previews
+          "$browser" --headless=new --no-sandbox --disable-gpu --hide-scrollbars --virtual-time-budget=6000 --window-size=1440,1000 --screenshot="$PWD/previews/after-desktop.png" "http://127.0.0.1:5175/projects"
+          "$browser" --headless=new --no-sandbox --disable-gpu --hide-scrollbars --virtual-time-budget=6000 --window-size=390,850 --screenshot="$PWD/previews/after-mobile.png" "http://127.0.0.1:5175/projects"
+          "$browser" --headless=new --no-sandbox --disable-gpu --hide-scrollbars --virtual-time-budget=6000 --window-size=1440,1000 --screenshot="$PWD/previews/before-desktop.png" "https://47.116.20.196/projects"
+          "$browser" --headless=new --no-sandbox --disable-gpu --hide-scrollbars --virtual-time-budget=6000 --window-size=390,850 --screenshot="$PWD/previews/before-mobile.png" "https://47.116.20.196/projects"
+          file previews/*.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: leadboard-ui-phase1-before-after
+          path: previews/*.png
+          retention-days: 14

@@ -1,0 +1,38 @@
+name: TLS Prerequisite Check
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/tls-preflight.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 5
+    steps:
+      - name: Check HTTPS issuance prerequisites without changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "CERTBOT:"
+          if command -v certbot >/dev/null 2>&1; then certbot --version; else echo "not installed"; fi
+          echo "SNAP CERTBOT:"
+          snap list certbot 2>/dev/null | tail -n 2 || true
+          echo "NGINX:"
+          nginx -v
+          echo "HTTP CHALLENGE:"
+          curl -sS -o /dev/null -w 'local_http=%{http_code}\n' --max-time 5 http://127.0.0.1/.well-known/acme-challenge/leadboard-preflight || true
+          echo "IP:"
+          curl -fsS --connect-timeout 5 --max-time 10 https://api.ipify.org || true
+          echo
+          echo "LETSENCRYPT CERT DIRECTORY:"
+          sudo find /etc/letsencrypt/live -maxdepth 1 -mindepth 1 -type d -printf '%f\n' 2>/dev/null || true
+          echo "TIMER:"
+          systemctl list-timers --all --no-pager | grep -Ei 'certbot|snap.certbot' || true
+          echo "CURRENT 443:"
+          ss -lnt | grep -E ':443[[:space:]]' || true
+          echo "NGINX SITE:"
+          sudo cat /etc/nginx/sites-enabled/leadboard

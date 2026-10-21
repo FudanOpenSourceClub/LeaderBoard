@@ -1,0 +1,25 @@
+name: Public LeadBoard Smoke Check
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/public-smoke-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify production reachability from outside the ECS instance
+        shell: bash
+        env:
+          SITE_URL: http://47.116.20.196
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 2 --retry-delay 2 --connect-timeout 10 --max-time 20 "$SITE_URL/health" | grep -q '"status":"ok"'
+          curl -fsS --retry 2 --retry-delay 2 --connect-timeout 10 --max-time 20 -H 'Accept: text/html' "$SITE_URL/" | grep -qi '<!doctype html>'
+          echo "Public health endpoint and homepage are reachable."

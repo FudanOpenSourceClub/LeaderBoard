@@ -9,6 +9,14 @@ export interface PublicContribution {
   identifier: string;
   title: string;
   url: string;
+  repositoryGithubId?: string | null;
+  objectGithubId?: string | null;
+  mergedAt?: string | null;
+  scoring?: {
+    whitelisted: boolean; month: string; repositoryMonthCount: number; monthCount: number;
+    repositoryCapExceeded: boolean; monthlyCapExceeded: boolean; points: number;
+    prOpenedPoints: number; prMergedPoints: number;
+  };
 }
 
 export interface PublicContributionExport {
@@ -20,9 +28,11 @@ export interface PublicContributionExport {
 
 type SearchKind = PublicContribution["kind"];
 interface SearchItem {
+  id?: number;
   html_url?: string;
   repository_url?: string;
-  repository?: { full_name?: string };
+  repository?: { full_name?: string; id?: number };
+  pull_request?: { merged_at?: string | null };
   created_at?: string;
   title?: string;
   number?: number;
@@ -38,7 +48,7 @@ const MAX_PER_KIND = 5000;
 const GITHUB_SEARCH_LIMIT = 1000; // GitHub still caps each individual search query at 1000.
 const DAY_MS = 86_400_000;
 const SEARCH_KINDS: SearchKind[] = ["commit", "pull_request", "issue"];
-const HEADER = ["类型", "仓库", "时间(UTC)", "SHA或编号", "标题", "原始链接", "统计口径"];
+const HEADER = ["类型", "仓库", "时间(UTC)", "SHA或编号", "标题", "原始链接", "统计口径", "GitHub仓库ID", "GitHub对象ID", "合并时间(UTC)", "白名单", "月份(北京时间)", "仓库月度次序", "月度有效次序", "超过仓库月限3次", "超过总月限10次", "得分", "PR提交得分", "PR合并得分"];
 
 function utcDay(time: number): string {
   return new Date(time).toISOString().slice(0, 10);
@@ -58,6 +68,7 @@ export async function collectPublicContributions(
   username: string,
   githubToken: string,
   fetcher: typeof fetch = fetch,
+  options: { since?: string } = {},
 ): Promise<PublicContributionExport> {
   if (!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(username)) {
     throw new Error("Invalid GitHub username");
@@ -131,8 +142,10 @@ export async function collectPublicContributions(
 
   for (const kind of SEARCH_KINDS) {
     const seen = new Set<string>();
+    const since = options.since ? new Date(options.since).toISOString().slice(0, 10) : null;
     const baseQuery = "author:" + username + (kind === "commit" ? "" :
-      " is:" + (kind === "pull_request" ? "pr" : "issue"));
+      " is:" + (kind === "pull_request" ? "pr" : "issue"))
+      + (since ? (kind === "commit" ? " committer-date:>=" : " updated:>=") + since : "");
 
     function addItems(items: SearchItem[]) {
       for (const item of items) {
@@ -150,6 +163,10 @@ export async function collectPublicContributions(
           kind, repository, occurredAt, identifier,
           title: kind === "commit" ? ((item.commit?.message ?? "").split("\n")[0] ?? "") : (item.title ?? ""),
           url,
+          repositoryGithubId: item.repository?.id ? String(item.repository.id) : null,
+          objectGithubId: item.id ? String(item.id) : null,
+          mergedAt: kind === "pull_request" && item.pull_request?.merged_at
+            && !Number.isNaN(Date.parse(item.pull_request.merged_at)) ? item.pull_request.merged_at : null,
         });
         seen.add(url);
       }
@@ -223,6 +240,12 @@ export function publicContributionCsv(data: PublicContributionExport): string {
     HEADER,
     ...data.rows.map((r) => [
       r.kind, r.repository, r.occurredAt, r.identifier, r.title, r.url, scope,
+      r.repositoryGithubId ?? "", r.objectGithubId ?? "", r.mergedAt ?? "",
+      r.scoring ? String(r.scoring.whitelisted) : "", r.scoring?.month ?? "",
+      r.scoring ? String(r.scoring.repositoryMonthCount) : "", r.scoring ? String(r.scoring.monthCount) : "",
+      r.scoring ? String(r.scoring.repositoryCapExceeded) : "", r.scoring ? String(r.scoring.monthlyCapExceeded) : "",
+      r.scoring ? String(r.scoring.points) : "", r.scoring ? String(r.scoring.prOpenedPoints) : "",
+      r.scoring ? String(r.scoring.prMergedPoints) : "",
     ]),
   ];
   return "\uFEFF" + values.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";

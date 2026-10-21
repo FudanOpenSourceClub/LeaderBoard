@@ -29,10 +29,14 @@ const tables = {
     id: id(), github_id: optional("bigint"), login: optional("text"), avatar_url: optional("text"),
     actor_type: required("text", "'Unknown'::text"), is_bot: required("boolean", "false"),
     enrolled_at: optional(timestamp), public_synced_at: optional(timestamp),
+    public_sync_version: required("integer", "0"),
     public_sync_truncated: required("boolean", "false"), public_sync_incomplete: required("boolean", "false"),
     created_at: required(timestamp, "now()"), updated_at: required(timestamp, "now()"),
   },
+  scoring_repositories: {github_id:required("bigint"),full_name:required("text"),html_url:required("text"),enabled:required("boolean","false"),updated_at:required(timestamp,"now()")},
   contributor_public_activities: {
+    id:id(),repository_github_id:optional("bigint"),object_github_id:optional("bigint"),merged_at:optional(timestamp),
+    first_seen_at:required(timestamp,"now()"),last_seen_at:required(timestamp,"now()"),
     contributor_id: required("bigint"), kind: required("text"), repository: required("text"),
     identifier: required("text"), occurred_at: required(timestamp), title: required("text"), html_url: required("text"),
   },
@@ -62,12 +66,15 @@ const tables = {
     error_message: optional("text"), created_at: required(timestamp, "now()"),
   },
   members: {
+    student_fingerprint:optional("text"),registration_github_id:optional("bigint"),
+    registration_session_hash:optional("text"),registration_session_expires_at:optional(timestamp),
     id: id(), email_fingerprint: required("text"), email_domain: required("text"),
     verification_status: required("text", "'verified'::text"), verified_at: required(timestamp),
     last_reverified_at: required(timestamp), created_at: required(timestamp, "now()"),
     updated_at: required(timestamp, "now()"),
   },
   email_verification_challenges: {
+    student_fingerprint:optional("text"),requested_github_id:optional("bigint"),requested_github_login:optional("text"),
     id: id(), email_fingerprint: required("text"), email_domain: required("text"),
     requester_ip_fingerprint: required("text"), code_hash: required("text"), code_salt: required("text"),
     expires_at: required(timestamp), attempt_count: required("integer", "0"), used_at: optional(timestamp),
@@ -111,9 +118,12 @@ const uniques = [
   ["groups", "name"], ["repositories", "github_id"], ["repositories", "node_id"],
   ["contributors", "github_id"], ["commits", "repository_id", "sha"],
   ["pull_requests", "repository_id", "github_id"], ["issues", "repository_id", "github_id"],
+  ["members", "student_fingerprint"], ["members", "registration_github_id"], ["members", "registration_session_hash"],
+  ["contributor_public_activities", "contributor_id", "kind", "repository_github_id", "identifier"],
   ["members", "email_fingerprint"], ["github_oauth_states", "state_hash"],
 ];
 const indexes = {
+  member_single_github_account_idx:["member_github_accounts","member_id"],
   repositories_tracked_idx: ["repositories", "tracked"],
   repositories_group_id_idx: ["repositories", "group_id"],
   commits_authored_at_idx: ["commits", "authored_at"],
@@ -139,7 +149,8 @@ const primaryKeys = {
   groups: ["id"],
   repositories: ["id"],
   contributors: ["id"],
-  contributor_public_activities: ["contributor_id", "kind", "repository", "identifier"],
+  scoring_repositories:["github_id"],
+  contributor_public_activities: ["id"],
   commits: ["id"],
   pull_requests: ["id"],
   issues: ["id"],
@@ -211,7 +222,7 @@ try {
   if (problems.length) {
     for (const problem of problems) console.error(problem);
     process.exitCode = 1;
-  } else console.info("Database schema verified: 14 tables, columns, foreign keys, unique constraints, and indexes.");
+  } else console.info("Database schema verified: 15 tables, columns, foreign keys, unique constraints, and indexes.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;

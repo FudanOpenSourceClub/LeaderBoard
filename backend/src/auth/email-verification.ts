@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomInt, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomInt, scryptSync, timingSafeEqual } from "node:crypto";
 import type { PoolClient } from "pg";
 import { getDbPool, withTransaction } from "../db/index.js";
 
@@ -16,13 +16,15 @@ export interface VerificationEmailSender {
   }): Promise<void>;
 }
 
+export interface RegistrationInput { studentId: string; githubLogin: string }
 export interface EmailVerificationApi {
-  sendCode(email: string, requesterIp: string): Promise<{
+  sendCode(email: string, requesterIp: string, registration: RegistrationInput): Promise<{
     sent: true;
     retryAfterSeconds: number;
     expiresInSeconds: number;
   }>;
-  verifyCode(email: string, code: string): Promise<{ verified: true; memberId: string }>;
+  verifyCode(email: string, code: string): Promise<{ verified: true; memberId: string; registrationToken?: string }>;
+  resumeRegistration?(token: string): Promise<string>;
 }
 
 export class EmailAuthError extends Error {
@@ -52,6 +54,7 @@ export interface EmailVerificationOptions {
   allowedDomains: string[];
   now?: () => Date;
   generateCode?: () => string;
+  lookupGithubAccount?: (login: string) => Promise<{ githubId: string; login: string }>;
 }
 
 function normalizeEmail(email: string): string {
@@ -104,7 +107,49 @@ export class EmailVerificationService implements EmailVerificationApi {
     this.generateCode = options.generateCode ?? (() => String(randomInt(0, 1_000_000)).padStart(6, "0"));
   }
 
-  async sendCode(rawEmail: string, requesterIp: string): Promise<{
+  private async lookupGithubAccount(login: string): Promise<{ githubId: string; login: string }> {
+    if (this.options.lookupGithubAccount) return this.options.lookupGithubAccount(login);
+    const token=process.env.GITHUB_TOKEN?.trim();
+    let response: Response;
+    try {
+      response=await fetch(`https://api.github.com/users/${encodeURIComponent(login)}`, {
+        headers: { Accept:"application/vnd.github+json", "User-Agent":"LeaderBoard", ...(token ? {Authorization:`Bearer ${token}`} : {}) },
+        signal:AbortSignal.timeout(12000),
+      });
+    } catch { throw new EmailAuthError("GITHUB_LOOKUP_UNAVAILABLE",503,"暂时无法核验 GitHub 账号"); }
+    if (response.status===404) throw new EmailAuthError("GITHUB_ACCOUNT_NOT_FOUND",400,"GitHub 账号不存在");
+    if (!response.ok) throw new EmailAuthError("GITHUB_LOOKUP_UNAVAILABLE",503,"暂时无法核验 GitHub 账号");
+    const account=await response.json() as {id?:unknown;login?:unknown;type?:unknown};
+    if (typeof account.id!=="number" || !Number.isSafeInteger(account.id) || account.id<=0
+        || typeof account.login!=="string" || account.login.toLowerCase()!==login.toLowerCase() || account.type!=="User") {
+      throw new EmailAuthError("INVALID_GITHUB_ACCOUNT",400,"请填写个人 GitHub 账号");
+    }
+    return {githubId:String(account.id),login:account.login};
+  }
+
+  private async ensureAvailable(client: PoolClient, email: string, student: string, githubId: string): Promise<void> {
+    const duplicate=await client.query(
+      `SELECT 1 FROM members WHERE email_fingerprint=$1 OR student_fingerprint=$2 OR registration_github_id=$3
+       UNION ALL SELECT 1 FROM github_accounts WHERE github_id=$3
+       UNION ALL SELECT 1 FROM contributors WHERE github_id=$3 AND enrolled_at IS NOT NULL LIMIT 1`,
+      [email,student,githubId],
+    );
+    if (duplicate.rows.length) throw new EmailAuthError("ALREADY_REGISTERED",409,"该学号、邮箱或 GitHub 账号已经注册，不能重复注册");
+  }
+
+  async resumeRegistration(token: string): Promise<string> {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new EmailAuthError("REGISTRATION_SESSION_REQUIRED",401,"请先完成邮箱验证");
+    const hash=createHash("sha256").update(token).digest("hex");
+    const result=await getDbPool().query<{id:string}>(
+      `SELECT m.id::text FROM members m WHERE m.registration_session_hash=$1
+       AND m.registration_session_expires_at>$2
+       AND NOT EXISTS (SELECT 1 FROM member_github_accounts a WHERE a.member_id=m.id)`,[hash,this.now()],
+    );
+    if (!result.rows[0]) throw new EmailAuthError("REGISTRATION_SESSION_REQUIRED",401,"没有可继续的注册，请先完成邮箱验证");
+    return result.rows[0].id;
+  }
+
+  async sendCode(rawEmail: string, requesterIp: string, registration: RegistrationInput): Promise<{
     sent: true;
     retryAfterSeconds: number;
     expiresInSeconds: number;
@@ -115,6 +160,12 @@ export class EmailVerificationService implements EmailVerificationApi {
       throw new EmailAuthError("INVALID_FUDAN_EMAIL", 400, "请输入有效的复旦邮箱");
     }
 
+    if (!registration || !/^[0-9]{6,20}$/.test(registration.studentId.trim())
+        || !/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(registration.githubLogin.trim())) {
+      throw new EmailAuthError("INVALID_REGISTRATION", 400, "请填写学号和 GitHub 用户名");
+    }
+    const identity = await this.lookupGithubAccount(registration.githubLogin.trim());
+    const studentFingerprint = hmacFingerprint(this.options.hmacSecret, "student", registration.studentId.trim());
     const now = this.now();
     const fingerprint = hmacFingerprint(this.options.hmacSecret, "email", email);
     const ipFingerprint = hmacFingerprint(this.options.hmacSecret, "ip", requesterIp || "unknown");
@@ -126,7 +177,9 @@ export class EmailVerificationService implements EmailVerificationApi {
     const expiresAt = new Date(now.getTime() + CODE_TTL_MS);
 
     const challengeId = await withTransaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(1279411270)");
       await lockFingerprint(client, fingerprint);
+      await this.ensureAvailable(client, fingerprint, studentFingerprint, identity.githubId);
 
       const latest = await client.query<{ created_at: Date }>(
         `SELECT created_at
@@ -170,10 +223,11 @@ export class EmailVerificationService implements EmailVerificationApi {
       const inserted = await client.query<{ id: string }>(
         `INSERT INTO email_verification_challenges
            (email_fingerprint, email_domain, requester_ip_fingerprint, code_hash, code_salt,
-            expires_at, attempt_count, delivery_status, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,0,'pending',$7)
+            expires_at, attempt_count, delivery_status, created_at,
+            student_fingerprint, requested_github_id, requested_github_login)
+         VALUES ($1,$2,$3,$4,$5,$6,0,'pending',$7,$8,$9,$10)
          RETURNING id::text`,
-        [fingerprint, domain, ipFingerprint, codeHash, salt, expiresAt, now],
+        [fingerprint, domain, ipFingerprint, codeHash, salt, expiresAt, now, studentFingerprint, identity.githubId, identity.login],
       );
       return inserted.rows[0]!.id;
     });
@@ -195,7 +249,7 @@ export class EmailVerificationService implements EmailVerificationApi {
     return { sent: true, retryAfterSeconds: 60, expiresInSeconds: 600 };
   }
 
-  async verifyCode(rawEmail: string, code: string): Promise<{ verified: true; memberId: string }> {
+  async verifyCode(rawEmail: string, code: string): Promise<{ verified: true; memberId: string; registrationToken?: string }> {
     const email = normalizeEmail(rawEmail);
     const domain = emailDomain(email);
     if (!email.includes("@") || !isAllowedDomain(domain, this.domains)) {
@@ -208,7 +262,10 @@ export class EmailVerificationService implements EmailVerificationApi {
     const now = this.now();
     const fingerprint = hmacFingerprint(this.options.hmacSecret, "email", email);
 
+    const registrationToken = randomBytes(32).toString("base64url");
+    const sessionHash = createHash("sha256").update(registrationToken).digest("hex");
     const result = await withTransaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(1279411270)");
       await lockFingerprint(client, fingerprint);
       const found = await client.query<{
         id: string;
@@ -217,8 +274,11 @@ export class EmailVerificationService implements EmailVerificationApi {
         expires_at: Date;
         attempt_count: number;
         used_at: Date | null;
+        student_fingerprint: string | null;
+        requested_github_id: string | null;
       }>(
-        `SELECT id::text, code_hash, code_salt, expires_at, attempt_count, used_at
+        `SELECT id::text, code_hash, code_salt, expires_at, attempt_count, used_at,
+                  student_fingerprint, requested_github_id::text
            FROM email_verification_challenges
           WHERE email_fingerprint=$1
             AND delivery_status IN ('pending','sent')
@@ -242,28 +302,28 @@ export class EmailVerificationService implements EmailVerificationApi {
         return { kind: nextAttempts >= MAX_ATTEMPTS ? "locked" as const : "invalid" as const };
       }
 
+      if (!challenge.student_fingerprint || !challenge.requested_github_id) {
+        throw new EmailAuthError("INVALID_REGISTRATION", 400, "请重新填写注册信息并获取验证码");
+      }
+      await this.ensureAvailable(client, fingerprint, challenge.student_fingerprint, challenge.requested_github_id);
       await client.query(
         "UPDATE email_verification_challenges SET used_at=$2 WHERE id=$1",
         [challenge.id, now],
       );
       const member = await client.query<{ id: string }>(
         `INSERT INTO members
-           (email_fingerprint, email_domain, verification_status, verified_at, last_reverified_at, created_at, updated_at)
-         VALUES ($1,$2,'verified',$3,$3,$3,$3)
-         ON CONFLICT (email_fingerprint) DO UPDATE SET
-           email_domain=EXCLUDED.email_domain,
-           verification_status='verified',
-           verified_at=COALESCE(members.verified_at, EXCLUDED.verified_at),
-           last_reverified_at=EXCLUDED.last_reverified_at,
-           updated_at=EXCLUDED.updated_at
+           (email_fingerprint, email_domain, verification_status, verified_at, last_reverified_at, created_at, updated_at,
+            student_fingerprint, registration_github_id, registration_session_hash, registration_session_expires_at)
+         VALUES ($1,$2,'verified',$3,$3,$3,$3,$4,$5,$6,$7)
          RETURNING id::text`,
-        [fingerprint, domain, now],
+        [fingerprint, domain, now, challenge.student_fingerprint, challenge.requested_github_id,
+          sessionHash, new Date(now.getTime()+7*86400000)],
       );
       return { kind: "verified" as const, memberId: member.rows[0]!.id };
     });
 
     switch (result.kind) {
-      case "verified": return { verified: true, memberId: result.memberId };
+      case "verified": return { verified: true, memberId: result.memberId, registrationToken };
       case "used": throw new EmailAuthError("VERIFICATION_CODE_USED", 400, "该验证码已使用，请重新获取");
       case "expired": throw new EmailAuthError("VERIFICATION_CODE_EXPIRED", 400, "验证码已过期，请重新获取");
       case "locked": throw new EmailAuthError("VERIFICATION_ATTEMPTS_EXCEEDED", 429, "验证码尝试次数过多，请重新获取");

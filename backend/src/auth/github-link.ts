@@ -245,6 +245,15 @@ export class GitHubOAuthLinkService implements GitHubLinkApi {
     const identity = await fetchGitHubIdentity(accessToken);
 
     await withTransaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(1279411270)");
+      const member=await client.query<{registration_github_id:string|null}>(
+        "SELECT registration_github_id::text FROM members WHERE id=$1 FOR UPDATE",[memberId]);
+      const intended=member.rows[0]?.registration_github_id;
+      if (!member.rows[0] || (intended && intended!==identity.githubId)) {
+        throw new GitHubLinkError("GITHUB_ACCOUNT_MISMATCH",409,"请使用注册时填写的 GitHub 账号授权");
+      }
+      const bound=await client.query("SELECT 1 FROM member_github_accounts WHERE member_id=$1",[memberId]);
+      if (bound.rows.length) throw new GitHubLinkError("GITHUB_ACCOUNT_ALREADY_LINKED",409,"此用户已经绑定 GitHub 账号");
       const existing = await client.query<{ member_id: string }>(
         `SELECT member_id::text
            FROM member_github_accounts
@@ -284,6 +293,14 @@ export class GitHubOAuthLinkService implements GitHubLinkApi {
            is_primary=TRUE`,
         [memberId, identity.githubId, now],
       );
+      await client.query(
+        `INSERT INTO contributors (github_id,login,avatar_url,actor_type,is_bot,enrolled_at)
+         VALUES ($1,$2,$3,'User',FALSE,$4)
+         ON CONFLICT (github_id) DO UPDATE SET login=EXCLUDED.login,avatar_url=EXCLUDED.avatar_url,
+           enrolled_at=coalesce(contributors.enrolled_at,EXCLUDED.enrolled_at),updated_at=$4`,
+        [identity.githubId,identity.login,identity.avatarUrl,now],
+      );
+      await client.query("UPDATE members SET registration_session_hash=NULL,registration_session_expires_at=NULL WHERE id=$1",[memberId]);
     });
 
     return { login: identity.login };

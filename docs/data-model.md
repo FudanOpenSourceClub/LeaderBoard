@@ -393,3 +393,26 @@ INDEX contributor_public_activities_time_idx (contributor_id, occurred_at)
 项目/组织汇总仍只计算已监控仓库。已收录用户在当前时间范围没有活动时以 0 条保留在总榜。
 普通同步任务每六小时刷新个人记录，下载直接读取已保存记录。
 完整快照在事务内替换旧记录；GitHub 不完整结果不覆盖旧数据；达到每类 5,000 条上限时保留已采集历史并设置截断标记。
+
+
+## 16. 稳定身份贡献账本与注册约束
+
+`contributor_public_activities` 升级为 `id BIGSERIAL PRIMARY KEY`；新增可回填的
+`repository_github_id BIGINT`、`object_github_id BIGINT`、`merged_at TIMESTAMPTZ`、
+`first_seen_at/last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()`。
+`UNIQUE(contributor_id, kind, repository_github_id, identifier)` 保证重复采集、PR 状态更新、仓库重命名不新增重复贡献。
+旧记录仓库 ID 空时仅保留历史；完成真实 ID 回填前不计分。新增写入必须带真实仓库 ID。
+`contributors.public_sync_version INTEGER NOT NULL DEFAULT 0` 标记回填版本；当前版本 2 使用每日重叠增量游标。
+
+`scoring_repositories`：`github_id BIGINT PRIMARY KEY`、`full_name/html_url TEXT NOT NULL`、
+`enabled BOOLEAN NOT NULL DEFAULT FALSE`、`updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`。
+91 项初筛仓库保留为停用候选，待细分规则后启用；所有计分检查稳定 ID。
+
+`members` 新增唯一的可空 `student_fingerprint TEXT`（HMAC-SHA256）、
+`registration_github_id BIGINT`、`registration_session_hash TEXT`，以及可空
+`registration_session_expires_at TIMESTAMPTZ`。旧用户字段可空以保留原记录，新注册必须填写学号和 GitHub。
+`email_verification_challenges` 保存同次注册的学号指纹、`requested_github_id BIGINT` 与 `requested_github_login TEXT`。
+`member_single_github_account_idx(member_id)` 与现有 GitHub 账号所属唯一索引组成一对一约束。
+邮箱验证、注册和 OAuth 绑定共享事务锁，唯一约束负责最终防重。恢复注册的 Cookie 只允许继续原用户绑定，不能更换账号或新建用户。
+
+个人历史只做 upsert；限额与分数不覆盖贡献事实。旧第 15 节的完整快照替换策略由本节的永久增量策略替代，刷新间隔改为每日。

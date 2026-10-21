@@ -24,9 +24,9 @@ jobs:
           trap 'rm -rf "$tmp"' EXIT
 
           echo "Checking application health"
-          curl -kfsSL --connect-timeout 10 --max-time 20 "$base/health" | grep -q '"status":"ok"'
+          curl --retry 4 --retry-delay 2 --retry-all-errors -kfsSL --connect-timeout 10 --max-time 20 "$base/health" | grep -q '"status":"ok"'
           echo "Checking LeaderBoard contributor page"
-          curl -kfsSL --connect-timeout 10 --max-time 20 "$base/contributors" | grep -q '<!doctype html>'
+          curl --retry 4 --retry-delay 2 --retry-all-errors -kfsSL --connect-timeout 10 --max-time 20 "$base/contributors" | grep -q '<!doctype html>'
 
           echo "Downloading live Zecyel public contribution CSV"
           status="$(curl -kLsS --connect-timeout 10 --max-time 20 \
@@ -60,20 +60,38 @@ jobs:
           assert detail["total"] == len(rows), "Profile and export totals differ"
           assert (detail["commits"], detail["prs"], detail["issues"]) == (kinds["commit"], kinds["pull_request"], kinds["issue"])
           for range_ in ["7d", "30d", "90d", "all"]:
-              for metric in ["total", "commits", "prs", "issues"]:
+              for metric in ["score", "total", "commits", "prs", "issues"]:
                   board = json.loads(get(f"/api/v1/contributors/leaderboard?range={range_}&metric={metric}&limit=5000"))
                   person = next((p for p in board["items"] if p["login"] == "Zecyel"), None)
                   assert person is not None, f"Zecyel missing from {range_}/{metric} leaderboard"
+                  assert len(board["items"]) <= 10
+                  assert "score" in person and person["avatarUrl"]
                   if range_ == "all":
                       assert person["total"] == len(rows)
           index = get("/projects")
           script = re.search(r'src="([^"]+\.js)"', index).group(1)
           bundle = get(script)
           assert "复旦开源仓库必吃榜" in bundle
+          assert "本期活跃达人" not in bundle
+          assert "达人榜" in bundle
+          assert "studentId" in bundle and "githubLogin" in bundle
+          assert all(r["GitHub仓库ID"] for r in rows)
+          assert detail["score"] == sum(int(r["得分"]) for r in rows)
+          assert all(r["超过仓库月限3次"] in ["true","false"] for r in rows)
+          assert all(r["超过总月限10次"] in ["true","false"] for r in rows)
+          request = urllib.request.Request(base+"/api/v1/auth/email/send-code",method="POST",
+              data=json.dumps({"email":"duplicate-check@fudan.edu.cn","studentId":"26399999999","githubLogin":"Zecyel"}).encode(),
+              headers={"Content-Type":"application/json"})
+          try:
+              urllib.request.urlopen(request,context=context,timeout=25)
+              raise AssertionError("Duplicate GitHub account was allowed to request email")
+          except urllib.error.HTTPError as error:
+              assert error.code == 409
+              assert json.loads(error.read())["error"]["code"] == "ALREADY_REGISTERED"
           assert "公开贡献采集试点" not in bundle
           assert "PUBLIC CONTRIBUTION PILOT" not in bundle
           assert "不计入复旦正式排名" not in bundle
-          print("Verified: Zecyel is enrolled in all 16 leaderboard views; profile/export totals match; project title and user interface are current")
+          print("Verified: Zecyel is enrolled in all 20 leaderboard views; profile/export totals match; project title and user interface are current")
           print("Export verified: %d total public source-linked events" % len(rows))
           print("Events by type: " + str(dict(kinds)))
           print("Sample verified URL: " + rows[0]["原始链接"])

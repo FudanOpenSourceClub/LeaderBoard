@@ -39,7 +39,7 @@ const fixtures = [
   [c.RepositoryStatsResponseSchema, { items: [{ ...repositoryStat, contributors: 2 }] }],
   [c.GroupsResponseSchema, { items: [{ name: "systems" }] }],
   [c.ContributorLeaderboardResponseSchema, { range: "30d", metric: "total", items: [rank] }],
-  [c.EmailCodeRequestSchema, { email: "student@fudan.edu.cn" }],
+  [c.EmailCodeRequestSchema, { email: "student@fudan.edu.cn",studentId:"26300000001",githubLogin:"octocat" }],
   [c.EmailCodeVerifyRequestSchema, { email: "student@fudan.edu.cn", code: "012345" }],
   [c.EmailCodeSendResponseSchema, { sent: true, retryAfterSeconds: 60, expiresInSeconds: 600 }],
   [c.GitHubLinkInfoSchema, { available: false }],
@@ -92,7 +92,7 @@ describe("documented shared boundaries", () => {
   });
   it("rejects invalid response enums, fractional counts and missing items", () => {
     expect(c.OrganizationActivitySummarySchema.safeParse({ ...summary, range: "1d" }).success).toBe(false);
-    expect(c.ContributorLeaderboardResponseSchema.safeParse({ range: "all", metric: "score", items: [] }).success).toBe(false);
+    expect(c.ContributorLeaderboardResponseSchema.safeParse({ range: "all", metric: "invalid", items: [] }).success).toBe(false);
     expect(c.RepositoryStatsResponseSchema.safeParse({}).success).toBe(false);
     expect(c.ContributorRankSchema.safeParse({ ...rank, total: 0.5 }).success).toBe(false);
   });

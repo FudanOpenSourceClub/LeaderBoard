@@ -118,13 +118,17 @@ export type SyncStatus = z.infer<typeof SyncStatusSchema>;
 export const TimeRangeSchema = z.enum(["7d", "30d", "90d", "all"]);
 export type TimeRange = z.infer<typeof TimeRangeSchema>;
 
-export const LeaderboardMetricSchema = z.enum(["total", "commits", "prs", "issues"]);
+export const LeaderboardMetricSchema = z.enum(["score", "total", "commits", "prs", "issues"]);
 export type LeaderboardMetric = z.infer<typeof LeaderboardMetricSchema>;
 
 export const GroupSummarySchema = z.object({ name: text });
 export type GroupSummary = z.infer<typeof GroupSummarySchema>;
 
 const activityCounts = { commits: count, prs: count, issues: count, total: count };
+const scoringCounts = {
+  score: count.optional(), commitIssueScore: count.optional(), prOpenedScore: count.optional(),
+  prMergedScore: count.optional(), mergedPrs: count.optional(),
+};
 
 export const OrganizationActivitySummarySchema = z.object({ range: TimeRangeSchema, repositories: count, contributors: count, ...activityCounts });
 export type OrganizationActivitySummary = z.infer<typeof OrganizationActivitySummarySchema>;
@@ -132,15 +136,15 @@ export type OrganizationActivitySummary = z.infer<typeof OrganizationActivitySum
 export const RepositoryStatSchema = z.object({ githubId, fullName: text, group: text, contributors: count, ...activityCounts });
 export type RepositoryStat = z.infer<typeof RepositoryStatSchema>;
 
-export const ContributorRankSchema = z.object({ rank: positive, login: text, avatarUrl: webUrl.nullable(), ...activityCounts });
+export const ContributorRankSchema = z.object({ rank: positive, login: text, avatarUrl: webUrl.nullable(), ...activityCounts, ...scoringCounts });
 export type ContributorRank = z.infer<typeof ContributorRankSchema>;
 
-export const ContributorRepositoryStatSchema = z.object({ githubId: githubId.nullable(), fullName: text, group: text, ...activityCounts });
+export const ContributorRepositoryStatSchema = z.object({ githubId: githubId.nullable(), fullName: text, group: text, ...activityCounts, ...scoringCounts });
 export type ContributorRepositoryStat = z.infer<typeof ContributorRepositoryStatSchema>;
 
 export const ContributorDetailSchema = z.object({
   login: text, avatarUrl: webUrl.nullable(), range: TimeRangeSchema,
-  ...activityCounts, repositories: z.array(ContributorRepositoryStatSchema),
+  ...activityCounts, ...scoringCounts, repositories: z.array(ContributorRepositoryStatSchema),
 });
 export type ContributorDetail = z.infer<typeof ContributorDetailSchema>;
 
@@ -183,10 +187,13 @@ const emailAddress = z.string().trim().max(254).email();
 
 export const EmailCodeRequestSchema = z.object({
   email: emailAddress,
+  studentId: z.string().trim().regex(/^[0-9]{6,20}$/, "Expected a student number"),
+  githubLogin: z.string().trim().regex(/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i, "Expected a GitHub username"),
 });
 export type EmailCodeRequest = z.infer<typeof EmailCodeRequestSchema>;
 
-export const EmailCodeVerifyRequestSchema = EmailCodeRequestSchema.extend({
+export const EmailCodeVerifyRequestSchema = z.object({
+  email: emailAddress,
   code: z.string().trim().regex(/^\d{6}$/, "Expected a 6-digit verification code"),
 });
 export type EmailCodeVerifyRequest = z.infer<typeof EmailCodeVerifyRequestSchema>;

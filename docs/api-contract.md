@@ -724,3 +724,17 @@ EMAIL_AUTH_NOT_CONFIGURED
 - 反向代理仅在 loopback 来源时被 Express 信任，用于可靠取得客户端 IP；
 - 未配置 `EMAIL_HMAC_SECRET` 或 SMTP 时，服务仍可正常启动，但相关接口返回安全的 503；
 - SMTP 支持隐式 TLS（常见 465）及 STARTTLS（常见 587）。
+
+
+## 达人榜积分、每日增量与唯一注册
+
+- 默认 `range=all&metric=score`；`score` 是新增排序指标，接口最多返回 10 人，同分按 GitHub 用户名稳定排序，超额活动次数不参与破同分。
+- Contributor rank/detail/repository 增加 `score`、`commitIssueScore`、`prOpenedScore`、`prMergedScore`、`mergedPrs`。
+- 仅 `scoring_repositories.enabled=true` 的稳定 Repository ID 计分，名称和 URL 不能代替 ID。根目录 `scoring-whitelist.json` 管理候选及启用状态。
+- Commit/Issue 共用每用户自然月 10 次、每用户每仓库每自然月 3 次额度，每次 1 分。北京时间划分月份，按贡献时间和稳定身份确定次序。先检查仓库额度，未超仓库额度的记录再检查个人月度额度。
+- 每次计算先检查完整历史，再筛选展示范围；时间筛选和分组不重置额度。PR 在创建时得 20 分、在 `merged_at` 时另得 30 分，不使用 closed 状态冒充 merged。
+- CSV 增加仓库 ID、对象 ID、合并时间、白名单命中、自然月、两个额度的计数/超限标记、得分及 PR 分项。
+- `POST /auth/email/send-code` 现需 `{ email, studentId, githubLogin }`。先解析 GitHub 稳定 ID，再查邮箱、学号指纹、注册/绑定的 GitHub ID 和已收录账号；重复返回 409 `ALREADY_REGISTERED`，不发邮件。
+- `POST /auth/email/verify` 仍需 `{ email, code }`。校验成功才创建用户，数据库唯一约束和事务锁保证并发只能注册一次；之后 OAuth 必须匹配预先填写的 GitHub 稳定 ID。
+- 邮箱验证后通过 7 天 HttpOnly/Secure/SameSite=Lax Cookie 恢复未完成绑定。`POST /auth/github/retry` 不重发验证码、不创建第二个用户，已完成绑定的恢复凭证作废。
+- 个人贡献每日增量采集，PR/Issue 按 `updated` 拉取，Commit 按 `committer-date` 拉取并保留重叠窗口。首次升级完整回填稳定仓库 ID 与合并状态；只有完整成功才推进游标。每批按用户 ID、贡献类型、仓库 ID、SHA/编号 upsert，永久保留历史。

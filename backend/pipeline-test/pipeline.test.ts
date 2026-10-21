@@ -123,10 +123,10 @@ describe("Analytics pipeline fixture", () => {
     const identity = { githubId: "2001", login: "alice", avatarUrl: "https://example.test/alice.png" };
     const data: PublicContributionExport = {
       rows: [
-        { kind: "commit", repository: repoA.fullName, identifier: "C1", occurredAt: "2026-09-24T10:00:00Z", title: "Tracked change", url: `https://github.com/${repoA.fullName}/commit/C1` },
-        { kind: "commit", repository: "other/community", identifier: "EXTERNAL", occurredAt: "2026-08-01T10:00:00Z", title: "Older change", url: "https://github.com/other/community/commit/EXTERNAL" },
-        { kind: "pull_request", repository: "other/community", identifier: "10", occurredAt: "2026-09-24T10:00:00Z", title: "Feature", url: "https://github.com/other/community/pull/10" },
-        { kind: "issue", repository: "other/community", identifier: "11", occurredAt: "2026-09-24T10:00:00Z", title: "Discussion", url: "https://github.com/other/community/issues/11" },
+        { kind: "commit", repository: repoA.fullName, repositoryGithubId:"1001", identifier: "C1", occurredAt: "2026-09-24T10:00:00Z", title: "Tracked change", url: `https://github.com/${repoA.fullName}/commit/C1` },
+        { kind: "commit", repository: "other/community", repositoryGithubId:"9999", identifier: "EXTERNAL", occurredAt: "2026-08-01T10:00:00Z", title: "Older change", url: "https://github.com/other/community/commit/EXTERNAL" },
+        { kind: "pull_request", repository: "other/community", repositoryGithubId:"9999", identifier: "10", occurredAt: "2026-09-24T10:00:00Z", title: "Feature", url: "https://github.com/other/community/pull/10" },
+        { kind: "issue", repository: "other/community", repositoryGithubId:"9999", identifier: "11", occurredAt: "2026-09-24T10:00:00Z", title: "Discussion", url: "https://github.com/other/community/issues/11" },
       ],
       totals: { commit: 2, pull_request: 1, issue: 1 }, truncated: false, incomplete: false,
     };
@@ -145,7 +145,7 @@ describe("Analytics pipeline fixture", () => {
     expect(personal[0]?.total).toBe(3);
     const detail = await analytics.getContributorDetail("ALICE", "all");
     expect(detail?.total).toBe(7);
-    expect(detail?.repositories.find((r) => r.fullName === "other/community")).toMatchObject({ githubId: null, commits: 1, prs: 1, issues: 1, total: 3 });
+    expect(detail?.repositories.find((r) => r.fullName === "other/community")).toMatchObject({ githubId: "9999", commits: 1, prs: 1, issues: 1, total: 3 });
     const exported = await getContributorActivityExport("alice", pool);
     expect(exported?.rows).toHaveLength(7);
     expect(exported?.totals).toEqual({ commit: 3, pull_request: 3, issue: 1 });
@@ -161,5 +161,24 @@ describe("Analytics pipeline fixture", () => {
     expect(withNewMember.find((item) => item.login === "new-member")).toMatchObject({ commits: 0, prs: 0, issues: 0, total: 0 });
     await expect(analytics.getContributorDetail("new-member", "7d")).resolves.toMatchObject({ login: "new-member", total: 0, repositories: [] });
     await expect(getContributorActivityExport("missing-user", pool)).resolves.toBeNull();
+
+    await pool.query(`INSERT INTO scoring_repositories(github_id,full_name,html_url,enabled)
+      VALUES (1001,'leadboard-fixture/repo-a','https://github.com/leadboard-fixture/repo-a',TRUE),
+             (9999,'other/community','https://github.com/other/community',TRUE)`);
+    expect((await analytics.getContributorDetail("alice","all"))?.score).toBe(74);
+    await saveContributorActivity(identity,{...data,rows:[{
+      ...data.rows[2]!,repository:"other/renamed",mergedAt:"2026-09-24T11:00:00Z",
+    }]},pool);
+    const afterMerge=await analytics.getContributorDetail("alice","all");
+    expect(afterMerge).toMatchObject({total:7,score:104,prMergedScore:60});
+    const ledger=await getContributorActivityExport("alice",pool);
+    expect(ledger?.rows).toHaveLength(7);
+    expect(ledger?.rows.find(row=>row.identifier==="10"&&row.kind==="pull_request")).toMatchObject({repository:"other/renamed",repositoryGithubId:"9999"});
+    expect(ledger?.rows.reduce((sum,row)=>sum+(row.scoring?.points??0),0)).toBe(104);
+    await pool.query(`INSERT INTO contributors(github_id,login,enrolled_at)
+      SELECT 3000+n,'member-'||n,now() FROM generate_series(1,12) n`);
+    const top=await analytics.getContributorLeaderboard({range:"all",metric:"score",limit:5000});
+    expect(top).toHaveLength(10);
+    expect(top[0]).toMatchObject({login:"alice",score:104});
   });
 });

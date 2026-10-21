@@ -82,12 +82,12 @@ function parseRange(value: unknown, res: Response): TimeRange | null {
 function parseMetric(value: unknown, res: Response) {
   const raw = singleQuery(value);
   if (raw === "") {
-    sendError(res, 400, "INVALID_METRIC", "metric must be total, commits, prs or issues");
+    sendError(res, 400, "INVALID_METRIC", "metric must be score, total, commits, prs or issues");
     return null;
   }
-  const parsed = LeaderboardMetricSchema.safeParse(raw ?? "total");
+  const parsed = LeaderboardMetricSchema.safeParse(raw ?? "score");
   if (!parsed.success) {
-    sendError(res, 400, "INVALID_METRIC", "metric must be total, commits, prs or issues");
+    sendError(res, 400, "INVALID_METRIC", "metric must be score, total, commits, prs or issues");
     return null;
   }
   return parsed.data;
@@ -143,7 +143,7 @@ function handleServiceError(error: unknown, res: Response): boolean {
 export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Router {
   const analytics = dependencies.analytics ?? new AnalyticsService();
   const getSyncStatus = dependencies.getSyncStatus ?? defaultGetSyncStatus;
-  const emailVerification = dependencies.emailVerification ?? new UnavailableEmailVerificationApi();
+  const emailVerification: EmailVerificationApi = dependencies.emailVerification ?? new UnavailableEmailVerificationApi();
   const githubLink = dependencies.githubLink ?? new UnavailableGitHubLinkApi();
   const projectProposals = dependencies.projectProposals ?? new ProjectProposalService();
   const contributorExport = dependencies.contributorExport ?? getContributorActivityExport;
@@ -157,7 +157,7 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
     }
     try {
       const requesterIp = req.ip ?? req.socket.remoteAddress ?? "unknown";
-      const result = await emailVerification.sendCode(parsed.data.email, requesterIp);
+      const result = await emailVerification.sendCode(parsed.data.email, requesterIp, {studentId:parsed.data.studentId,githubLogin:parsed.data.githubLogin});
       res.status(202).json(EmailCodeSendResponseSchema.parse(result));
     } catch (error) {
       if (!handleServiceError(error, res)) next(error);
@@ -172,6 +172,9 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
     }
     try {
       const result = await emailVerification.verifyCode(parsed.data.email, parsed.data.code);
+      if (result.registrationToken) res.cookie("leaderboard_registration",result.registrationToken, {
+        httpOnly:true,secure:true,sameSite:"lax",maxAge:7*86400000,path:"/api/v1/auth",
+      });
       const link = await githubLink.createAuthorization(result.memberId);
       res.json(EmailCodeVerifyResponseSchema.parse({
         verified: true,
@@ -180,6 +183,16 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
     } catch (error) {
       if (!handleServiceError(error, res)) next(error);
     }
+  });
+
+  router.post("/auth/github/retry", async (req,res,next) => {
+    try {
+      const cookie=(req.headers.cookie??"").split(";").map(v=>v.trim()).find(v=>v.startsWith("leaderboard_registration="));
+      const token=cookie?.slice("leaderboard_registration=".length)??"";
+      if (!emailVerification.resumeRegistration) {sendError(res,401,"REGISTRATION_SESSION_REQUIRED","请先完成邮箱验证");return;}
+      const memberId=await emailVerification.resumeRegistration(token);
+      res.json(await githubLink.createAuthorization(memberId));
+    } catch(error) { if(!handleServiceError(error,res))next(error); }
   });
 
   router.get("/auth/github/callback", async (req, res, next) => {
@@ -201,6 +214,7 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
       if (error instanceof GitHubLinkError) {
         const reason = error.code === "GITHUB_ACCOUNT_ALREADY_LINKED"
           ? "already_linked"
+          : error.code === "GITHUB_ACCOUNT_MISMATCH" ? "account_mismatch"
           : error.code === "GITHUB_LINK_NOT_CONFIGURED"
             ? "not_configured"
             : "authorization_failed";

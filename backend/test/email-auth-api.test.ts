@@ -46,7 +46,7 @@ describe("email verification HTTP API", () => {
     const app = createApp({ apiRouter: routerWithEmail(deps.emailVerification) });
     const response = await request(app)
       .post("/api/v1/auth/email/send-code")
-      .send({ email: "student@fudan.edu.cn" })
+      .send({ email: "student@fudan.edu.cn", studentId:"26300000001", githubLogin:"octocat" })
       .expect(202);
 
     expect(response.body).toEqual({
@@ -57,6 +57,7 @@ describe("email verification HTTP API", () => {
     expect(deps.emailVerification.sendCode).toHaveBeenCalledWith(
       "student@fudan.edu.cn",
       expect.any(String),
+      {studentId:"26300000001",githubLogin:"octocat"},
     );
   });
 
@@ -100,7 +101,7 @@ describe("email verification HTTP API", () => {
     const app = createApp({ apiRouter: routerWithEmail(deps.emailVerification) });
     const response = await request(app)
       .post("/api/v1/auth/email/send-code")
-      .send({ email: "student@fudan.edu.cn" })
+      .send({ email: "student@fudan.edu.cn", studentId:"26300000001", githubLogin:"octocat" })
       .expect(429);
 
     expect(response.body).toEqual({
@@ -112,7 +113,7 @@ describe("email verification HTTP API", () => {
     const app = createApp({ apiRouter: routerWithEmail() });
     const response = await request(app)
       .post("/api/v1/auth/email/send-code")
-      .send({ email: "student@fudan.edu.cn" })
+      .send({ email: "student@fudan.edu.cn", studentId:"26300000001", githubLogin:"octocat" })
       .expect(503);
     expect(response.body.error.code).toBe("EMAIL_AUTH_NOT_CONFIGURED");
   });

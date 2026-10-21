@@ -16,17 +16,8 @@ type State =
   | { status: "error"; message: string }
   | { status: "ready"; leaderboard: ContributorLeaderboardResponse; groups: GroupsResponse["items"] };
 
-const metricLabel = {
-  total: "总活动",
-  commits: "Commit",
-  prs: "Pull Request",
-  issues: "Issue",
-} as const;
-
-const metricEntries = Object.entries(metricLabel) as Array<[keyof typeof metricLabel, string]>;
-
 export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient }) {
-  const { range, setRange, metric, setMetric, group, setGroup } = useFilters();
+  const { range, setRange, group, setGroup } = useFilters();
   const [state, setState] = useState<State>({ status: "loading" });
   const [retry, setRetry] = useState(0);
   const [query, setQuery] = useState("");
@@ -37,7 +28,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
     let active = true;
     setState({ status: "loading" });
     void Promise.all([
-      api.getContributorLeaderboard({ range, metric, ...(group === undefined ? {} : { group }), limit: 50 }),
+      api.getContributorLeaderboard({ range, metric: "score", ...(group === undefined ? {} : { group }), limit: 10 }),
       api.getGroups(),
     ]).then(
       ([leaderboard, groups]) => { if (active) setState({ status: "ready", leaderboard, groups: groups.items }); },
@@ -46,13 +37,13 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
       },
     );
     return () => { active = false; };
-  }, [api, range, metric, group, retry]);
+  }, [api, range, group, retry]);
 
   const groups = state.status === "ready" ? state.groups : [];
   const visibleItems = useMemo(() => {
     if (state.status !== "ready") return [];
     const normalized = query.trim().toLowerCase();
-    return state.leaderboard.items.filter((item) => {
+    return state.leaderboard.items.slice(0, 10).filter((item) => {
       const matchesQuery = !normalized || item.login.toLowerCase().includes(normalized);
       const matchesFavorite = !favoritesOnly || favorites.isFavorite(item.login);
       return matchesQuery && matchesFavorite;
@@ -62,12 +53,13 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
   function exportVisibleRows() {
     if (state.status !== "ready") return;
     downloadCsv(
-      `leadboard-${range}-${metric}.csv`,
+      `leaderboard-top10-${range}.csv`,
       [
-        ["排名", "GitHub", "Commit", "Pull Request", "Issue", "总活动", "时间范围", "分组"],
+        ["排名", "GitHub", "积分", "Commit", "Pull Request", "Issue", "总活动", "时间范围", "分组"],
         ...visibleItems.map((item) => [
           item.rank,
           item.login,
+          item.score ?? 0,
           item.commits,
           item.prs,
           item.issues,
@@ -90,22 +82,10 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
         <div className="hero-stamp" aria-hidden="true">🏆</div>
       </section>
 
-      <section className="filter-card leaderboard-filters" aria-label="复旦开源达人筛选">
+      <section className="filter-card leaderboard-filters" aria-label="积分规则">
         <div>
-          <span className="filter-title">四种贡献视角</span>
-          <span className="filter-caption">当前按 {metricLabel[metric]} 排序</span>
-        </div>
-        <div className="segmented-metrics" role="group" aria-label="排行榜指标">
-          {metricEntries.map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={metric === value}
-              onClick={() => setMetric(value)}
-            >
-              {label}
-            </button>
-          ))}
+          <span className="filter-title">按积分展示前 10 名</span>
+          <p className="filter-caption">仅白名单仓库计分。Commit 与 Issue 合计每月最多 10 次、同一仓库每月最多 3 次，每次 1 分；提交 PR 得 20 分，合并再加 30 分。</p>
         </div>
       </section>
 
@@ -168,35 +148,17 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
             <div className="section-title-row">
               <div>
                 <p className="section-kicker">OPEN SOURCE MAKERS</p>
-                <h2>本期活跃达人</h2>
-                <p>排名依据公开 GitHub 活动统计，不代表对个人能力的评价。</p>
+                <h2>达人榜</h2>
+                <p>按贡献积分排序，保留全部历史积分。</p>
               </div>
               <span className="count-pill">{visibleItems.length} 位贡献者</span>
-            </div>
-
-            <div className="podium-grid">
-              {visibleItems.slice(0, 3).map((item) => (
-                <Link className={`podium-card podium-${Math.min(item.rank, 3)}`} key={item.login} to={`/contributors/${encodeURIComponent(item.login)}`}>
-                  <span className="podium-rank">#{item.rank}</span>
-                  {item.avatarUrl
-                    ? <img className="podium-avatar" src={item.avatarUrl} alt="" />
-                    : <span className="podium-avatar avatar-placeholder" aria-hidden="true">{item.login.slice(0, 1).toUpperCase()}</span>}
-                  <strong className="podium-name">{item.login}</strong>
-                  <span className="podium-score">{item[metric]}<small> {metricLabel[metric]}</small></span>
-                  <div className="podium-meta">
-                    <span><b>{item.commits}</b> Commit</span>
-                    <span><b>{item.prs}</b> PR</span>
-                    <span><b>{item.issues}</b> Issue</span>
-                  </div>
-                </Link>
-              ))}
             </div>
 
             <section className="panel ranking-panel">
               <div className="panel-heading">
                 <div>
-                  <p className="section-kicker">完整榜单</p>
-                  <h2>复旦开源达人</h2>
+                  <p className="section-kicker">TOP 10</p>
+                  <h2>积分前十</h2>
                   <p>搜索、收藏和导出都只影响你的当前视图，不改变榜单原始数据。</p>
                 </div>
               </div>
@@ -204,9 +166,9 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
                 {visibleItems.map((item) => (
                   <div className="ranking-row ranking-row-with-favorite" key={item.login}>
                     <span className={`rank-badge rank-${Math.min(item.rank, 4)}`}>{item.rank}</span>
-                    {item.avatarUrl
-                      ? <img className="avatar avatar-xl" src={item.avatarUrl} alt="" />
-                      : <span className="avatar avatar-xl avatar-placeholder" aria-hidden="true">{item.login.slice(0, 1).toUpperCase()}</span>}
+                    <img className="avatar avatar-xl"
+                      src={item.avatarUrl ?? `https://github.com/${encodeURIComponent(item.login)}.png?size=96`}
+                      alt={`${item.login} 的头像`} loading="lazy" />
                     <Link className="ranking-person" to={`/contributors/${encodeURIComponent(item.login)}`}>
                       <strong>{item.login}</strong>
                       <span className="tag-row">
@@ -220,7 +182,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
                       <span><small>PR</small><b>{item.prs}</b></span>
                       <span><small>Issue</small><b>{item.issues}</b></span>
                     </span>
-                    <span className="ranking-total"><strong>{item[metric]}</strong><small>{metricLabel[metric]}</small></span>
+                    <span className="ranking-total"><strong>{item.score ?? 0}</strong><small>积分</small></span>
                     <button
                       className="favorite-button"
                       type="button"

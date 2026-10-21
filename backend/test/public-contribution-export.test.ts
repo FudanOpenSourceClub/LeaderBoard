@@ -75,6 +75,15 @@ describe("Public contributor activity export", () => {
     expect(fetcher).toHaveBeenCalledTimes(4);
   });
 
+  it("uses update time for incremental PR/Issue collection so later merges are refreshed",async()=>{
+    const fetcher=vi.fn(mockFetcher) as unknown as typeof fetch;
+    await collectPublicContributions("Zecyel","token",fetcher,{since:"2026-10-01T12:00:00Z"});
+    const queries=vi.mocked(fetcher).mock.calls.map(([url])=>new URL(String(url)).searchParams.get("q"));
+    expect(queries[0]).toContain("committer-date:>=2026-10-01");
+    expect(queries[1]).toContain("updated:>=2026-10-01");
+    expect(queries[2]).toContain("updated:>=2026-10-01");
+  });
+
   it("retrieves more than GitHub's per-query 1000 cap by splitting date windows", async () => {
     const commits = Array.from({ length: 1200 }, (_, i) => {
       const day = i < 600 ? "2025-01-12" : "2026-02-02";

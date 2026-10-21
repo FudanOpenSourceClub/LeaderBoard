@@ -14,6 +14,13 @@ import {
 } from "@leadboard/contracts";
 import type { Pool } from "pg";
 import { getDbPool } from "../db/index.js";
+import { emptyScore, getContributionScores, type ScoreDecision } from "./scoring.js";
+
+function sumScores(decisions: ScoreDecision[]) {
+  return decisions.reduce((s,d) => ({ score:s.score+d.points, commitIssueScore:s.commitIssueScore+d.commitIssuePoints,
+    prOpenedScore:s.prOpenedScore+d.prOpenedPoints, prMergedScore:s.prMergedScore+d.prMergedPoints,
+    mergedPrs:s.mergedPrs+(d.prMergedPoints>0?1:0) }),emptyScore());
+}
 
 type Clock = () => Date;
 
@@ -64,16 +71,19 @@ const CONTRIBUTOR_EVENTS_CTE = `
   events AS (
     SELECT * FROM tracked_events
     UNION ALL
-    SELECT r.id, r.github_id::text, a.repository,
+    SELECT r.id, coalesce(r.github_id,a.repository_github_id)::text, coalesce(r.full_name,a.repository),
            coalesce(g.name, '个人开源贡献'), a.contributor_id, a.kind, a.occurred_at, a.identifier
     FROM contributor_public_activities a
     JOIN contributors con ON con.id=a.contributor_id AND con.enrolled_at IS NOT NULL
-    LEFT JOIN repositories r ON lower(r.full_name)=lower(a.repository) AND r.tracked=TRUE
+    LEFT JOIN repositories r ON r.tracked=TRUE AND (r.github_id=a.repository_github_id
+      OR (a.repository_github_id IS NULL AND lower(r.full_name)=lower(a.repository)))
     LEFT JOIN groups g ON g.id=r.group_id
     WHERE NOT EXISTS (
       SELECT 1 FROM tracked_events t
       WHERE t.contributor_id=a.contributor_id AND t.kind=a.kind
-        AND lower(t.full_name)=lower(a.repository) AND t.identifier=a.identifier
+        AND ((a.repository_github_id IS NOT NULL AND t.github_id=a.repository_github_id::text)
+          OR (a.repository_github_id IS NULL AND lower(t.full_name)=lower(a.repository)))
+        AND t.identifier=a.identifier
     )
   ), ${FILTERED_EVENTS_SQL}
 `;
@@ -171,11 +181,14 @@ export class AnalyticsService {
 
   async getContributorLeaderboard(input: LeaderboardQuery): Promise<ContributorRank[]> {
     const bounds = rangeBounds(input.range, this.clock());
+    const scoring = await getContributionScores(this.pool, bounds.from, bounds.to);
+    const decisions = scoring.decisions.filter(d => input.group === undefined || d.group===input.group);
+    const activeIds = [...new Set(decisions.filter(d=>d.points>0).map(d=>d.contributorId))];
     const result = await this.pool.query<{
-      login: string; avatar_url: string | null; commits: string; prs: string; issues: string; total: string;
+      id: string; login: string; avatar_url: string | null; commits: string; prs: string; issues: string; total: string;
     }>(
       CONTRIBUTOR_EVENTS_CTE + `
-      SELECT con.login, con.avatar_url,
+      SELECT con.id::text, con.login, con.avatar_url,
         count(f.kind) FILTER (WHERE f.kind = 'commit') AS commits,
         count(f.kind) FILTER (WHERE f.kind = 'pull_request') AS prs,
         count(f.kind) FILTER (WHERE f.kind = 'issue') AS issues,
@@ -184,9 +197,9 @@ export class AnalyticsService {
       LEFT JOIN filtered f ON con.id = f.contributor_id
         AND ($3::text IS NULL OR f.group_name = $3)
       WHERE con.is_bot = FALSE AND con.login IS NOT NULL
-        AND (f.contributor_id IS NOT NULL OR (con.enrolled_at IS NOT NULL AND $3::text IS NULL))
+        AND (f.contributor_id IS NOT NULL OR (con.enrolled_at IS NOT NULL AND $3::text IS NULL) OR con.id=ANY($4::bigint[]))
       GROUP BY con.id, con.login, con.avatar_url`,
-      [bounds.from, bounds.to, input.group ?? null],
+      [bounds.from, bounds.to, input.group ?? null, activeIds],
     );
 
     const rows = result.rows.map((row) => ({
@@ -196,16 +209,17 @@ export class AnalyticsService {
       prs: safeNumber(row.prs),
       issues: safeNumber(row.issues),
       total: safeNumber(row.total),
+      ...sumScores(decisions.filter(d=>d.contributorId===row.id)),
     }));
     rows.sort((a, b) => b[input.metric] - a[input.metric] || a.login.localeCompare(b.login));
-    return rows.slice(0, input.limit).map((row, index) =>
+    return rows.slice(0, Math.min(10,input.limit)).map((row, index) =>
       ContributorRankSchema.parse({ rank: index + 1, ...row }),
     );
   }
 
   async getContributorDetail(username: string, range: TimeRange): Promise<ContributorDetail | null> {
     const contributor = await this.pool.query<{ id: string; login: string; avatar_url: string | null; enrolled_at: Date | null }>(
-      `SELECT id, login, avatar_url, enrolled_at FROM contributors
+      `SELECT id::text, login, avatar_url, enrolled_at FROM contributors
        WHERE lower(login) = lower($1) AND is_bot = FALSE
        ORDER BY updated_at DESC, id ASC LIMIT 1`,
       [username],
@@ -214,6 +228,8 @@ export class AnalyticsService {
     if (!actor) return null;
 
     const bounds = rangeBounds(range, this.clock());
+    const scoring = await getContributionScores(this.pool, bounds.from, bounds.to);
+    const personalScores = scoring.users.get(actor.id) ?? emptyScore();
     const result = await this.pool.query<{
       github_id: string | null; full_name: string; group_name: string;
       commits: string; prs: string; issues: string; total: string;
@@ -238,8 +254,16 @@ export class AnalyticsService {
       prs: safeNumber(row.prs),
       issues: safeNumber(row.issues),
       total: safeNumber(row.total),
+      ...(scoring.repositories.get(actor.id)?.get(row.full_name) ?? emptyScore()),
     }));
-    if (repositories.length === 0 && actor.enrolled_at === null) return null;
+    for (const [fullName, score] of scoring.repositories.get(actor.id) ?? []) {
+      if (score.score>0 && !repositories.some(r=>r.fullName===fullName)) {
+        const source=scoring.decisions.find(d=>d.contributorId===actor.id && d.repository===fullName)!;
+        repositories.push({githubId:source.repositoryGithubId, fullName, group:source.group,
+          commits:0,prs:0,issues:0,total:0,...score});
+      }
+    }
+    if (repositories.length === 0 && actor.enrolled_at === null && personalScores.score===0) return null;
     const commits = repositories.reduce((sum, row) => sum + row.commits, 0);
     const prs = repositories.reduce((sum, row) => sum + row.prs, 0);
     const issues = repositories.reduce((sum, row) => sum + row.issues, 0);
@@ -253,6 +277,7 @@ export class AnalyticsService {
       issues,
       total: commits + prs + issues,
       repositories,
+      ...personalScores,
     });
   }
 }

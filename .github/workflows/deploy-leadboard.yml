@@ -15,6 +15,7 @@ on:
       - "package.json"
       - "package-lock.json"
       - "contributors.json"
+      - "scoring-whitelist.json"
       - ".github/workflows/deploy-leadboard.yml"
 
 permissions:
@@ -122,3 +123,8 @@ jobs:
           echo "Join page: OK"
           echo "Email API: active"
           echo "Nginx proxy: OK"
+          if [ "$(sudo grep -Ec '^GITHUB_OAUTH_(CLIENT_ID|CLIENT_SECRET|CALLBACK_URL)=.+' /etc/leadboard/leadboard.env)" = "3" ]; then
+            echo "GitHub OAuth: configured"
+          else
+            echo "GitHub OAuth: not configured"
+          fi

@@ -4,14 +4,27 @@ import { enrollContributor } from "../backend/dist/public-contributions/enrollme
 
 const pool = getDbPool();
 try {
+  const whitelist = JSON.parse(await readFile(new URL("../scoring-whitelist.json", import.meta.url), "utf8"));
+  if (!Array.isArray(whitelist) || !whitelist.every(r => /^[1-9]\d*$/.test(r.githubId) && typeof r.enabled === "boolean" && typeof r.fullName === "string" && typeof r.url === "string")) throw new Error("Invalid repository whitelist");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("UPDATE scoring_repositories SET enabled=FALSE");
+    for (const repo of whitelist) await client.query(
+      `INSERT INTO scoring_repositories (github_id,full_name,html_url,enabled) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (github_id) DO UPDATE SET full_name=EXCLUDED.full_name,html_url=EXCLUDED.html_url,
+         enabled=EXCLUDED.enabled,updated_at=now()`, [repo.githubId,repo.fullName,repo.url,repo.enabled]);
+    await client.query("COMMIT");
+  } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
+  console.info(`Repository whitelist: ${whitelist.filter(r => r.enabled).length} enabled, ${whitelist.length} candidates`);
   const accounts = JSON.parse(await readFile(new URL("../contributors.json", import.meta.url), "utf8"));
   if (!Array.isArray(accounts) || !accounts.every((name) => typeof name === "string")) {
     throw new Error("contributors.json must contain GitHub usernames");
   }
   for (const name of accounts) {
     const existing = await pool.query(
-      `SELECT 1 FROM contributors WHERE lower(login)=lower($1) AND enrolled_at IS NOT NULL
-         AND public_synced_at >= now() - interval '6 hours'`,
+      `SELECT 1 FROM contributors WHERE lower(login)=lower($1) AND enrolled_at IS NOT NULL AND public_sync_version=2
+         AND public_synced_at >= now() - interval '1 day'`,
       [name],
     );
     if (existing.rowCount) {

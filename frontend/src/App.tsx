@@ -14,13 +14,13 @@ export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient;
   return (
     <div className="app-shell">
       <header className="topbar">
-        <Link className="brand" to="/projects" aria-label="LeadBoard 首页">
+        <a className="brand" href="https://github.com/swiftgorge5-eng/LeadBoard" aria-label="LeaderBoard GitHub 仓库">
           <span className="brand-mark" aria-hidden="true">L</span>
           <span className="brand-copy">
-            <strong>LeadBoard</strong>
+            <strong>LeaderBoard</strong>
             <small>复旦开源贡献可视化</small>
           </span>
-        </Link>
+        </a>
 
         <nav className="topnav" aria-label="主导航">
           <NavLink className={navClass} to="/projects">校内开源项目</NavLink>
@@ -40,9 +40,6 @@ export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient;
           <div className="side-section">
             <p className="side-label">社区</p>
             <NavLink className={navClass} to="/join"><span aria-hidden="true">✦</span> 加入贡献榜</NavLink>
-            <a className="nav-link" href="https://github.com/swiftgorge5-eng/LeadBoard" target="_blank" rel="noreferrer">
-              <span aria-hidden="true">↗</span> 项目仓库
-            </a>
           </div>
         </aside>
 
@@ -58,7 +55,7 @@ export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient;
           </Routes>
 
           <footer>
-            <span>LeadBoard · Fudan Open Source</span>
+            <span>LeaderBoard · Fudan Open Source</span>
             <span>数据来自公开 GitHub 活动</span>
           </footer>
         </div>

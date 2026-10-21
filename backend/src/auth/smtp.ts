@@ -183,8 +183,8 @@ export class SmtpEmailSender implements VerificationEmailSender {
       await command(socket, reader, `RCPT TO:<${headerValue(input.to)}>`, [250, 251]);
       await command(socket, reader, "DATA", 354);
 
-      const subject = encodeSubject("LeadBoard 复旦身份验证码");
-      const body = `你的 LeadBoard 验证码是：${input.code}\n\n验证码 ${input.expiresInMinutes} 分钟内有效，请勿转发给他人。\n\n如果这不是你的操作，可以忽略此邮件。`;
+      const subject = encodeSubject("LeaderBoard 复旦身份验证码");
+      const body = `你的 LeaderBoard 验证码是：${input.code}\n\n验证码 ${input.expiresInMinutes} 分钟内有效，请勿转发给他人。\n\n如果这不是你的操作，可以忽略此邮件。`;
       const message = [
         `From: ${headerValue(this.config.from)}`,
         `To: ${headerValue(input.to)}`,

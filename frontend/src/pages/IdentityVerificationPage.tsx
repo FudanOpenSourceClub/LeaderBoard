@@ -149,7 +149,7 @@ export function IdentityVerificationPage() {
         <div className="join-copy">
           <span className="hero-badge">FUDAN IDENTITY</span>
           <h1>把你的开源贡献<br />带回校园。</h1>
-          <p>先验证复旦邮箱，再通过 GitHub 官方授权确认账号归属。LeadBoard 不保存 GitHub OAuth access token。</p>
+          <p>先验证复旦邮箱，再通过 GitHub 官方授权确认账号归属。LeaderBoard 不保存 GitHub OAuth access token。</p>
           <div className="join-steps" aria-label="加入贡献榜步骤">
             <div className={`join-step ${verified || githubLinked ? "join-step-done" : "join-step-active"}`}><span>{verified || githubLinked ? "✓" : "1"}</span><div><strong>验证邮箱</strong><small>确认复旦身份</small></div></div>
             <div className={`join-step ${githubLinked ? "join-step-done" : verified ? "join-step-active" : ""}`}><span>{githubLinked ? "✓" : "2"}</span><div><strong>绑定 GitHub</strong><small>通过 GitHub 官方 OAuth 确认账号</small></div></div>
@@ -164,7 +164,7 @@ export function IdentityVerificationPage() {
         <div className="verify-card">
           <div className="verify-card-head">
             <span className="verify-icon" aria-hidden="true">✦</span>
-            <div><p>加入 LeadBoard</p><h2>{githubLinked ? "GitHub 绑定完成" : verified ? "继续绑定 GitHub" : sent ? "输入邮箱验证码" : "验证复旦邮箱"}</h2></div>
+            <div><p>加入 LeaderBoard</p><h2>{githubLinked ? "GitHub 绑定完成" : verified ? "继续绑定 GitHub" : sent ? "输入邮箱验证码" : "验证复旦邮箱"}</h2></div>
           </div>
 
           {githubLinked ? (

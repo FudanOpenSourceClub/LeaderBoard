@@ -4,7 +4,6 @@ import {
   ProjectProposalResponseSchema,
 } from "@leadboard/contracts";
 import { useLocalFavorites } from "../lib/favorites";
-import { MotionSelect } from "../components/MotionSelect";
 
 const campusProjects = [
   {
@@ -109,7 +108,7 @@ export function ProjectBoardPage() {
         <div>
           <span className="hero-badge">FUDAN · OPEN SOURCE</span>
           <h1>校内开源项目</h1>
-          <p>从校园实验室出发，发现正在创造影响力的开源项目。</p>
+          <p>先从能通过公开来源核验的实验室项目开始。这里不做排行榜，也不拿 Star 给项目排座次，只把值得被看见的校内开源项目认真收进来。</p>
         </div>
       </section>
 
@@ -122,7 +121,10 @@ export function ProjectBoardPage() {
             placeholder="搜索项目、实验室或技术方向"
           />
         </label>
-        <MotionSelect label="技术方向" value={tag} onChange={setTag} options={[{ value: "", label: "全部方向" }, ...availableTags.map((item) => ({ value: item, label: item }))]} />
+        <select className="toolbar-select" value={tag} onChange={(event) => setTag(event.target.value)} aria-label="按标签筛选">
+          <option value="">全部方向</option>
+          {availableTags.map((item) => <option value={item} key={item}>{item}</option>)}
+        </select>
         <button
           className="toolbar-button"
           type="button"
@@ -137,7 +139,8 @@ export function ProjectBoardPage() {
         <div className="section-title-row">
           <div>
             <p className="section-kicker">CAMPUS PROJECTS</p>
-            <h2>探索开源作品</h2>
+            <h2>先放几个我们能核验的</h2>
+            <p>项目顺序只是展示顺序，不代表排名。</p>
           </div>
           <span className="count-pill">{campusProjects.length} 个已核验项目</span>
         </div>
@@ -197,18 +200,18 @@ export function ProjectBoardPage() {
         <section className="project-invite-card">
           <div className="project-invite-copy">
             <span className="section-kicker">YOUR PROJECT?</span>
-            <h2>你的项目，也值得被看见。</h2>
-            <p>提交仓库和团队信息，让更多人发现它。</p>
+            <h2>漏掉你们实验室的宝藏仓库了？</h2>
+            <p>丢给我们看看 👀。只要能说明这是复旦校内实验室在维护的开源项目，我们核实后就把它补进来。</p>
           </div>
-          <button className="button button-primary proposal-toggle" type="button" aria-expanded={showForm} aria-controls="project-proposal" onClick={() => {
+          <button className="button button-primary" type="button" onClick={() => {
             setShowForm((value) => !value);
             if (submit.status === "success") setSubmit({ status: "idle" });
           }}>
-            {showForm ? "收起表单" : "提交项目"} <span className="toggle-chevron" aria-hidden="true">⌄</span>
+            {showForm ? "先收起来" : "加上我的项目"}
           </button>
         </section>
 
-        <div id="project-proposal" className={"proposal-reveal" + (showForm ? " is-open" : "")} inert={!showForm} aria-hidden={!showForm}>
+        {showForm && (
           <section className="panel proposal-panel">
             <div className="panel-heading">
               <div>
@@ -277,7 +280,7 @@ export function ProjectBoardPage() {
               </form>
             )}
           </section>
-        </div>
+        )}
       </section>
     </div>
   );

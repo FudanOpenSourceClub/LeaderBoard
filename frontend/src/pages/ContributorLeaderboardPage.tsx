@@ -10,7 +10,6 @@ import { EmptyState, ErrorState, LoadingState } from "../components/AsyncStates"
 import { downloadCsv } from "../lib/download";
 import { useLocalFavorites } from "../lib/favorites";
 import { useFilters } from "../state/filters";
-import { MotionSelect } from "../components/MotionSelect";
 
 type State =
   | { status: "loading" }
@@ -82,20 +81,19 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
 
   return (
     <div className="page-canvas">
-      <section className="makers-hero" aria-labelledby="makers-title">
-        <div className="makers-hero-inner">
-          <span className="makers-eyebrow">LEADBOARD / THE PEOPLE</span>
-          <h1 id="makers-title">代码背后，<br /><em>是创造者。</em></h1>
-          <p>认识复旦的开源贡献者，发现他们留下的作品与足迹。</p>
-          <span className="makers-scroll-hint" aria-hidden="true">DISCOVER <span>↓</span></span>
+      <section className="page-hero compact-hero">
+        <div>
+          <span className="hero-badge">CAMPUS MAKERS</span>
+          <h1>校内开源达人</h1>
+          <p>每一次提交、协作和讨论，都会在这里留下清晰的记录。</p>
         </div>
-        <div className="makers-hero-orbit" aria-hidden="true"><span>OPEN</span><span>SOURCE</span></div>
+        <div className="hero-stamp" aria-hidden="true">🏆</div>
       </section>
 
       <section className="filter-card leaderboard-filters" aria-label="校内开源达人筛选">
         <div>
-          <span className="filter-title">浏览贡献</span>
-          <span className="filter-caption">按 {metricLabel[metric]} 排序</span>
+          <span className="filter-title">四种贡献视角</span>
+          <span className="filter-caption">当前按 {metricLabel[metric]} 排序</span>
         </div>
         <div className="segmented-metrics" role="group" aria-label="排行榜指标">
           {metricEntries.map(([value, label]) => (
@@ -120,8 +118,26 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
             placeholder="搜索 GitHub 用户名"
           />
         </label>
-        <MotionSelect label="时间范围" value={range} onChange={(value) => setRange(TimeRangeSchema.parse(value))} options={[{ value: "7d", label: "最近 7 天" }, { value: "30d", label: "最近 30 天" }, { value: "90d", label: "最近 90 天" }, { value: "all", label: "全部历史" }]} />
-        <MotionSelect label="分组" value={group ?? ""} onChange={(value) => setGroup(value || undefined)} options={[{ value: "", label: "全部分组" }, ...groups.map((item) => ({ value: item.name, label: item.name }))]} />
+        <select
+          className="toolbar-select"
+          value={range}
+          onChange={(event) => setRange(TimeRangeSchema.parse(event.target.value))}
+          aria-label="时间范围"
+        >
+          <option value="7d">最近 7 天</option>
+          <option value="30d">最近 30 天</option>
+          <option value="90d">最近 90 天</option>
+          <option value="all">全部历史</option>
+        </select>
+        <select
+          className="toolbar-select"
+          value={group ?? ""}
+          onChange={(event) => setGroup(event.target.value || undefined)}
+          aria-label="分组"
+        >
+          <option value="">全部分组</option>
+          {groups.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
+        </select>
         <button
           className="toolbar-button"
           type="button"
@@ -149,43 +165,39 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
         )}
         {state.status === "ready" && visibleItems.length > 0 && (
           <>
-            <section className="maker-showcase" aria-label="本期精选贡献者">
-              <div className="maker-showcase-heading">
-                <div>
-                  <p className="maker-overline">FEATURED CONTRIBUTORS</p>
-                  <h2>开源达人<span className="maker-dot">.</span></h2>
-                </div>
-                <span className="maker-showcase-count">{visibleItems.length} 位贡献者 <span aria-hidden="true">↗</span></span>
+            <div className="section-title-row">
+              <div>
+                <p className="section-kicker">OPEN SOURCE MAKERS</p>
+                <h2>本期活跃达人</h2>
+                <p>排名依据公开 GitHub 活动统计，不代表对个人能力的评价。</p>
               </div>
-              <div className="maker-portraits">
-                {visibleItems.slice(0, 3).map((item, index) => (
-                  <Link className={"maker-portrait maker-portrait-" + (index + 1)} key={item.login} to={"/contributors/" + encodeURIComponent(item.login)}>
-                    <div className="maker-portrait-visual">
-                      <span className="maker-portrait-index">NO. {String(item.rank).padStart(2, "0")}</span>
-                      {item.avatarUrl
-                        ? <img className="maker-portrait-avatar" src={item.avatarUrl} alt="" loading="lazy" />
-                        : <span className="maker-portrait-avatar maker-portrait-placeholder" aria-hidden="true">{item.login.slice(0, 1).toUpperCase()}</span>}
-                      <span className="maker-portrait-mark" aria-hidden="true">↗</span>
-                    </div>
-                    <div className="maker-portrait-info">
-                      <span className="maker-portrait-role">OPEN SOURCE CONTRIBUTOR</span>
-                      <h3>{item.login}</h3>
-                      <div className="maker-portrait-stats">
-                        <span><strong>{item[metric]}</strong> {metricLabel[metric]}</span>
-                        <span>{item.commits} Commit <span aria-hidden="true">·</span> {item.prs} PR <span aria-hidden="true">·</span> {item.issues} Issue</span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
+              <span className="count-pill">{visibleItems.length} 位贡献者</span>
+            </div>
+
+            <div className="podium-grid">
+              {visibleItems.slice(0, 3).map((item) => (
+                <Link className={`podium-card podium-${Math.min(item.rank, 3)}`} key={item.login} to={`/contributors/${encodeURIComponent(item.login)}`}>
+                  <span className="podium-rank">#{item.rank}</span>
+                  {item.avatarUrl
+                    ? <img className="podium-avatar" src={item.avatarUrl} alt="" />
+                    : <span className="podium-avatar avatar-placeholder" aria-hidden="true">{item.login.slice(0, 1).toUpperCase()}</span>}
+                  <strong className="podium-name">{item.login}</strong>
+                  <span className="podium-score">{item[metric]}<small> {metricLabel[metric]}</small></span>
+                  <div className="podium-meta">
+                    <span><b>{item.commits}</b> Commit</span>
+                    <span><b>{item.prs}</b> PR</span>
+                    <span><b>{item.issues}</b> Issue</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
 
             <section className="panel ranking-panel">
               <div className="panel-heading">
                 <div>
                   <p className="section-kicker">完整榜单</p>
                   <h2>校内开源达人</h2>
-                  <p>按照所选时间与贡献指标排列</p>
+                  <p>搜索、收藏和导出都只影响你的当前视图，不改变榜单原始数据。</p>
                 </div>
               </div>
               <div className="ranking-list">

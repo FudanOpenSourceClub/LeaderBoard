@@ -65,6 +65,10 @@ login           TEXT
 avatar_url      TEXT
 actor_type      TEXT NOT NULL DEFAULT 'Unknown'
 is_bot          BOOLEAN NOT NULL DEFAULT FALSE
+enrolled_at     TIMESTAMPTZ NULL
+public_synced_at TIMESTAMPTZ NULL
+public_sync_truncated  BOOLEAN NOT NULL DEFAULT FALSE
+public_sync_incomplete BOOLEAN NOT NULL DEFAULT FALSE
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
@@ -282,7 +286,7 @@ total   = commits + prs + issues
 - 分数由独立 scoring layer 产生，不覆盖原始事实。
 
 
-## 14. 复旦身份验证（个人贡献榜前置）
+## 14. 复旦身份验证（自助身份绑定）
 
 个人贡献榜使用独立的身份层，不把 GitHub contributor 直接当作复旦成员。
 
@@ -364,3 +368,28 @@ PRIMARY KEY(member_id, github_id)
 ```
 
 一个成员可以绑定多个 GitHub 账号；同一成员最多一个 `is_primary=true` 账号。
+
+## 15. 正式收录的个人贡献
+
+管理员通过根目录 `contributors.json` 收录 GitHub 用户。部署运行
+`scripts/sync-contributors.mjs`，按 GitHub stable ID 幂等保存账号并设置 `enrolled_at`。
+该收录不生成邮箱验证或 OAuth 绑定记录；自助身份验证继续使用现有身份层。
+
+`contributor_public_activities` 保存这些用户的公开 Commit、PR、Issue：
+
+```text
+contributor_id BIGINT NOT NULL FK -> contributors.id ON DELETE CASCADE
+kind           TEXT NOT NULL CHECK IN ('commit', 'pull_request', 'issue')
+repository     TEXT NOT NULL
+identifier     TEXT NOT NULL
+occurred_at    TIMESTAMPTZ NOT NULL
+title          TEXT NOT NULL
+html_url       TEXT NOT NULL
+PRIMARY KEY(contributor_id, kind, repository, identifier)
+INDEX contributor_public_activities_time_idx (contributor_id, occurred_at)
+```
+
+达人榜及个人详情将这些记录与已监控仓库活动合并，按用户、类型、仓库和 SHA/编号去重。
+项目/组织汇总仍只计算已监控仓库。已收录用户在当前时间范围没有活动时以 0 条保留在总榜。
+普通同步任务每六小时刷新个人记录，下载直接读取已保存记录。
+完整快照在事务内替换旧记录；GitHub 不完整结果不覆盖旧数据；达到每类 5,000 条上限时保留已采集历史并设置截断标记。

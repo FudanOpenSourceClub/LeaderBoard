@@ -28,7 +28,13 @@ const tables = {
   contributors: {
     id: id(), github_id: optional("bigint"), login: optional("text"), avatar_url: optional("text"),
     actor_type: required("text", "'Unknown'::text"), is_bot: required("boolean", "false"),
+    enrolled_at: optional(timestamp), public_synced_at: optional(timestamp),
+    public_sync_truncated: required("boolean", "false"), public_sync_incomplete: required("boolean", "false"),
     created_at: required(timestamp, "now()"), updated_at: required(timestamp, "now()"),
+  },
+  contributor_public_activities: {
+    contributor_id: required("bigint"), kind: required("text"), repository: required("text"),
+    identifier: required("text"), occurred_at: required(timestamp), title: required("text"), html_url: required("text"),
   },
   commits: {
     id: id(), repository_id: required("bigint"), sha: required("text"),
@@ -99,6 +105,7 @@ const foreignKeys = [
   ["member_github_accounts", "member_id", "members", "id"],
   ["member_github_accounts", "github_id", "github_accounts", "github_id"],
   ["github_oauth_states", "member_id", "members", "id"],
+  ["contributor_public_activities", "contributor_id", "contributors", "id"],
 ];
 const uniques = [
   ["groups", "name"], ["repositories", "github_id"], ["repositories", "node_id"],
@@ -125,12 +132,14 @@ const indexes = {
   member_github_account_owner_idx: ["member_github_accounts", "github_id"],
   github_oauth_states_member_time_idx: ["github_oauth_states", "member_id", "created_at"],
   project_proposals_status_time_idx: ["project_proposals", "status", "created_at"],
+  contributor_public_activities_time_idx: ["contributor_public_activities", "contributor_id", "occurred_at"],
 };
 
 const primaryKeys = {
   groups: ["id"],
   repositories: ["id"],
   contributors: ["id"],
+  contributor_public_activities: ["contributor_id", "kind", "repository", "identifier"],
   commits: ["id"],
   pull_requests: ["id"],
   issues: ["id"],
@@ -202,7 +211,7 @@ try {
   if (problems.length) {
     for (const problem of problems) console.error(problem);
     process.exitCode = 1;
-  } else console.info("Database schema verified: 13 tables, columns, foreign keys, unique constraints, and indexes.");
+  } else console.info("Database schema verified: 14 tables, columns, foreign keys, unique constraints, and indexes.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;

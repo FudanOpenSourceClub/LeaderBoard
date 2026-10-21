@@ -18,6 +18,7 @@
 - 支持时间范围：`7d | 30d | 90d | all`
 - `all` 表示 LeadBoard **已经入库的全部历史**，不承诺等于 GitHub 账号/仓库的全部历史
 - 所有可重复执行的写入必须幂等
+- 正式收录用户的榜单和详情包含已保存的个人公开贡献，与已监控仓库事件按身份去重；组织统计仍使用仓库范围。
 
 ## 2. Shared actor
 
@@ -414,7 +415,7 @@ export interface ContributorRank {
 }
 
 export interface ContributorRepositoryStat {
-  githubId: string;
+  githubId: string | null;
   fullName: string;
   group: string;
   commits: number;
@@ -550,6 +551,19 @@ export interface ContributorLeaderboardResponse {
 `GET /api/v1/contributors/:username?range=30d`
 
 返回 `ContributorDetail`；不存在返回 404。
+
+个人公开贡献中的仓库可能尚未进入仓库目录，其 `githubId` 为 `null`；`fullName` 始终保留真实仓库名，前端以该名称作为列表键。
+正式收录用户即使在所选时间范围没有活动，也返回总数为 0 的详情。
+
+### 个人贡献导出
+
+`GET /api/v1/contributors/:username/export.csv`
+
+返回已保存的全部历史贡献，UTF-8 BOM CSV，列为类型、仓库、时间(UTC)、SHA或编号、标题、原始链接、统计口径。
+下载不实时调用 GitHub。未收录且没有贡献记录的账号返回 404。
+`/api/v1/public-contributors/:username/export.csv` 保留为兼容路径。
+`X-LeaderBoard-Event-Count` 为导出条数，`X-LeaderBoard-Truncated` 和
+`X-LeaderBoard-Incomplete` 表示采集状态，响应使用 `Cache-Control: no-store`。
 
 ### Sync Status
 

@@ -37,4 +37,5 @@ it("renders the campus project board without a header status widget", () => {
   expect(html).toContain("加上我的项目");
   expect(html).toContain("精选开源项目");
   expect(html).not.toContain("先放几个我们能核验的");
+  expect(html).not.toContain("让每一份微小贡献都被看见");
 });

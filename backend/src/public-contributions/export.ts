@@ -108,10 +108,13 @@ export async function collectPublicContributions(
         continue;
       }
       if (!response.ok) {
+        const problem = await response.json().catch(() => null) as {message?:unknown}|null;
+        const message = typeof problem?.message === "string" ? problem.message.slice(0,180) : "";
         const retryable = [429, 500, 502, 503, 504].includes(response.status) ||
           (response.status === 403 &&
             (response.headers.has("retry-after") ||
-              response.headers.get("x-ratelimit-remaining") === "0"));
+              response.headers.get("x-ratelimit-remaining") === "0" ||
+              /rate.limit|secondary|abuse|temporar/i.test(message)));
         if (retryable && attempt < 3) {
           const retryAfter = Number(response.headers.get("retry-after"));
           const reset = Number(response.headers.get("x-ratelimit-reset"));
@@ -123,7 +126,7 @@ export async function collectPublicContributions(
           if (fetcher === fetch) await delay(Math.min(wait, 65000));
           continue;
         }
-        throw new Error("GitHub " + endpoint + " search returned HTTP " + response.status);
+        throw new Error("GitHub " + endpoint + " search returned HTTP " + response.status + (message ? ": "+message : ""));
       }
       const payload = await response.json() as SearchResponse;
       if (!Array.isArray(payload.items) ||

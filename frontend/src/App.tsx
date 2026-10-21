@@ -44,12 +44,6 @@ export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient;
               <span aria-hidden="true">↗</span> 项目仓库
             </a>
           </div>
-          <div className="side-spacer" />
-          <div className="side-card">
-            <span className="side-card-kicker">LEADBOARD</span>
-            <strong>让每一份微小贡献都被看见。</strong>
-            <p>基于真实 GitHub 活动持续更新。</p>
-          </div>
         </aside>
 
         <div className="content-shell">

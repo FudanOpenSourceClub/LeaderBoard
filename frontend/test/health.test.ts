@@ -23,7 +23,7 @@ it.each([
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response()));
   await expect(fetchHealth()).rejects.toThrow();
 });
-it("renders the campus project board and service status", () => {
+it("renders the refreshed campus board without a header service pill", () => {
   const html = renderToStaticMarkup(
     createElement(MemoryRouter, null,
       createElement(FiltersProvider, null,
@@ -31,8 +31,27 @@ it("renders the campus project board and service status", () => {
       ),
     ),
   );
-  expect(html).toContain('role="status"');
   expect(html).toContain("校内开源项目");
-  expect(html).toContain("加上我的项目");
-  expect(html).toContain("项目顺序只是展示顺序，不代表排名");
+  expect(html).toContain("探索开源作品");
+  expect(html).toContain("提交项目");
+  expect(html).toContain('aria-haspopup="listbox"');
+  expect(html).not.toContain("服务正常");
+  expect(html).not.toContain("先放几个我们能核验的");
+});
+
+it("renders the editorial contributors section and three-step join flow", () => {
+  const routes = [
+    { path: "/contributors", expected: "代码背后" },
+    { path: "/join", expected: "三步加入" },
+  ];
+  for (const route of routes) {
+    const html = renderToStaticMarkup(
+      createElement(MemoryRouter, { initialEntries: [route.path] },
+        createElement(FiltersProvider, null,
+          createElement(App, { api: createMockApiClient() }),
+        ),
+      ),
+    );
+    expect(html).toContain(route.expected);
+  }
 });

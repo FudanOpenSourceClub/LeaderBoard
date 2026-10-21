@@ -35,6 +35,13 @@ jobs:
           done
           cat /tmp/leadboard-preview.log
           exit 1
+      - name: Install Chinese font for accurate screenshot rendering
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq fonts-noto-cjk
+          fc-cache -f
+          fc-list :lang=zh family | head -n 3
       - name: Capture before and after on desktop and mobile
         shell: bash
         run: |

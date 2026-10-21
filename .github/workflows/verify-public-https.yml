@@ -24,7 +24,7 @@ jobs:
           css_path="$(printf '%s' "$html" | grep -oE '/assets/index-[^"]+\.css' | head -1)"
           test -n "$css_path"
           curl -fSs --connect-timeout 8 --max-time 20 "$base$css_path" -o /tmp/leadboard-published.css
-          grep -q 'maker-portraits' /tmp/leadboard-published.css
-          grep -q 'proposal-reveal' /tmp/leadboard-published.css
-          grep -q 'motion-select-menu' /tmp/leadboard-published.css
-          echo "Public HTTPS, join page, and new production stylesheet: OK"
+          grep -q 'podium-grid' /tmp/leadboard-published.css
+          grep -q 'service-pill' /tmp/leadboard-published.css
+          ! grep -q 'maker-portraits' /tmp/leadboard-published.css
+          echo "Public HTTPS, join page, and restored production stylesheet: OK"

@@ -23,8 +23,8 @@ export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient;
         </a>
 
         <nav className="topnav" aria-label="主导航">
-          <NavLink className={navClass} to="/projects">校内开源项目</NavLink>
-          <NavLink className={navClass} to="/contributors">校内开源达人</NavLink>
+          <NavLink className={navClass} to="/projects">复旦开源项目</NavLink>
+          <NavLink className={navClass} to="/contributors">复旦开源达人</NavLink>
           <NavLink className={navClass} to="/join">加入贡献榜</NavLink>
         </nav>
 
@@ -32,14 +32,49 @@ export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient;
 
       <div className="workspace">
         <aside className="sidebar" aria-label="侧边导航">
-          <div className="side-section">
-            <p className="side-label">校内看板</p>
-            <NavLink className={navClass} to="/projects"><span aria-hidden="true">◇</span> 校内开源项目</NavLink>
-            <NavLink className={navClass} to="/contributors"><span aria-hidden="true">🏆</span> 校内开源达人</NavLink>
+          <div className="sidebar-intro">
+            <span>FUDAN OPEN SOURCE</span>
+            <strong>探索复旦开源</strong>
+            <p>发现项目，认识贡献者。</p>
           </div>
           <div className="side-section">
-            <p className="side-label">社区</p>
-            <NavLink className={navClass} to="/join"><span aria-hidden="true">✦</span> 加入贡献榜</NavLink>
+            <p className="side-label">发现</p>
+            <NavLink className={navClass} to="/projects">
+              <span className="side-nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3.5" y="3.5" width="7" height="7" rx="1.8" />
+                  <rect x="13.5" y="3.5" width="7" height="7" rx="1.8" />
+                  <rect x="3.5" y="13.5" width="7" height="7" rx="1.8" />
+                  <rect x="13.5" y="13.5" width="7" height="7" rx="1.8" />
+                </svg>
+              </span>
+              <span className="side-nav-copy"><strong>复旦开源项目</strong><small>发现优质开源项目</small></span>
+              <span className="side-nav-arrow" aria-hidden="true">↗</span>
+            </NavLink>
+            <NavLink className={navClass} to="/contributors">
+              <span className="side-nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="7" r="3.2" />
+                  <path d="M5.5 20v-2a6.5 6.5 0 0 1 13 0v2" />
+                  <path d="m18.5 4.8 1.3.4.4 1.3-.4 1.3-1.3.4-1.3-.4-.4-1.3.4-1.3z" />
+                </svg>
+              </span>
+              <span className="side-nav-copy"><strong>复旦开源达人</strong><small>认识活跃贡献者</small></span>
+              <span className="side-nav-arrow" aria-hidden="true">↗</span>
+            </NavLink>
+          </div>
+          <div className="side-section">
+            <p className="side-label">参与</p>
+            <NavLink className={navClass} to="/join">
+              <span className="side-nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M8 12h8m-3.5-3.5L16 12l-3.5 3.5" />
+                </svg>
+              </span>
+              <span className="side-nav-copy"><strong>加入贡献榜</strong><small>展示你的开源贡献</small></span>
+              <span className="side-nav-arrow" aria-hidden="true">↗</span>
+            </NavLink>
           </div>
         </aside>
 
@@ -51,7 +86,7 @@ export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient;
             <Route path="/contributors" element={<ContributorLeaderboardPage api={api} />} />
             <Route path="/contributors/:username" element={<ContributorDetailPage api={api} />} />
             <Route path="/join" element={<IdentityVerificationPage />} />
-            <Route path="*" element={<section className="not-found"><h1>页面不存在</h1><Link to="/projects">返回校内开源项目</Link></section>} />
+            <Route path="*" element={<section className="not-found"><h1>页面不存在</h1><Link to="/projects">返回复旦开源项目</Link></section>} />
           </Routes>
 
           <footer>

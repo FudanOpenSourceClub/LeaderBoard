@@ -83,14 +83,14 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
     <div className="page-canvas">
       <section className="page-hero compact-hero">
         <div>
-          <span className="hero-badge">CAMPUS MAKERS</span>
-          <h1>校内开源达人</h1>
+          <span className="hero-badge">FUDAN CONTRIBUTORS</span>
+          <h1>复旦开源达人</h1>
           <p>每一次提交、协作和讨论，都会在这里留下清晰的记录。</p>
         </div>
         <div className="hero-stamp" aria-hidden="true">🏆</div>
       </section>
 
-      <section className="filter-card leaderboard-filters" aria-label="校内开源达人筛选">
+      <section className="filter-card leaderboard-filters" aria-label="复旦开源达人筛选">
         <div>
           <span className="filter-title">四种贡献视角</span>
           <span className="filter-caption">当前按 {metricLabel[metric]} 排序</span>
@@ -196,7 +196,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
               <div className="panel-heading">
                 <div>
                   <p className="section-kicker">完整榜单</p>
-                  <h2>校内开源达人</h2>
+                  <h2>复旦开源达人</h2>
                   <p>搜索、收藏和导出都只影响你的当前视图，不改变榜单原始数据。</p>
                 </div>
               </div>

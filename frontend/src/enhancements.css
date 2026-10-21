@@ -17,9 +17,9 @@
   width: 100%;
   min-height: 40px;
   padding: 9px 12px 9px 36px;
-  border: 1px solid #dfe1ea;
+  border: 1px solid #d7e9dc;
   border-radius: 10px;
-  background: #fafbfc;
+  background: #f7fcf8;
   color: #3f4255;
 }
 .search-box::before {
@@ -32,7 +32,7 @@
 }
 .toolbar-select, .toolbar-button {
   min-height: 40px;
-  border: 1px solid #dfe1ea;
+  border: 1px solid #d7e9dc;
   border-radius: 10px;
   background: #fff;
   color: #55586c;
@@ -41,7 +41,7 @@
 }
 .toolbar-select { padding: 8px 30px 8px 10px; }
 .toolbar-button { padding: 8px 12px; }
-.toolbar-button[aria-pressed="true"] { border-color: #cfcaf8; background: #f0efff; color: #6157d7; }
+.toolbar-button[aria-pressed="true"] { border-color: #cfcaf8; background: #e5f4e8; color: #6157d7; }
 .segmented-metrics {
   display: flex;
   flex-wrap: wrap;
@@ -58,8 +58,8 @@
   font-weight: 750;
 }
 .segmented-metrics button[aria-pressed="true"] {
-  border-color: #cbc7f8;
-  background: #eeedff;
+  border-color: #bde1ca;
+  background: #e3f4e7;
   color: #5f55d8;
 }
 .favorite-button {
@@ -68,7 +68,7 @@
   width: 34px;
   height: 34px;
   flex: 0 0 auto;
-  border: 1px solid #e2e3ea;
+  border: 1px solid #d6e6db;
   border-radius: 10px;
   background: #fff;
   color: #a1a4b2;
@@ -98,9 +98,9 @@
 }
 .empty-filter-state {
   padding: 28px;
-  border: 1px dashed #dfe1ea;
+  border: 1px dashed #d7e9dc;
   border-radius: 16px;
-  background: #fbfbfd;
+  background: #f8fcf8;
   color: #8c8f9f;
   text-align: center;
   font-size: 12px;
@@ -148,3 +148,29 @@
   color: #458f79;
 }
 .join-step-done strong { color: #4f6f65; }
+
+/* Mint-green filters and utility controls */
+.toolbar-card { background: rgba(255,255,255,.86); border-color: #d9e9de; }
+.search-box input { border-color: #d4e6d9; background: #fbfefb; color: #315440; font-size: 13px; }
+.search-box::before { color: #78a086; }
+.toolbar-select, .toolbar-button {
+  min-height: 44px; border-color: #d4e6d9; border-radius: 11px;
+  background: #fbfefb; color: #3a6d4f; font-size: 12px;
+}
+.toolbar-button { padding-inline: 15px; }
+.toolbar-button:hover, .toolbar-select:hover { border-color: #93cda6; background: #f0faf2; }
+.toolbar-button[aria-pressed="true"] { border-color: #a5d8b4; background: #ddf3e3; color: #236d43; }
+.segmented-metrics button {
+  min-height: 40px; padding: 9px 15px; border-color: #d4e6d9;
+  background: #fbfefb; color: #62806c; font-size: 12px;
+}
+.segmented-metrics button:hover { background: #f0faf2; }
+.segmented-metrics button[aria-pressed="true"] {
+  border-color: #a3d8b4; background: #dff3e5; color: #206b43;
+}
+.favorite-button { border-color: #d4e6d9; background: #fbfefb; color: #81a18b; }
+.favorite-button[aria-pressed="true"] { border-color: #d6dfa5; background: #f7fadf; color: #869228; }
+.project-search-summary { color: #79907f; font-size: 11px; }
+.empty-filter-state { border-color: #cee6d6; background: #f6fcf7; color: #6b8b77; }
+.profile-action-link, .profile-action-button { min-height: 42px; font-size: 12px; }
+.profile-action-button[aria-pressed="true"] { border-color: #c1dfaa; background: #f0f8e5; color: #4e7c41; }

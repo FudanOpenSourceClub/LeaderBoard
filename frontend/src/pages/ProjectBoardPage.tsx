@@ -107,8 +107,8 @@ export function ProjectBoardPage() {
       <section className="page-hero campus-project-hero">
         <div>
           <span className="hero-badge">FUDAN · OPEN SOURCE</span>
-          <h1>校内开源项目</h1>
-          <p>先从能通过公开来源核验的实验室项目开始。这里不做排行榜，也不拿 Star 给项目排座次，只把值得被看见的校内开源项目认真收进来。</p>
+          <h1>复旦开源项目</h1>
+          <p>先从能通过公开来源核验的实验室项目开始。这里不做排行榜，也不拿 Star 给项目排座次，只把值得被看见的复旦开源项目认真收进来。</p>
         </div>
       </section>
 
@@ -138,8 +138,8 @@ export function ProjectBoardPage() {
       <section className="dashboard-content">
         <div className="section-title-row">
           <div>
-            <p className="section-kicker">CAMPUS PROJECTS</p>
-            <h2>精选开源项目</h2>
+            <p className="section-kicker">FUDAN PROJECTS</p>
+            <h2>精选复旦开源项目</h2>
             <p>项目顺序只是展示顺序，不代表排名。</p>
           </div>
           <span className="count-pill">{campusProjects.length} 个已核验项目</span>
@@ -201,7 +201,7 @@ export function ProjectBoardPage() {
           <div className="project-invite-copy">
             <span className="section-kicker">YOUR PROJECT?</span>
             <h2>漏掉你们实验室的宝藏仓库了？</h2>
-            <p>丢给我们看看 👀。只要能说明这是复旦校内实验室在维护的开源项目，我们核实后就把它补进来。</p>
+            <p>丢给我们看看 👀。只要能说明这是复旦大学实验室在维护的开源项目，我们核实后就把它补进来。</p>
           </div>
           <button className="button button-primary" type="button" onClick={() => {
             setShowForm((value) => !value);

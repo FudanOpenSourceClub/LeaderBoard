@@ -1,0 +1,61 @@
+name: Configure long public export timeout
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/zecyel-export-proxy-timeout.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  proxy:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 5
+    steps:
+      - name: Extend only Zecyel export upstream timeout on HTTP and HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          site="$(readlink -f /etc/nginx/sites-enabled/leadboard)"
+          test -f "$site"
+          backup="$(mktemp)"
+          sudo cp -a "$site" "$backup"
+          restore() {
+            if [[ "$1" == "1" ]]; then
+              sudo cp "$backup" "$site"
+              sudo nginx -t
+              sudo systemctl reload nginx
+            fi
+            rm -f "$backup"
+          }
+          trap 'restore 1' ERR
+          sudo python3 - "$site" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text()
+          needle = " location / {"
+          exact = " location = /api/v1/public-contributors/Zecyel/export.csv {"
+          if exact not in s:
+              assert s.count(needle) == 2, "Unexpected HTTP/HTTPS server config"
+              block = (
+                  " location = /api/v1/public-contributors/Zecyel/export.csv {\n"
+                  "  proxy_pass http://127.0.0.1:3000;\n"
+                  "  proxy_connect_timeout 15s;\n"
+                  "  proxy_read_timeout 480s;\n"
+                  "  proxy_send_timeout 480s;\n"
+                  "  proxy_buffering off;\n"
+                  " }\n"
+              )
+              s = s.replace(needle, block + needle)
+              p.write_text(s)
+          assert s.count(exact) == 2
+          PY
+          sudo nginx -t
+          sudo systemctl reload nginx
+          trap - ERR
+          restore 0
+          echo "Zecyel public export upstream timeout: 480 seconds on both listeners"
+          curl -fsS --max-time 10 http://127.0.0.1/health | grep -q '"status":"ok"'

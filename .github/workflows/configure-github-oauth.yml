@@ -1,0 +1,121 @@
+name: Configure LeaderBoard GitHub OAuth
+
+on:
+  push:
+    paths:
+      - ".github/workflows/configure-github-oauth.yml"
+  workflow_dispatch:
+    inputs:
+      encrypted_credentials:
+        description: "RSA-OAEP-SHA256 encrypted configuration (never enter plaintext secrets)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leadboard-oauth-configuration
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 5
+    steps:
+      - name: Prepare one-time encrypted delivery
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install -d -m 700 /etc/leadboard/oauth-transfer
+          sudo bash -c 'umask 077; openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out /etc/leadboard/oauth-transfer/private.pem 2>/dev/null'
+          echo '=== ONE-TIME PUBLIC KEY ==='
+          sudo openssl pkey -in /etc/leadboard/oauth-transfer/private.pem -pubout
+          echo '=== END ONE-TIME PUBLIC KEY ==='
+          echo 'Only RSA-OAEP-SHA256 ciphertext may be supplied to the configuration run.'
+
+      - name: Decrypt, install configuration, and verify
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          ENCRYPTED_CREDENTIALS: ${{ inputs.encrypted_credentials }}
+        run: |
+          set -euo pipefail
+          umask 077
+          sudo test -s /etc/leadboard/oauth-transfer/private.pem
+          age=$(( $(date +%s) - $(sudo stat -c %Y /etc/leadboard/oauth-transfer/private.pem) ))
+          test "$age" -ge 0
+          test "$age" -lt 3600
+          [[ "$ENCRYPTED_CREDENTIALS" =~ ^[A-Za-z0-9+/=]+$ ]]
+          test "${#ENCRYPTED_CREDENTIALS}" -eq 512
+          work="$(mktemp -d /dev/shm/leadboard-oauth.XXXXXX)"
+          trap 'rm -rf "$work"' EXIT
+          printf '%s' "$ENCRYPTED_CREDENTIALS" | base64 -d > "$work/ciphertext"
+          sudo openssl pkeyutl -decrypt -inkey /etc/leadboard/oauth-transfer/private.pem \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+            -pkeyopt rsa_mgf1_md:sha256 -in "$work/ciphertext" \
+            -out "$work/credentials.json"
+          sudo chmod 600 "$work/credentials.json"
+          sudo python3 - "$work/credentials.json" <<'PY'
+          import json, os, pathlib, re, tempfile
+          import sys
+          supplied=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert set(supplied)=={'clientId','clientSecret','callbackUrl'}, 'Invalid configuration keys'
+          assert supplied['clientId']=='Ov23lievDY5nyA4XfsgX', 'Unexpected OAuth application'
+          assert re.fullmatch(r'[A-Za-z0-9_]{20,128}', supplied['clientSecret']), 'Invalid secret format'
+          assert supplied['callbackUrl']=='https://47.116.20.196/api/v1/auth/github/callback', 'Unexpected callback'
+          target=pathlib.Path('/etc/leadboard/leadboard.env')
+          keys={'GITHUB_OAUTH_CLIENT_ID':supplied['clientId'],
+                'GITHUB_OAUTH_CLIENT_SECRET':supplied['clientSecret'],
+                'GITHUB_OAUTH_CALLBACK_URL':supplied['callbackUrl']}
+          original=target.read_text()
+          lines=[line for line in original.splitlines() if line.split('=',1)[0] not in keys]
+          lines.extend(f'{key}={value}' for key,value in keys.items())
+          backup=pathlib.Path('/etc/leadboard/oauth-transfer/previous.env')
+          backup.write_text(original)
+          backup.chmod(0o600)
+          fd,name=tempfile.mkstemp(dir=target.parent,prefix='.oauth-env-')
+          with os.fdopen(fd,'w') as output:
+              output.write('\n'.join(lines)+'\n')
+              output.flush()
+              os.fsync(output.fileno())
+          os.chmod(name,0o600)
+          stat=target.stat()
+          os.chown(name,stat.st_uid,stat.st_gid)
+          os.replace(name,target)
+          print('OAuth credentials installed; values hidden.')
+          PY
+          rollback() {
+            sudo cp /etc/leadboard/oauth-transfer/previous.env /etc/leadboard/leadboard.env
+            sudo chmod 600 /etc/leadboard/leadboard.env
+            sudo systemctl restart leadboard.service
+          }
+          if ! sudo systemctl restart leadboard.service; then rollback; exit 1; fi
+          ok=0
+          for attempt in $(seq 1 15); do
+            if curl -fsS --max-time 3 http://127.0.0.1:3000/health | grep -q '"status":"ok"'; then ok=1; break; fi
+            sleep 1
+          done
+          if [ "$ok" != 1 ]; then rollback; exit 1; fi
+          release="$(systemctl show -p WorkingDirectory --value leadboard.service)"
+          if ! sudo /usr/local/bin/leadboard-node --env-file=/etc/leadboard/leadboard.env --input-type=module - "$release" <<'JS'
+          import { pathToFileURL } from 'node:url';
+          const root=process.argv[2];
+          const {createGitHubLinkServiceFromEnv,GitHubOAuthLinkService}=await import(pathToFileURL(root+'/backend/dist/auth/github-link.js'));
+          if (!(createGitHubLinkServiceFromEnv() instanceof GitHubOAuthLinkService)) throw new Error('OAuth provider is unavailable');
+          const response=await fetch('https://github.com/login/oauth/access_token',{
+            method:'POST',headers:{Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},
+            body:new URLSearchParams({client_id:process.env.GITHUB_OAUTH_CLIENT_ID,client_secret:process.env.GITHUB_OAUTH_CLIENT_SECRET,code:'leaderboard-configuration-check-invalid-code'}),
+            signal:AbortSignal.timeout(15000)
+          });
+          const result=await response.json();
+          if(result.error!=='bad_verification_code') throw new Error('GitHub OAuth credential check failed');
+          console.log('GitHub recognized application credentials; synthetic authorization code correctly rejected.');
+          JS
+          then rollback; exit 1; fi
+          curl -fsS --max-time 10 https://47.116.20.196/health | grep -q '"status":"ok"'
+          status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 'http://127.0.0.1:3000/api/v1/auth/github/callback?error=access_denied')"
+          test "$status" = 303
+          sudo rm -f /etc/leadboard/oauth-transfer/private.pem /etc/leadboard/oauth-transfer/previous.env
+          echo 'OAuth configured. Service healthy. HTTPS and callback route verified. One-time delivery key removed.'

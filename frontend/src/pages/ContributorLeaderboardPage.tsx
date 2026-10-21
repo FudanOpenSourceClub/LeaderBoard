@@ -169,7 +169,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
           <a className="profile-action-button" href="/api/v1/public-contributors/Zecyel/export.csv">导出公开贡献 CSV ↓</a>
           <Link className="profile-action-link" to="/join">校内身份验证 ↗</Link>
         </div>
-        <p style={{ padding: "0 22px 20px", margin: 0, fontSize: 12, opacity: 0.7 }}>导出来自 GitHub 实时搜索，最多每类 1,000 条；私有活动和未被 GitHub 索引的活动无法保证包含，不能与本页仓库范围内的正式榜单数值直接比较。</p>
+        <p style={{ padding: "0 22px 20px", margin: 0, fontSize: 12, opacity: 0.7 }}>导出来自 GitHub 实时搜索，按日期分段采集，每类最多 5,000 条；GitHub 单次查询仍限制为 1,000 条。私有活动和未被 GitHub 索引的活动无法保证包含，不能与本页仓库范围内的正式榜单数值直接比较。</p>
       </section>
 
       <section className="dashboard-content">

@@ -27,6 +27,13 @@ describe("Contributor scoring rules",()=>{
     const rows=[...Array.from({length:12},(_,i)=>event(i)),...Array.from({length:9},(_,i)=>event(i+12,String(102+Math.floor(i/3))))];
     expect(points(rows).users.get("1")?.score).toBe(10);
   });
+  it("reports both exhausted limits when the same contribution violates both",()=>{
+    const rows=Array.from({length:10},(_,i)=>event(i+1,String(101+Math.floor(i/3))));
+    rows.push(event(11,"101","issue"));
+    const data=points(rows);
+    expect(data.users.get("1")?.score).toBe(10);
+    expect(data.decisions.at(-1)).toMatchObject({repositoryCapExceeded:true,monthlyCapExceeded:true,points:0});
+  });
   it("keeps quotas per user and uses Shanghai natural-month boundaries",()=>{
     const sept=[1,2,3].map(i=>({...event(i),occurredAt:`2026-09-30T15:59:0${i}.000Z`}));
     const oct=[4,5,6].map(i=>({...event(i),occurredAt:`2026-09-30T16:00:0${i}.000Z`}));

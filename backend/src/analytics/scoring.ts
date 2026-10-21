@@ -79,7 +79,9 @@ export function scoreEvents(events: ScoringEvent[], whitelist: Set<string>, from
     const prMergedPoints = whitelisted && event.kind === "pull_request" && inRange(event.mergedAt) ? 30 : 0;
     const decision: ScoreDecision = {
       ...event, whitelisted, month, repositoryMonthCount: repoCount, monthCount,
-      repositoryCapExceeded: repoCount > 3, monthlyCapExceeded: monthCount > 10,
+      repositoryCapExceeded: repoCount > 3,
+      // Evaluate both limits even when the repository limit already blocks this record.
+      monthlyCapExceeded: repoCount > 3 ? monthCount >= 10 : monthCount > 10,
       commitIssuePoints, prOpenedPoints, prMergedPoints,
       points: commitIssuePoints + prOpenedPoints + prMergedPoints,
     };

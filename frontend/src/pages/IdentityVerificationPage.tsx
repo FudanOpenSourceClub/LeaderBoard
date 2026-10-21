@@ -147,18 +147,26 @@ export function IdentityVerificationPage() {
     <div className="page-canvas">
       <section className="join-hero">
         <div className="join-copy">
-          <span className="hero-badge">FUDAN IDENTITY</span>
-          <h1>把你的开源贡献<br />带回校园。</h1>
-          <p>先验证复旦邮箱，再通过 GitHub 官方授权确认账号归属。LeadBoard 不保存 GitHub OAuth access token。</p>
+          <span className="join-eyebrow">GET ON THE BOARD / 01—03</span>
+          <h1>三步加入<br /><em>贡献榜。</em></h1>
           <div className="join-steps" aria-label="加入贡献榜步骤">
-            <div className={`join-step ${verified || githubLinked ? "join-step-done" : "join-step-active"}`}><span>{verified || githubLinked ? "✓" : "1"}</span><div><strong>验证邮箱</strong><small>确认复旦身份</small></div></div>
-            <div className={`join-step ${githubLinked ? "join-step-done" : verified ? "join-step-active" : ""}`}><span>{githubLinked ? "✓" : "2"}</span><div><strong>绑定 GitHub</strong><small>通过 GitHub 官方 OAuth 确认账号</small></div></div>
-            <div className={`join-step ${githubLinked ? "join-step-active" : ""}`}><span>3</span><div><strong>贡献归属</strong><small>用稳定 GitHub ID 关联公开贡献</small></div></div>
+            <div className={"join-step" + (verified || githubLinked ? " join-step-done" : " join-step-active")}>
+              <span aria-hidden="true">{verified || githubLinked ? "✓" : "01"}</span>
+              <div><strong>验证复旦邮箱</strong><small>确认你的校园身份</small></div>
+              <span className="join-step-arrow" aria-hidden="true">↗</span>
+            </div>
+            <div className={"join-step" + (githubLinked ? " join-step-done" : verified ? " join-step-active" : "")}>
+              <span aria-hidden="true">{githubLinked ? "✓" : "02"}</span>
+              <div><strong>绑定 GitHub</strong><small>通过官方授权连接账号</small></div>
+              <span className="join-step-arrow" aria-hidden="true">↗</span>
+            </div>
+            <div className={"join-step" + (githubLinked ? " join-step-active" : "")}>
+              <span aria-hidden="true">03</span>
+              <div><strong>开始贡献</strong><small>参与公开开源项目</small></div>
+              <span className="join-step-arrow" aria-hidden="true">↗</span>
+            </div>
           </div>
-          <div className="privacy-card">
-            <span className="privacy-icon" aria-hidden="true">◇</span>
-            <div><strong>隐私设计</strong><p>邮箱只保存不可逆指纹；GitHub 只保存账号 ID、用户名和头像，授权 token 验证完身份后立即丢弃。</p></div>
-          </div>
+          <p className="join-privacy-note">仅用于身份关联 · GitHub 授权令牌不会被保存</p>
         </div>
 
         <div className="verify-card">

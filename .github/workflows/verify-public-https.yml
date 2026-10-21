@@ -21,7 +21,7 @@ jobs:
           curl -fSs --retry 2 --retry-delay 2 --connect-timeout 8 --max-time 20 -H 'Accept: text/html' "$base/join" | grep -qi '<!doctype html>'
           echo "Checking that the deployed production stylesheet contains the refreshed visual system"
           html="$(curl -fSs --connect-timeout 8 --max-time 20 "$base/")"
-          css_path="$(printf '%s' "$html" | grep -oE '/assets/index-[^"]+\\.css' | head -1)"
+          css_path="$(printf '%s' "$html" | grep -oE '/assets/index-[^"]+\.css' | head -1)"
           test -n "$css_path"
           curl -fSs --connect-timeout 8 --max-time 20 "$base$css_path" -o /tmp/leadboard-published.css
           grep -q 'maker-portraits' /tmp/leadboard-published.css

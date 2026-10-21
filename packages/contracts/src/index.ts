@@ -135,7 +135,7 @@ export type RepositoryStat = z.infer<typeof RepositoryStatSchema>;
 export const ContributorRankSchema = z.object({ rank: positive, login: text, avatarUrl: webUrl.nullable(), ...activityCounts });
 export type ContributorRank = z.infer<typeof ContributorRankSchema>;
 
-export const ContributorRepositoryStatSchema = z.object({ githubId, fullName: text, group: text, ...activityCounts });
+export const ContributorRepositoryStatSchema = z.object({ githubId: githubId.nullable(), fullName: text, group: text, ...activityCounts });
 export type ContributorRepositoryStat = z.infer<typeof ContributorRepositoryStatSchema>;
 
 export const ContributorDetailSchema = z.object({

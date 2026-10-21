@@ -22,7 +22,7 @@ import {
   type SyncStatus,
   type TimeRange,
 } from "@leadboard/contracts";
-import { Router, type Response } from "express";
+import { Router, type RequestHandler, type Response } from "express";
 import { AnalyticsService } from "../analytics/index.js";
 import {
   EmailAuthError,
@@ -33,7 +33,8 @@ import {
   type GitHubLinkApi,
 } from "../auth/index.js";
 import { GitHubClientError } from "../github/client.js";
-import { collectPublicContributions, publicContributionCsv } from "../public-contributions/export.js";
+import { publicContributionCsv } from "../public-contributions/export.js";
+import { getContributorActivityExport } from "../public-contributions/enrollment.js";
 import { ProjectProposalService, type ProjectProposalApi } from "../projects/proposals.js";
 import { getSyncStatus as defaultGetSyncStatus, SyncAlreadyRunningError } from "../sync/index.js";
 
@@ -51,6 +52,7 @@ export interface ApiDependencies {
   emailVerification: EmailVerificationApi;
   githubLink: GitHubLinkApi;
   projectProposals: ProjectProposalApi;
+  contributorExport: typeof getContributorActivityExport;
 }
 
 function sendError(res: Response, status: number, code: string, message: string): void {
@@ -144,6 +146,7 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
   const emailVerification = dependencies.emailVerification ?? new UnavailableEmailVerificationApi();
   const githubLink = dependencies.githubLink ?? new UnavailableGitHubLinkApi();
   const projectProposals = dependencies.projectProposals ?? new ProjectProposalService();
+  const contributorExport = dependencies.contributorExport ?? getContributorActivityExport;
   const router = Router();
 
   router.post("/auth/email/send-code", async (req, res, next) => {
@@ -280,38 +283,32 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
     }
   });
 
-  // Public-data collection pilot. This route does not enroll the account
-  // as a verified Fudan member or alter leaderboard ranks/database facts.
-  router.get("/public-contributors/:username/export.csv", async (req, res, next) => {
+  const exportContributor: RequestHandler<{ username: string }> = async (req, res, next) => {
     const username = req.params.username;
-    if (username.toLowerCase() !== "zecyel") {
-      sendError(res, 404, "PILOT_NOT_FOUND", "Public contributor pilot not found");
-      return;
-    }
-    const token = process.env.GITHUB_TOKEN?.trim();
-    if (!token) {
-      sendError(res, 503, "PUBLIC_EXPORT_UNAVAILABLE", "GitHub export is not configured");
+    if (!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(username)) {
+      sendError(res, 400, "INVALID_USERNAME", "Invalid GitHub username");
       return;
     }
     try {
-      const data = await collectPublicContributions("Zecyel", token);
+      const data = await contributorExport(username);
+      if (data === null) {
+        sendError(res, 404, "CONTRIBUTOR_NOT_FOUND", "Contributor not found");
+        return;
+      }
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", 'attachment; filename="LeaderBoard-Zecyel-public-contributions.csv"');
-      res.setHeader("Cache-Control", "private, max-age=300");
+      res.setHeader("Content-Disposition", `attachment; filename="LeaderBoard-${username}-public-contributions.csv"`);
+      res.setHeader("Cache-Control", "no-store");
       res.setHeader("X-LeaderBoard-Truncated", String(data.truncated));
       res.setHeader("X-LeaderBoard-Incomplete", String(data.incomplete));
       res.setHeader("X-LeaderBoard-Event-Count", String(data.rows.length));
       res.send(publicContributionCsv(data));
     } catch (error) {
-      if (error instanceof Error && error.message.startsWith("GitHub ")) {
-        sendError(res, 503, "PUBLIC_EXPORT_UPSTREAM_FAILED", "GitHub 数据获取失败，请稍后再试");
-      } else if (error instanceof Error && error.name === "TimeoutError") {
-        sendError(res, 503, "PUBLIC_EXPORT_TIMEOUT", "GitHub 请求超时，请稍后再试");
-      } else {
-        next(error);
-      }
+      if (!handleServiceError(error, res)) next(error);
     }
-  });
+  };
+  router.get("/contributors/:username/export.csv", exportContributor);
+  // Preserve existing contribution download links.
+  router.get("/public-contributors/:username/export.csv", exportContributor);
 
   router.get("/contributors/:username", async (req, res, next) => {
     const range = parseRange(req.query.range, res);

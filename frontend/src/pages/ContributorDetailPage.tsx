@@ -64,6 +64,12 @@ export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
               >
                 GitHub ↗
               </a>
+              <a
+                className="profile-action-button"
+                href={`/api/v1/contributors/${encodeURIComponent(username)}/export.csv`}
+              >
+                导出公开贡献 CSV ↓
+              </a>
               <button
                 className="profile-action-button"
                 type="button"
@@ -107,7 +113,7 @@ export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
                   <table className="data-table">
                     <thead><tr><th>仓库</th><th>分组</th><th>Commit</th><th>PR</th><th>Issue</th><th>总活动</th></tr></thead>
                     <tbody>{state.detail.repositories.map((item) => (
-                      <tr key={item.githubId}><td><strong>{item.fullName}</strong></td><td><span className="tag">{item.group}</span></td>
+                      <tr key={item.fullName}><td><strong>{item.fullName}</strong></td><td><span className="tag">{item.group}</span></td>
                         <td>{item.commits}</td><td>{item.prs}</td><td>{item.issues}</td><td><strong>{item.total}</strong></td></tr>
                     ))}</tbody>
                   </table>

@@ -38,7 +38,7 @@ function mockFetcher(url: URL | RequestInfo) {
   }));
 }
 
-describe("Zecyel public contribution pilot", () => {
+describe("Public contributor activity export", () => {
   it("collects real-source-shaped Commit/PR/Issue data and exports safe CSV", async () => {
     const fetcher = vi.fn(mockFetcher) as unknown as typeof fetch;
     const result = await collectPublicContributions("Zecyel", "test-token", fetcher);
@@ -51,7 +51,7 @@ describe("Zecyel public contribution pilot", () => {
     const csv = publicContributionCsv(result);
     expect(csv).toContain("https://github.com/example/repo/pull/12");
     expect(csv).toContain("'=SUM(1,2)");
-    expect(csv).toContain("不等于已认证复旦贡献");
+    expect(csv).toContain("公开 GitHub 贡献记录");
   });
 
   it("rejects invalid login and missing token before accessing GitHub", async () => {
@@ -64,6 +64,15 @@ describe("Zecyel public contribution pilot", () => {
   it("surfaces GitHub failures instead of exporting invented zero counts", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response("rate limited", { status: 403 })) as unknown as typeof fetch;
     await expect(collectPublicContributions("Zecyel", "token", fetcher)).rejects.toThrow("HTTP 403");
+  });
+
+  it("retries transient GitHub failures before collecting the contribution snapshot", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response("temporary failure", { status: 503 }))
+      .mockImplementation(mockFetcher) as unknown as typeof fetch;
+    const result = await collectPublicContributions("Zecyel", "token", fetcher);
+    expect(result.rows).toHaveLength(3);
+    expect(fetcher).toHaveBeenCalledTimes(4);
   });
 
   it("retrieves more than GitHub's per-query 1000 cap by splitting date windows", async () => {

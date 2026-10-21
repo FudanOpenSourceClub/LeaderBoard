@@ -108,7 +108,7 @@ export function ProjectBoardPage() {
         <div>
           <span className="hero-badge">FUDAN · OPEN SOURCE</span>
           <h1>复旦开源项目</h1>
-          <p>复旦校内仓库必吃榜</p>
+          <p>复旦开源仓库必吃榜</p>
         </div>
       </section>
 

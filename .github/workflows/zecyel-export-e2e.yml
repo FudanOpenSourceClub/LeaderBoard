@@ -1,13 +1,10 @@
-name: Zecyel Public Export E2E
+name: Contributor Enrollment and Export E2E
 
 on:
   workflow_dispatch:
   workflow_run:
     workflows: ["Deploy LeadBoard"]
     types: [completed]
-  push:
-    paths:
-      - ".github/workflows/zecyel-export-e2e.yml"
 
 permissions:
   contents: read
@@ -22,7 +19,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base="http://47.116.20.196"
+          base="https://47.116.20.196"
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
 
@@ -32,14 +29,14 @@ jobs:
           curl -kfsSL --connect-timeout 10 --max-time 20 "$base/contributors" | grep -q '<!doctype html>'
 
           echo "Downloading live Zecyel public contribution CSV"
-          status="$(curl -kLsS --connect-timeout 10 --max-time 480 \
+          status="$(curl -kLsS --connect-timeout 10 --max-time 20 \
             -o "$tmp/zecyel.csv" -w '%{http_code}' \
-            "$base/api/v1/public-contributors/Zecyel/export.csv")"
+            "$base/api/v1/contributors/Zecyel/export.csv")"
           echo "Export HTTP status: $status"
           test "$status" = "200"
           python3 - "$tmp/zecyel.csv" <<'PY'
           import csv
-          import sys
+          import sys, json, re, ssl, urllib.request
           from collections import Counter
           path = sys.argv[1]
           with open(path, encoding="utf-8-sig", newline="") as file:
@@ -53,6 +50,30 @@ jobs:
           assert kinds["commit"] <= 5000, "Exceeded configured per-kind limit"
           assert kinds["pull_request"] > 0, "No public PRs in export"
           assert kinds["issue"] > 0, "No public issues in export"
+          base = "https://47.116.20.196"
+          context = ssl._create_unverified_context()
+          def get(path):
+              with urllib.request.urlopen(base + path, context=context, timeout=20) as response:
+                  return response.read().decode("utf-8-sig")
+          detail = json.loads(get("/api/v1/contributors/Zecyel?range=all"))
+          assert detail["login"] == "Zecyel"
+          assert detail["total"] == len(rows), "Profile and export totals differ"
+          assert (detail["commits"], detail["prs"], detail["issues"]) == (kinds["commit"], kinds["pull_request"], kinds["issue"])
+          for range_ in ["7d", "30d", "90d", "all"]:
+              for metric in ["total", "commits", "prs", "issues"]:
+                  board = json.loads(get(f"/api/v1/contributors/leaderboard?range={range_}&metric={metric}&limit=5000"))
+                  person = next((p for p in board["items"] if p["login"] == "Zecyel"), None)
+                  assert person is not None, f"Zecyel missing from {range_}/{metric} leaderboard"
+                  if range_ == "all":
+                      assert person["total"] == len(rows)
+          index = get("/projects")
+          script = re.search(r'src="([^"]+\.js)"', index).group(1)
+          bundle = get(script)
+          assert "复旦开源仓库必吃榜" in bundle
+          assert "公开贡献采集试点" not in bundle
+          assert "PUBLIC CONTRIBUTION PILOT" not in bundle
+          assert "不计入复旦正式排名" not in bundle
+          print("Verified: Zecyel is enrolled in all 16 leaderboard views; profile/export totals match; project title and user interface are current")
           print("Export verified: %d total public source-linked events" % len(rows))
           print("Events by type: " + str(dict(kinds)))
           print("Sample verified URL: " + rows[0]["原始链接"])

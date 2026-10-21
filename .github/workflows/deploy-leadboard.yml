@@ -14,6 +14,7 @@ on:
       - "scripts/**"
       - "package.json"
       - "package-lock.json"
+      - "contributors.json"
       - ".github/workflows/deploy-leadboard.yml"
 
 permissions:
@@ -83,6 +84,7 @@ jobs:
           echo "=== Database migration ==="
           sudo install -o leadboard -g leadboard -m 600 /etc/leadboard/leadboard.env "$release/.env"
           sudo -u leadboard bash -c "cd '$release' && /usr/local/bin/leadboard-node --env-file=.env scripts/db-migrate.mjs"
+          sudo -u leadboard bash -c "cd '$release' && /usr/local/bin/leadboard-node --env-file=.env scripts/sync-contributors.mjs"
           sudo rm -f "$release/.env"
 
           echo "=== Switch systemd release ==="

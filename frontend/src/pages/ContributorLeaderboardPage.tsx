@@ -156,22 +156,6 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
         </button>
       </section>
 
-      <section className="panel" aria-label="公开贡献采集试点" style={{ marginBottom: 24 }}>
-        <div className="panel-heading">
-          <div>
-            <p className="section-kicker">PUBLIC CONTRIBUTION PILOT</p>
-            <h2>Zecyel · 公开贡献采集试点</h2>
-            <p>已核验公开 GitHub 账号存在。这里独立导出公开 Commit、PR 和 Issue，不计入复旦正式排名；复旦身份仍需邮箱与 GitHub 授权确认。</p>
-          </div>
-        </div>
-        <div className="profile-actions" style={{ padding: "0 22px 20px" }}>
-          <a className="profile-action-link" href="https://github.com/Zecyel" target="_blank" rel="noreferrer">GitHub 主页 ↗</a>
-          <a className="profile-action-button" href="/api/v1/public-contributors/Zecyel/export.csv">导出公开贡献 CSV ↓</a>
-          <Link className="profile-action-link" to="/join">校内身份验证 ↗</Link>
-        </div>
-        <p style={{ padding: "0 22px 20px", margin: 0, fontSize: 12, opacity: 0.7 }}>导出来自 GitHub 实时搜索，按日期分段采集，每类最多 5,000 条；GitHub 单次查询仍限制为 1,000 条。私有活动和未被 GitHub 索引的活动无法保证包含，不能与本页仓库范围内的正式榜单数值直接比较。</p>
-      </section>
-
       <section className="dashboard-content">
         {state.status === "loading" && <LoadingState label="正在加载贡献者排行榜…" />}
         {state.status === "error" && <ErrorState message={state.message} onRetry={() => setRetry((value) => value + 1)} />}

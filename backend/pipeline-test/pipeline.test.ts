@@ -3,6 +3,8 @@ import type { CommitActivity, GitHubActivity, RepositorySyncResult } from "@lead
 import { AnalyticsService } from "../src/analytics/index.js";
 import { getDbPool } from "../src/db/index.js";
 import { applyRepositoryScope, ingestActivities } from "../src/ingestion/index.js";
+import { getContributorActivityExport, saveContributorActivity } from "../src/public-contributions/enrollment.js";
+import type { PublicContributionExport } from "../src/public-contributions/export.js";
 
 const pool = getDbPool();
 const NOW = new Date("2026-09-25T12:00:00.000Z");
@@ -115,5 +117,49 @@ describe("Analytics pipeline fixture", () => {
     expect(alice).toMatchObject({ login: "alice", commits: 2, prs: 2, issues: 0, total: 4 });
     expect(alice?.repositories).toHaveLength(2);
     await expect(analytics.getContributorDetail("charlie", "30d")).resolves.toBeNull();
+  });
+
+  it("persists enrolled users, deduplicates tracked events, and uses the same history for ranking, profile and export", async () => {
+    const identity = { githubId: "2001", login: "alice", avatarUrl: "https://example.test/alice.png" };
+    const data: PublicContributionExport = {
+      rows: [
+        { kind: "commit", repository: repoA.fullName, identifier: "C1", occurredAt: "2026-09-24T10:00:00Z", title: "Tracked change", url: `https://github.com/${repoA.fullName}/commit/C1` },
+        { kind: "commit", repository: "other/community", identifier: "EXTERNAL", occurredAt: "2026-08-01T10:00:00Z", title: "Older change", url: "https://github.com/other/community/commit/EXTERNAL" },
+        { kind: "pull_request", repository: "other/community", identifier: "10", occurredAt: "2026-09-24T10:00:00Z", title: "Feature", url: "https://github.com/other/community/pull/10" },
+        { kind: "issue", repository: "other/community", identifier: "11", occurredAt: "2026-09-24T10:00:00Z", title: "Discussion", url: "https://github.com/other/community/issues/11" },
+      ],
+      totals: { commit: 2, pull_request: 1, issue: 1 }, truncated: false, incomplete: false,
+    };
+    await saveContributorActivity(identity, data, pool);
+    await saveContributorActivity(identity, data, pool);
+    const all = await analytics.getContributorLeaderboard({ range: "all", metric: "total", limit: 50 });
+    expect(all[0]).toMatchObject({ login: "alice", commits: 3, prs: 3, issues: 1, total: 7 });
+    const month = await analytics.getContributorLeaderboard({ range: "30d", metric: "total", limit: 50 });
+    expect(month[0]).toMatchObject({ login: "alice", commits: 2, prs: 3, issues: 1, total: 6 });
+    const week = await analytics.getContributorLeaderboard({ range: "7d", metric: "total", limit: 50 });
+    expect(week[0]).toMatchObject({ login: "alice", total: 5 });
+    const systems = await analytics.getContributorLeaderboard({ range: "all", metric: "total", group: "systems", limit: 50 });
+    expect(systems.find((item) => item.login === "alice")?.total).toBe(3);
+    const personal = await analytics.getContributorLeaderboard({ range: "all", metric: "total", group: "个人开源贡献", limit: 50 });
+    expect(personal).toHaveLength(1);
+    expect(personal[0]?.total).toBe(3);
+    const detail = await analytics.getContributorDetail("ALICE", "all");
+    expect(detail?.total).toBe(7);
+    expect(detail?.repositories.find((r) => r.fullName === "other/community")).toMatchObject({ githubId: null, commits: 1, prs: 1, issues: 1, total: 3 });
+    const exported = await getContributorActivityExport("alice", pool);
+    expect(exported?.rows).toHaveLength(7);
+    expect(exported?.totals).toEqual({ commit: 3, pull_request: 3, issue: 1 });
+    expect(exported?.rows.every((row) => row.url.startsWith("https://github.com/"))).toBe(true);
+    await expect(analytics.getOrganizationActivitySummary("30d")).resolves.toMatchObject({ repositories: 2, total: 11 });
+    await expect(saveContributorActivity(identity, { ...data, rows: [], incomplete: true }, pool)).rejects.toThrow("incomplete");
+    expect((await getContributorActivityExport("alice", pool))?.rows).toHaveLength(7);
+
+    await saveContributorActivity({ githubId: "2010", login: "new-member", avatarUrl: null }, {
+      rows: [], totals: { commit: 0, pull_request: 0, issue: 0 }, truncated: false, incomplete: false,
+    }, pool);
+    const withNewMember = await analytics.getContributorLeaderboard({ range: "7d", metric: "total", limit: 50 });
+    expect(withNewMember.find((item) => item.login === "new-member")).toMatchObject({ commits: 0, prs: 0, issues: 0, total: 0 });
+    await expect(analytics.getContributorDetail("new-member", "7d")).resolves.toMatchObject({ login: "new-member", total: 0, repositories: [] });
+    await expect(getContributorActivityExport("missing-user", pool)).resolves.toBeNull();
   });
 });

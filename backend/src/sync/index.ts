@@ -18,6 +18,7 @@ import { getDbPool } from "../db/index.js";
 import { GitHubApiClient } from "../github/client.js";
 import { applyRepositoryScope, ingestActivities } from "../ingestion/index.js";
 import { RepositorySync } from "../repositories/sync.js";
+import { refreshEnrolledContributors } from "../public-contributions/enrollment.js";
 
 const SYNC_LOCK_KEY = 1279411268;
 
@@ -51,6 +52,7 @@ export interface SyncDependencies {
   pullIssues: PullIssueCollectorLike;
   applyScope: typeof applyRepositoryScope;
   ingest: typeof ingestActivities;
+  refreshContributors?(): Promise<void>;
 }
 
 function initialFrom(to: string, days: number): string {
@@ -145,6 +147,9 @@ export class SyncCoordinator {
       };
 
       try {
+        let contributorSyncFailed = false;
+        try { await this.dependencies.refreshContributors?.(); }
+        catch { contributorSyncFailed = true; }
         const oldTracked = await this.pool.query<{ github_id: string }>(
           "SELECT github_id::text AS github_id FROM repositories WHERE tracked = TRUE",
         );
@@ -181,10 +186,11 @@ export class SyncCoordinator {
           }
         }
 
-        const status: SyncRunStatus = repositoriesFailed === 0
+        const status: SyncRunStatus = repositoriesFailed === 0 && !contributorSyncFailed
           ? "success"
           : repositoriesOk === 0 ? "failed" : "partial";
-        return await finish(status, repositoriesOk, repositoriesFailed);
+        return await finish(status, repositoriesOk, repositoriesFailed,
+          contributorSyncFailed ? "ContributorSynchronizationError" : null);
       } catch (error) {
         return await finish("failed", 0, 0, safeErrorName(error));
       }
@@ -234,6 +240,7 @@ export function createDefaultSyncCoordinator(config: SyncConfig): SyncCoordinato
     pullIssues: new PullRequestIssueCollector(github),
     applyScope: applyRepositoryScope,
     ingest: ingestActivities,
+    refreshContributors: () => refreshEnrolledContributors(loadConfig().githubToken),
   });
 }
 

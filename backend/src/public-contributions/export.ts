@@ -1,7 +1,6 @@
 /**
- * A public GitHub activity export, deliberately separate from the verified
- * Fudan leaderboard. GitHub Search is not equivalent to GitHub's contribution
- * graph or LeadBoard's tracked-repository database.
+ * Collect source-linked public activity for enrolled contributors and exports.
+ * GitHub Search is not equivalent to GitHub's contribution graph.
  */
 export interface PublicContribution {
   kind: "commit" | "pull_request" | "issue";
@@ -81,7 +80,9 @@ export async function collectPublicContributions(
       // Keep authenticated GitHub search calls below roughly 30/minute.
       // Mock fetchers bypass the delay so unit tests remain fast.
       if (requestCount++ > 0 && fetcher === fetch) await delay(2200);
-      const response = await fetcher(url, {
+      let response: Response;
+      try {
+        response = await fetcher(url, {
         headers: {
           Accept: "application/vnd.github+json",
           Authorization: "Bearer " + githubToken,
@@ -89,9 +90,14 @@ export async function collectPublicContributions(
           "X-GitHub-Api-Version": "2022-11-28",
         },
         signal: AbortSignal.timeout(25000),
-      });
+        });
+      } catch (error) {
+        if (attempt === 3) throw error;
+        if (fetcher === fetch) await delay(1000 * 2 ** attempt);
+        continue;
+      }
       if (!response.ok) {
-        const retryable = response.status === 429 ||
+        const retryable = [429, 500, 502, 503, 504].includes(response.status) ||
           (response.status === 403 &&
             (response.headers.has("retry-after") ||
               response.headers.get("x-ratelimit-remaining") === "0"));
@@ -102,8 +108,8 @@ export async function collectPublicContributions(
             ? retryAfter * 1000
             : Number.isFinite(reset) && reset > 0
               ? Math.max(1000, reset * 1000 - Date.now() + 1000)
-              : 10000;
-          await delay(Math.min(wait, 65000));
+              : response.status >= 500 ? 1000 * 2 ** attempt : 10000;
+          if (fetcher === fetch) await delay(Math.min(wait, 65000));
           continue;
         }
         throw new Error("GitHub " + endpoint + " search returned HTTP " + response.status);
@@ -112,6 +118,10 @@ export async function collectPublicContributions(
       if (!Array.isArray(payload.items) ||
           !Number.isSafeInteger(payload.total_count) || payload.total_count < 0) {
         throw new Error("Invalid GitHub search response");
+      }
+      if (payload.incomplete_results && attempt < 3) {
+        if (fetcher === fetch) await delay(1000 * 2 ** attempt);
+        continue;
       }
       incomplete ||= payload.incomplete_results === true;
       return payload;
@@ -208,7 +218,7 @@ function csvCell(value: string): string {
 }
 
 export function publicContributionCsv(data: PublicContributionExport): string {
-  const scope = "公开 GitHub 搜索记录（不等于已认证复旦贡献或 GitHub contributions 总数）";
+  const scope = "公开 GitHub 贡献记录（按 Commit、PR、Issue 统计）";
   const values = [
     HEADER,
     ...data.rows.map((r) => [

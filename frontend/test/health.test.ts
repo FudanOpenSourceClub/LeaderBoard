@@ -38,7 +38,7 @@ it("renders the Fudan project board without a header status widget", () => {
   expect(html).not.toContain("校内开源项目");
   expect(html).not.toContain("校内开源达人");
   expect(html).toContain("加上我的项目");
-  expect(html).toContain("精选复旦开源项目");
+  expect(html).toContain("复旦开源仓库必吃榜");
   expect(html).not.toContain("先放几个我们能核验的");
   expect(html).not.toContain("让每一份微小贡献都被看见");
 });

@@ -50,7 +50,17 @@ jobs:
           sudo nginx -t
           sudo systemctl reload nginx
           printf 'challenge-ok\n' | sudo tee /var/www/letsencrypt/.well-known/acme-challenge/leadboard-tls-check >/dev/null
-          curl -fsS --max-time 5 http://127.0.0.1/.well-known/acme-challenge/leadboard-tls-check | grep -qx 'challenge-ok'
+          challenge_ready=0
+          for i in $(seq 1 15); do
+            body="$(curl -sS --max-time 5 http://127.0.0.1/.well-known/acme-challenge/leadboard-tls-check || true)"
+            if [[ "$body" = 'challenge-ok' ]]; then challenge_ready=1; break; fi
+            sleep 1
+          done
+          if [[ "$challenge_ready" != "1" ]]; then
+            echo "::error::Nginx ACME challenge URL does not serve the challenge file"
+            curl -sS -i --max-time 5 http://127.0.0.1/.well-known/acme-challenge/leadboard-tls-check | head -c 500 || true
+            exit 1
+          fi
 
           echo "=== Obtain publicly trusted short-lived IP certificate ==="
           sudo "$certbot_bin" certonly --non-interactive --agree-tos --register-unsafely-without-email             --preferred-profile shortlived --webroot             --webroot-path /var/www/letsencrypt --ip-address "$ip" --keep-until-expiring

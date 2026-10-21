@@ -1,0 +1,91 @@
+name: Configure LeadBoard IP HTTPS
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/configure-ip-https.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  https:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 18
+    steps:
+      - name: Install certificate, add TLS listener, and configure renewals
+        shell: bash
+        run: |
+          set -euo pipefail
+          ip=47.116.20.196
+          site="$(readlink -f /etc/nginx/sites-enabled/leadboard)"
+          test -f "$site"
+          echo "=== Existing HTTP must be healthy ==="
+          curl -fsS --max-time 5 http://127.0.0.1/health | grep -q '"status":"ok"'
+
+          echo "=== Install modern Certbot with IP-certificate support ==="
+          if ! command -v certbot >/dev/null 2>&1 || ! certbot --help all 2>/dev/null | grep -q -- '--ip-address'; then
+            sudo snap install --classic certbot
+          fi
+          certbot_bin=/snap/bin/certbot
+          if [[ ! -x "$certbot_bin" ]]; then certbot_bin="$(command -v certbot)"; fi
+          sudo "$certbot_bin" --version
+          sudo "$certbot_bin" --help all | grep -q -- '--ip-address'
+
+          echo "=== Add narrowly scoped ACME challenge route ==="
+          sudo mkdir -p /var/www/letsencrypt/.well-known/acme-challenge
+          sudo cp -a "$site" "$site.pre-ip-tls-20261021"
+          sudo python3 - "$site" <<'PY'
+          import pathlib, sys
+          p=pathlib.Path(sys.argv[1])
+          s=p.read_text()
+          anchor=' location / {'
+          if 'location ^~ /.well-known/acme-challenge/' not in s:
+              assert s.count(anchor)==1, 'Unexpected Nginx site, refusing to change'
+              challenge=' location ^~ /.well-known/acme-challenge/ {\n  root /var/www/letsencrypt;\n  default_type text/plain;\n  try_files $uri =404;\n }\n'
+              s=s.replace(anchor,challenge+anchor,1)
+              p.write_text(s)
+          PY
+          sudo nginx -t
+          sudo systemctl reload nginx
+          printf 'challenge-ok\n' | sudo tee /var/www/letsencrypt/.well-known/acme-challenge/leadboard-tls-check >/dev/null
+          curl -fsS --max-time 5 http://127.0.0.1/.well-known/acme-challenge/leadboard-tls-check | grep -qx 'challenge-ok'
+
+          echo "=== Obtain publicly trusted short-lived IP certificate ==="
+          sudo "$certbot_bin" certonly --non-interactive --agree-tos --register-unsafely-without-email             --preferred-profile shortlived --webroot             --webroot-path /var/www/letsencrypt --ip-address "$ip" --keep-until-expiring
+
+          cert="/etc/letsencrypt/live/$ip/fullchain.pem"
+          key="/etc/letsencrypt/live/$ip/privkey.pem"
+          sudo test -s "$cert"
+          sudo test -s "$key"
+
+          echo "=== Configure Nginx HTTPS without removing HTTP ==="
+          sudo python3 - "$site" "$ip" <<'PY'
+          import pathlib,sys
+          site=pathlib.Path(sys.argv[1]); ip=sys.argv[2]
+          s=site.read_text()
+          if 'listen 443 ssl default_server;' not in s:
+              assert s.count('server {')==1
+              https=s.replace(' listen 80 default_server;', ' listen 443 ssl default_server;').replace(' listen [::]:80 default_server;', ' listen [::]:443 ssl default_server;')
+              https=https.replace(' client_max_body_size 1m;', f' ssl_certificate /etc/letsencrypt/live/{ip}/fullchain.pem;\n ssl_certificate_key /etc/letsencrypt/live/{ip}/privkey.pem;\n ssl_protocols TLSv1.2 TLSv1.3;\n client_max_body_size 1m;',1)
+              site.write_text(s+'\n'+https)
+          PY
+          if ! sudo nginx -t; then
+            sudo cp -a "$site.pre-ip-tls-20261021" "$site"
+            sudo nginx -t
+            sudo systemctl reload nginx
+            exit 1
+          fi
+          sudo systemctl reload nginx
+
+          echo "=== Configure automatic renewal and reload ==="
+          sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+          printf '#!/bin/sh\nset -eu\nsystemctl reload nginx\n'             | sudo tee /etc/letsencrypt/renewal-hooks/deploy/leadboard-nginx-reload.sh >/dev/null
+          sudo chmod 755 /etc/letsencrypt/renewal-hooks/deploy/leadboard-nginx-reload.sh
+          sudo systemctl enable --now snap.certbot.renew.timer || true
+
+          echo "=== Verify local HTTPS with public cert validation ==="
+          curl -fsS --connect-timeout 5 --max-time 10 "https://$ip/health" | grep -q '"status":"ok"'
+          curl -fsS --connect-timeout 5 --max-time 10 "https://$ip/join" | grep -qi '<!doctype html>'
+          echo "HTTPS configured and locally verified; exterior port 443 still needs independent testing."

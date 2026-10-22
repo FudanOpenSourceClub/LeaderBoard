@@ -121,18 +121,11 @@ export function ProjectBoardPage() {
         <div className="project-list-count"><Badge className="count-pill">{campusProjects.length} 个项目</Badge></div>
 
         {catalogError&&<p role="alert" className="verify-notice verify-notice-error">{catalogError}</p>}
-        <div className="project-search-summary">
-          <span aria-hidden="true"></span>
-          {(query || tag || favoritesOnly) && (
-            <button
-              className="text-button"
-              type="button"
-              onClick={() => { setQuery(""); setTag(""); setFavoritesOnly(false); }}
-            >
-              清除筛选
-            </button>
-          )}
-        </div>
+        {(query || tag || favoritesOnly) && (
+          <div className="project-search-summary">
+            <button className="text-button" type="button" onClick={() => { setQuery(""); setTag(""); setFavoritesOnly(false); }}>清除筛选</button>
+          </div>
+        )}
 
         {catalogLoading ? <p role="status">正在加载项目…</p> : visibleProjects.length === 0 ? (
           <div className="empty-filter-state">没有匹配的项目。换个关键词，或者清除筛选再看看。</div>
@@ -159,11 +152,10 @@ export function ProjectBoardPage() {
                   </div>
                 </div>
                 <div className="project-tags">
-                  {project.tags.map((item) => <Badge className="tag" key={item}>{item}</Badge>)}
+                  {project.tags.map((item) => <button type="button" className="tag project-tag-button" key={item} onClick={() => setTag(item)} aria-label={`筛选 ${item}`}>{item}</button>)}
                 </div>
                 <div className="project-links">
-                  <a href={project.url} target="_blank" rel="noreferrer">打开项目 ↗</a>
-                  {project.labUrl&&<a href={project.labUrl} target="_blank" rel="noreferrer">查看实验室来源 ↗</a>}
+                  {project.labUrl&&<a href={project.labUrl} target="_blank" rel="noreferrer">实验室来源 ↗</a>}
                 </div>
               </Card>
             ))}

@@ -83,8 +83,8 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
       <nav className="mobile-bottom-nav" aria-label="底部导航">
         <NavLink to="/" end className={({isActive}) => isActive ? "mobile-tab mobile-tab-active" : "mobile-tab"}><AppIcon name="home" size={22}/><span>首页</span></NavLink>
         <NavLink to="/projects" className={({isActive}) => isActive ? "mobile-tab mobile-tab-active" : "mobile-tab"}><AppIcon name="grid" size={22}/><span>项目</span></NavLink>
-        <NavLink to="/contributors" className={({isActive}) => isActive || location.pathname.startsWith("/contributors/") && !(session.authenticated && location.pathname === accountUrl) ? "mobile-tab mobile-tab-active" : "mobile-tab"}><AppIcon name="users" size={22}/><span>达人</span></NavLink>
-        <Link to={accountUrl} className={location.pathname === accountUrl && accountUrl !== "/join" || (accountUrl === "/join" && location.pathname === "/join") ? "mobile-tab mobile-tab-active" : "mobile-tab"}><AppIcon name="user" size={22}/><span>我的</span></Link>
+        <NavLink to="/contributors" className={() => location.pathname === "/contributors" || (location.pathname.startsWith("/contributors/") && location.pathname !== accountUrl) ? "mobile-tab mobile-tab-active" : "mobile-tab"}><AppIcon name="users" size={22}/><span>达人</span></NavLink>
+        <Link to={accountUrl} className={location.pathname === accountUrl ? "mobile-tab mobile-tab-active" : "mobile-tab"}><AppIcon name="user" size={22}/><span>我的</span></Link>
       </nav>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   TimeRangeSchema,
   type ContributorLeaderboardResponse,
@@ -20,14 +20,22 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
   const [state, setState] = useState<State>({ status: "loading" });
   const [retry, setRetry] = useState(0);
   const [query, setQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(10);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
+  const generation = useRef(0);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const favorites = useLocalFavorites("contributors");
 
   useEffect(() => {
     let active = true;
+    generation.current += 1;
+    setVisibleCount(10);
+    setLoadingMore(false);
+    setMoreError(null);
     setState({ status: "loading" });
     void Promise.all([
-      api.getContributorLeaderboard({ range, metric: "score", ...(group === undefined ? {} : { group }), limit: 10 }),
+      api.getContributorLeaderboard({ range, metric: "score", ...(group === undefined ? {} : { group }), limit: 11 }),
       api.getGroups(),
     ]).then(
       ([leaderboard, groups]) => { if (active) setState({ status: "ready", leaderboard, groups: groups.items }); },
@@ -42,12 +50,31 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
   const visibleItems = useMemo(() => {
     if (state.status !== "ready") return [];
     const normalized = query.trim().toLowerCase();
-    return state.leaderboard.items.slice(0, 10).filter((item) => {
+    return state.leaderboard.items.slice(0, visibleCount).filter((item) => {
       const matchesQuery = !normalized || item.login.toLowerCase().includes(normalized);
       const matchesFavorite = !favoritesOnly || favorites.isFavorite(item.login);
       return matchesQuery && matchesFavorite;
     });
-  }, [state, query, favoritesOnly, favorites.items]);
+  }, [state, query, favoritesOnly, favorites.items, visibleCount]);
+
+
+  async function showMore() {
+    if (loadingMore || state.status !== "ready") return;
+    const currentGeneration = generation.current;
+    setLoadingMore(true);
+    setMoreError(null);
+    try {
+      const leaderboard = await api.getContributorLeaderboard({range, metric:"score", ...(group === undefined ? {} : {group}), limit:visibleCount + 11});
+      if (generation.current !== currentGeneration) return;
+      setState({...state, leaderboard});
+      setVisibleCount(value => value + 10);
+    } catch (error) {
+      if (generation.current === currentGeneration) setMoreError(error instanceof Error ? error.message : "加载失败，请重试");
+    } finally {
+      if (generation.current === currentGeneration) setLoadingMore(false);
+    }
+  }
+  const hasMore = state.status === "ready" && state.leaderboard.items.length > visibleCount;
 
 
   return (
@@ -63,7 +90,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
 
       <section className="filter-card leaderboard-filters" aria-label="积分规则">
         <div>
-          <span className="filter-title">按积分展示前 10 名</span>
+          <span className="filter-title">贡献积分规则</span>
           <p className="filter-caption">Commit 与 Issue 仅在仓库 Star ≥ 10 时计分，不受白名单限制，自己的仓库也适用；两者合计每月最多 10 次、同一仓库每月最多 3 次，每次 1 分。PR 仅在白名单仓库计分：提交得 20 分，合并再加 30 分。Star 数按每日同步结果判断。LeaderBoard 开发者另有一次性 50 分开发贡献奖励。</p>
         </div>
       </section>
@@ -115,7 +142,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
         {state.status === "ready" && state.leaderboard.items.length > 0 && visibleItems.length === 0 && (
           <div className="empty-filter-state">没有匹配的贡献者。换个用户名，或者关闭“只看收藏”。</div>
         )}
-        {state.status === "ready" && visibleItems.length > 0 && (
+        {state.status === "ready" && state.leaderboard.items.length > 0 && (
           <>
             <div className="section-title-row">
               <div>
@@ -123,21 +150,20 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
                 <h2>达人榜</h2>
                 <p>按贡献积分排序，保留全部历史积分。</p>
               </div>
-              <span className="count-pill">{visibleItems.length} 位贡献者</span>
+              <span className="count-pill">{Math.min(visibleCount, state.leaderboard.items.length)} 位达人</span>
             </div>
 
             <section className="panel ranking-panel">
               <div className="panel-heading">
                 <div>
-                  <p className="section-kicker">TOP 10</p>
-                  <h2>积分前十</h2>
-                  <p>搜索和收藏都只影响你的当前视图，不改变榜单原始数据。</p>
+                  <p className="section-kicker">CONTRIBUTOR RANKING</p>
+                  <h2>贡献排行榜</h2>
                 </div>
               </div>
               <div className="ranking-list">
                 {visibleItems.map((item) => (
-                  <div className="ranking-row ranking-row-with-favorite" key={item.login}>
-                    <span className={`rank-badge rank-${Math.min(item.rank, 4)}`}>{item.rank}</span>
+                  <div className={`ranking-row ranking-row-with-favorite ${item.rank <= 3 ? `ranking-medalist ranking-medalist-${item.rank}` : ""}`} key={item.login}>
+                    {item.rank <= 3 ? <span className={`rank-medal rank-medal-${item.rank}`} role="img" aria-label={`${["金牌", "银牌", "铜牌"][item.rank - 1]}，第 ${item.rank} 名`}><svg viewBox="0 0 40 48" aria-hidden="true"><path className="medal-ribbon" d="M9 4h9l7 18-8 4zM31 4h-9l-7 18 8 4z"/><circle cx="20" cy="30" r="15" fill="currentColor"/><circle cx="20" cy="30" r="11.5" fill="none" stroke="white" strokeOpacity=".65"/><text x="20" y="35" textAnchor="middle" fill="white" fontSize="15" fontWeight="800">{item.rank}</text></svg></span> : <span className="rank-badge rank-4">{item.rank}</span>}
                     <img className="avatar avatar-xl"
                       src={item.avatarUrl ?? `https://github.com/${encodeURIComponent(item.login)}.png?size=96`}
                       alt={`${item.login} 的头像`} loading="lazy" />
@@ -168,6 +194,10 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
                     <Link className="row-arrow" to={`/contributors/${encodeURIComponent(item.login)}`} aria-label={`查看 ${item.login} 详情`}>→</Link>
                   </div>
                 ))}
+              </div>
+              <div className="ranking-more">
+                {moreError && <p role="alert">{moreError}</p>}
+                <button className="toolbar-button" type="button" disabled={loadingMore || !hasMore} onClick={() => void showMore()}>{loadingMore ? "正在加载…" : hasMore ? "显示更多" : "已显示全部达人"}<span aria-hidden="true">{hasMore ? "↓" : "✓"}</span></button>
               </div>
             </section>
           </>

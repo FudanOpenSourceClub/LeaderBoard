@@ -15,6 +15,7 @@ import {
   ProjectProposalRequestSchema,
   ProjectProposalResponseSchema,
   RegistrationStatusSchema,
+  GitHubRegistrationIdentitySchema,
   RepositoryStatsResponseSchema,
   TimeRangeSchema,
   type ApiErrorResponse,
@@ -159,7 +160,7 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
   const analytics = dependencies.analytics ?? new AnalyticsService();
   const getSyncStatus = dependencies.getSyncStatus ?? defaultGetSyncStatus;
   const emailVerification: EmailVerificationApi = dependencies.emailVerification ?? new UnavailableEmailVerificationApi();
-  const githubLink = dependencies.githubLink ?? new UnavailableGitHubLinkApi();
+  const githubLink: GitHubLinkApi = dependencies.githubLink ?? new UnavailableGitHubLinkApi();
   const projectProposals = dependencies.projectProposals ?? new ProjectProposalService();
   const contributorExport = dependencies.contributorExport ?? getContributorActivityExport;
   const registrationStatus = dependencies.registrationStatus ?? getRegistrationStatus;
@@ -193,9 +194,38 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
     }catch(error){if(!handleServiceError(error,res))next(error)}
   });
 
+  router.get("/auth/github/register", async (_req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const result = await websiteAuth.startLogin("/join", "register");
+      res.cookie("leaderboard_login", result.browserToken, {httpOnly:true,secure:true,sameSite:"lax",maxAge:10*60000,path:"/api/v1/auth"});
+      res.redirect(303, result.authorizeUrl);
+    } catch (error) { if (!handleServiceError(error, res)) next(error); }
+  });
+
+  router.get("/auth/github/registration", async (req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const identity = await websiteAuth.getRegistrationIdentity(cookie(req, "leaderboard_session"));
+      res.json(GitHubRegistrationIdentitySchema.parse(identity ? {verified:true,githubId:identity.githubId,login:identity.login} : {verified:false}));
+    } catch (error) { if (!handleServiceError(error, res)) next(error); }
+  });
+
+  const requireGitHubIdentity = async (req: Request) => {
+    const identity = await websiteAuth.getRegistrationIdentity(cookie(req, "leaderboard_session"));
+    if (!identity) throw new WebsiteAuthError("GITHUB_AUTH_REQUIRED", 401, "请先通过 GitHub 官方授权验证账号");
+    return identity;
+  };
+
   router.get("/auth/registration/status", async (req,res,next) => {
     res.setHeader("Cache-Control", "no-store");
     try {
+      const token = cookie(req, "leaderboard_session");
+      if (token) {
+        const user = await websiteAuth.getSession(token);
+        res.json(RegistrationStatusSchema.parse(user?.memberId ? {registered:true,login:user.login} : {registered:false}));
+        return;
+      }
       res.json(RegistrationStatusSchema.parse(await registrationStatus(registrationCookie(req.headers.cookie))));
     } catch (error) { if (!handleServiceError(error,res)) next(error); }
   });
@@ -207,8 +237,9 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
       return;
     }
     try {
+      const identity = await requireGitHubIdentity(req);
       const requesterIp = req.ip ?? req.socket.remoteAddress ?? "unknown";
-      const result = await emailVerification.sendCode(parsed.data.email, requesterIp, {studentId:parsed.data.studentId,githubLogin:parsed.data.githubLogin});
+      const result = await emailVerification.sendCode(parsed.data.email, requesterIp, {studentId:parsed.data.studentId,githubId:identity.githubId,githubLogin:identity.login});
       res.status(202).json(EmailCodeSendResponseSchema.parse(result));
     } catch (error) {
       if (!handleServiceError(error, res)) next(error);
@@ -222,14 +253,22 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
       return;
     }
     try {
-      const result = await emailVerification.verifyCode(parsed.data.email, parsed.data.code);
+      const identity = await requireGitHubIdentity(req);
+      if (!githubLink.completeVerifiedRegistration) throw new GitHubLinkError("GITHUB_LINK_NOT_CONFIGURED", 503, "GitHub 绑定服务尚未配置");
+      const result = await emailVerification.verifyCode(parsed.data.email, parsed.data.code, identity.githubId);
+      if (!result.registrationToken) throw new GitHubLinkError("REGISTRATION_SESSION_REQUIRED", 401, "请重新完成邮箱验证");
       if (result.registrationToken) res.cookie("leaderboard_registration",result.registrationToken, {
         httpOnly:true,secure:true,sameSite:"lax",maxAge:7*86400000,path:"/api/v1/auth",
       });
-      const link = await githubLink.createAuthorization(result.memberId);
+      await githubLink.completeVerifiedRegistration(result.memberId, identity, result.registrationToken);
+      const confirmation = await registrationStatus(result.registrationToken);
+      if (!confirmation.registered) throw new GitHubLinkError("REGISTRATION_WRITE_NOT_CONFIRMED", 500, "未能确认注册记录");
+      const token = await websiteAuth.fromRegistration(result.registrationToken);
+      if (token) sessionCookie(res, token);
       res.json(EmailCodeVerifyResponseSchema.parse({
         verified: true,
-        githubLink: link,
+        registered: true,
+        githubLink: {available:false},
       }));
     } catch (error) {
       if (!handleServiceError(error, res)) next(error);
@@ -258,7 +297,7 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
       return;
     }
     try {
-      if(state.startsWith("login.")){
+      if(state.startsWith("login.") || state.startsWith("register.")){
         try{const result=await websiteAuth.completeLogin(code,state,cookie(req,"leaderboard_login"));
           sessionCookie(res,result.sessionToken);res.clearCookie("leaderboard_login",{path:"/api/v1/auth"});res.redirect(303,result.returnPath);return;
         }catch(error){res.redirect(303,error instanceof WebsiteAuthError&&error.code==="REGISTRATION_REQUIRED"?"/join?login=registration_required":"/join?login=failed");return;}

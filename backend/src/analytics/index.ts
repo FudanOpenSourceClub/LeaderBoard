@@ -220,7 +220,7 @@ export class AnalyticsService {
     };
     });
     rows.sort((a, b) => b[input.metric] - a[input.metric] || a.login.localeCompare(b.login));
-    return rows.slice(0, Math.min(10,input.limit)).map((row, index) =>
+    return rows.slice(0, input.limit).map((row, index) =>
       ContributorRankSchema.parse({ rank: index + 1, ...row }),
     );
   }

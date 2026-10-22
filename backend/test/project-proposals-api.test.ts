@@ -7,7 +7,7 @@ const user:WebsiteUser={githubId:"123",login:"student",memberId:"42",isAdmin:fal
 function setup(identity:WebsiteUser|null=user){
   const submit=vi.fn().mockResolvedValue({submitted:true,id:7});const review=vi.fn();const list=vi.fn().mockResolvedValue([]);
   const app=createApp({apiRouter:createApiRouter({analytics:{getGroups:vi.fn(),getOrganizationActivitySummary:vi.fn(),getRepositoryStats:vi.fn(),getContributorLeaderboard:vi.fn(),getContributorDetail:vi.fn()},
-    websiteAuth:{getSession:async()=>identity,fromRegistration:async()=>null,startLogin:vi.fn(),completeLogin:vi.fn()},projectProposals:{submit},projectReview:{list,review,projects:vi.fn().mockResolvedValue([])},notifyProjects:vi.fn().mockResolvedValue(undefined)})});
+    websiteAuth:{getSession:async()=>identity,fromRegistration:async()=>null,getRegistrationIdentity:async()=>null,startLogin:vi.fn(),completeLogin:vi.fn()},projectProposals:{submit},projectReview:{list,review,projects:vi.fn().mockResolvedValue([])},notifyProjects:vi.fn().mockResolvedValue(undefined)})});
   return {app,submit,review,list};
 }
 const proposal={projectUrl:"https://github.com/FudanLab/example",labName:"复旦大学示例实验室",notes:"这是一个由实验室长期维护的开源项目，实验室主页也有项目介绍。"};

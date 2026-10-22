@@ -3,6 +3,8 @@ import {
   ApiErrorResponseSchema,
   EmailCodeSendResponseSchema,
   GitHubLinkInfoSchema,
+  GitHubRegistrationIdentitySchema,
+  type GitHubRegistrationIdentity,
   EmailCodeVerifyResponseSchema,
   RegistrationStatusSchema,
 } from "@leadboard/contracts";
@@ -53,7 +55,11 @@ function messageFor(code: string): string {
     case "ALREADY_REGISTERED":
       return "该学号、邮箱或 GitHub 账号已注册，不能重复注册。";
     case "INVALID_REGISTRATION":
-      return "请填写有效学号和 GitHub 用户名。";
+      return "请填写有效学号并完成 GitHub 授权。";
+    case "GITHUB_AUTH_REQUIRED":
+      return "GitHub 授权已过期，请重新授权后继续。";
+    case "GITHUB_ACCOUNT_MISMATCH":
+      return "GitHub 账号已变化，请重新获取邮箱验证码。";
     case "GITHUB_ACCOUNT_NOT_FOUND":
     case "INVALID_GITHUB_ACCOUNT":
       return "请填写存在的个人 GitHub 账号。";
@@ -91,14 +97,14 @@ function messageFor(code: string): string {
 export function IdentityVerificationPage() {
   const [email, setEmail] = useState("");
   const [studentId, setStudentId] = useState("");
-  const [githubUsername, setGithubUsername] = useState("");
+  const [githubIdentity, setGithubIdentity] = useState<GitHubRegistrationIdentity>({ verified: false });
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
   const [verified, setVerified] = useState(false);
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [notice, setNotice] = useState<Notice>(null);
-  const [githubAuthorizeUrl, setGithubAuthorizeUrl] = useState<string | null>(null);
+
   const callbackParams = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
   const githubCallbackStatus = callbackParams.get("github");
   const [githubLogin, setGithubLogin] = useState<string | null>(null);
@@ -108,13 +114,18 @@ export function IdentityVerificationPage() {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/v1/auth/registration/status", { cache: "no-store", credentials: "same-origin" })
-      .then(async response => {
+    void Promise.all([
+      fetch("/api/v1/auth/registration/status", {cache:"no-store",credentials:"same-origin"}).then(async response => {
         if (!response.ok) throw new Error("Registration confirmation unavailable");
         return RegistrationStatusSchema.parse(await response.json());
-      })
-      .then(status => {
+      }),
+      fetch("/api/v1/auth/github/registration", {cache:"no-store",credentials:"same-origin"}).then(async response => {
+        if (!response.ok) throw new Error("GitHub identity unavailable");
+        return GitHubRegistrationIdentitySchema.parse(await response.json());
+      }),
+    ]).then(([status, identity]) => {
         if (!active) return;
+        setGithubIdentity(identity);
         setGithubLinked(status.registered);
         setGithubLogin(status.registered ? status.login : null);
         if (!status.registered && githubCallbackStatus === "success") {
@@ -144,7 +155,7 @@ export function IdentityVerificationPage() {
     try {
       const result = await postJson(
         "/api/v1/auth/email/send-code",
-        { email, studentId, githubLogin: githubUsername },
+        { email, studentId },
         EmailCodeSendResponseSchema,
       );
       setSent(true);
@@ -155,16 +166,6 @@ export function IdentityVerificationPage() {
     } finally {
       setBusy(false);
     }
-  }
-
-  async function resumeRegistration() {
-    setBusy(true); setNotice(null);
-    try {
-      const link=await postJson("/api/v1/auth/github/retry",{},GitHubLinkInfoSchema);
-      if (link.available) { setVerified(true); setGithubAuthorizeUrl(link.authorizeUrl); }
-      else setNotice({tone:"info",text:"GitHub 绑定服务还需要管理员完成配置。"});
-    } catch(error) { setNotice({tone:"error",text:messageFor(error instanceof Error?error.message:"UNKNOWN")}); }
-    finally { setBusy(false); }
   }
 
   async function verify(event: FormEvent) {
@@ -178,19 +179,26 @@ export function IdentityVerificationPage() {
         { email, code },
         EmailCodeVerifyResponseSchema,
       );
+      if (!result.registered) throw new Error("REGISTRATION_WRITE_NOT_CONFIRMED");
       setVerified(true);
-      if (result.githubLink.available) {
-        setGithubAuthorizeUrl(result.githubLink.authorizeUrl);
-        setNotice({ tone: "success", text: "复旦身份验证成功。现在可以继续绑定 GitHub。" });
-      } else {
-        setGithubAuthorizeUrl(null);
-        setNotice({ tone: "info", text: "复旦身份验证成功。GitHub 绑定服务还需要完成一次管理员配置。" });
-      }
+      window.location.assign("/join");
     } catch (error) {
       setNotice({ tone: "error", text: messageFor(error instanceof Error ? error.message : "UNKNOWN") });
     } finally {
       setBusy(false);
     }
+  }
+
+  async function resumeRegistration() {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const link = await postJson("/api/v1/auth/github/retry", {}, GitHubLinkInfoSchema);
+      if (link.available) window.location.assign(link.authorizeUrl);
+      else throw new Error("GITHUB_AUTH_REQUIRED");
+    } catch (error) {
+      setNotice({tone:"error",text:messageFor(error instanceof Error ? error.message : "UNKNOWN")});
+    } finally { setBusy(false); }
   }
 
   return (
@@ -199,23 +207,19 @@ export function IdentityVerificationPage() {
         <div className="join-copy">
           <span className="hero-badge">FUDAN IDENTITY</span>
           {callbackParams.get("login")&&<p role="alert" className="verify-notice verify-notice-error">{callbackParams.get("login")==="registration_required"?"请先注册网站，再使用 GitHub 登录。":"GitHub 登录未完成，请重新尝试。"}</p>}
-          <h1>把你的开源贡献<br />带回校园。</h1>
-          <p>填写学号和 GitHub 账号，验证复旦邮箱后通过 GitHub 官方授权完成绑定。LeaderBoard 不保存 GitHub OAuth access token。</p>
-          <div className="join-steps" aria-label="加入贡献榜步骤">
-            <div className={`join-step ${verified || githubLinked ? "join-step-done" : "join-step-active"}`}><span>{verified || githubLinked ? "✓" : "1"}</span><div><strong>验证邮箱</strong><small>确认复旦身份</small></div></div>
-            <div className={`join-step ${githubLinked ? "join-step-done" : verified ? "join-step-active" : ""}`}><span>{githubLinked ? "✓" : "2"}</span><div><strong>绑定 GitHub</strong><small>通过 GitHub 官方 OAuth 确认账号</small></div></div>
-            <div className={`join-step ${githubLinked ? "join-step-active" : ""}`}><span>3</span><div><strong>贡献归属</strong><small>用稳定 GitHub ID 关联公开贡献</small></div></div>
-          </div>
-          <div className="privacy-card">
-            <span className="privacy-icon" aria-hidden="true">◇</span>
-            <div><strong>隐私设计</strong><p>邮箱只保存不可逆指纹；GitHub 只保存账号 ID、用户名和头像，授权 token 验证完身份后立即丢弃。</p></div>
+          <h1>我要上榜</h1>
+          <p>授权 GitHub 账号，验证复旦邮箱，加入达人榜。</p>
+          <div className="join-steps" aria-label="加入达人榜步骤">
+            <div className={`join-step ${githubIdentity.verified ? "join-step-done" : "join-step-active"}`}><span>{githubIdentity.verified ? "✓" : "1"}</span><div><strong>授权 GitHub</strong><small>自动获取账号 ID</small></div></div>
+            <div className={`join-step ${githubLinked ? "join-step-done" : githubIdentity.verified ? "join-step-active" : ""}`}><span>{githubLinked ? "✓" : "2"}</span><div><strong>验证复旦邮箱</strong><small>确认校园身份</small></div></div>
+            <div className={`join-step ${githubLinked ? "join-step-done" : ""}`}><span>{githubLinked ? "✓" : "3"}</span><div><strong>加入达人榜</strong><small>关联你的公开贡献</small></div></div>
           </div>
         </div>
 
         <div className="verify-card">
           <div className="verify-card-head">
             <span className="verify-icon" aria-hidden="true">✦</span>
-            <div><p>加入 LeaderBoard</p><h2>{githubLinked ? "GitHub 绑定完成" : verified ? "继续绑定 GitHub" : sent ? "输入邮箱验证码" : "验证复旦邮箱"}</h2></div>
+            <div><p>加入 LeaderBoard</p><h2>{githubLinked || verified ? "已加入达人榜" : !githubIdentity.verified ? "验证 GitHub 账号" : sent ? "输入邮箱验证码" : "验证复旦邮箱"}</h2></div>
           </div>
 
           {checkingRegistration ? <p role="status">正在向后台确认注册状态…</p> : githubLinked ? (
@@ -223,23 +227,14 @@ export function IdentityVerificationPage() {
               <span className="verified-mark" aria-hidden="true">✓</span>
               <h2>注册成功</h2>
               <p>{githubLogin ? <>已确认账号 <strong>@{githubLogin}</strong> 的归属。</> : "GitHub 账号已经成功绑定。"}</p>
-              <div className="success-band">学号去重已检查 · GitHub 绑定已写入并核验</div>
+              <a className="primary-button github-link-button" href="/contributors">查看达人榜</a>
             </div>
-          ) : verified ? (
-            <div className="verified-state github-link-state" role="status">
-              <span className="verified-mark" aria-hidden="true">✓</span>
-              <h2>邮箱验证完成</h2>
-              <p>下一步会跳转到 GitHub 官方页面确认你控制的账号。</p>
-              {githubAuthorizeUrl ? (
-                <a className="primary-button github-link-button" href={githubAuthorizeUrl}>
-                  使用 GitHub 账号授权
-                </a>
-              ) : (
-                <div className="verify-notice verify-notice-info">
-                  GitHub OAuth 还没有配置完成。邮箱身份已经验证成功。
-                </div>
-              )}
-              {notice && <p className={`verify-notice verify-notice-${notice.tone}`}>{notice.text}</p>}
+          ) : !githubIdentity.verified ? (
+            <div className="github-link-state">
+              <p>通过 GitHub 官方 OAuth 验证，自动读取你的账号 ID。</p>
+              <a className="primary-button github-link-button" href="/api/v1/auth/github/register">使用 GitHub 授权</a>
+              {notice && <p className={`verify-notice verify-notice-${notice.tone}`} role="status">{notice.text}</p>}
+              {githubCallbackStatus === "error" && <p className="verify-notice verify-notice-error" role="alert">{githubCallbackMessage(githubCallbackReason)}</p>}
             </div>
           ) : (
             <>
@@ -248,19 +243,17 @@ export function IdentityVerificationPage() {
                   {githubCallbackMessage(githubCallbackReason)}
                 </p>
               )}
+              <div className="github-identity-card">
+                <div><span>GitHub 账号 ID</span><strong>{githubIdentity.githubId}</strong><small>@{githubIdentity.login}</small></div>
+                {!sent && <a href="/api/v1/auth/github/register">更换账号</a>}
+              </div>
               <form onSubmit={sendCode}>
                 <label className="form-field">
                   <span>学号</span>
                   <input type="text" inputMode="numeric" value={studentId}
                     onChange={event=>setStudentId(event.target.value.replace(/\D/g,""))}
                     pattern="[0-9]{6,20}" maxLength={20} placeholder="填写本人学号" required disabled={busy||sent} />
-                  <small>同一学号只能注册一次；仅保存用于去重的指纹。</small>
-                </label>
-                <label className="form-field">
-                  <span>GitHub 用户名</span>
-                  <input type="text" value={githubUsername} onChange={event=>setGithubUsername(event.target.value.trim())}
-                    placeholder="例如：octocat" required maxLength={39} disabled={busy||sent} />
-                  <small>同一 GitHub 账号只能绑定一个用户，后续需使用此账号授权。</small>
+
                 </label>
                 <label className="form-field">
                   <span>复旦邮箱</span>
@@ -279,7 +272,7 @@ export function IdentityVerificationPage() {
                   {busy && !sent ? "正在发送…" : cooldown > 0 ? `${cooldown} 秒后可重发` : sent ? "验证码已发送" : "发送验证码"}
                 </button>
               </form>
-              {!sent && <button className="text-button" type="button" disabled={busy} onClick={()=>void resumeRegistration()}>继续之前的 GitHub 绑定</button>}
+              {notice?.tone === "error" && notice.text.includes("已注册") && <button className="text-button" type="button" disabled={busy} onClick={() => void resumeRegistration()}>继续上次注册</button>}
 
               {sent && (
                 <form className="verification-form" onSubmit={verify}>
@@ -301,7 +294,7 @@ export function IdentityVerificationPage() {
                     <small>验证码 10 分钟内有效</small>
                   </label>
                   <button className="primary-button" type="submit" disabled={busy || code.length !== 6}>
-                    {busy ? "正在验证…" : "验证身份"}
+                    {busy ? "正在验证…" : "验证并加入达人榜"}
                   </button>
                   <button
                     className="text-button"

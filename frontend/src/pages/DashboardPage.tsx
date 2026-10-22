@@ -77,7 +77,7 @@ export function DashboardPage({ api, isMock = false }: { api: LeadBoardApiClient
           <p>把分散在 GitHub 仓库里的贡献整理成清晰、持续更新的社区画像。</p>
           <div className="hero-actions">
             <Link className="button button-primary" to="/contributors">查看贡献者榜单</Link>
-            <Link className="button button-secondary" to="/join">加入贡献榜</Link>
+            <Link className="button button-secondary" to="/join">加入达人榜</Link>
           </div>
           {isMock && <p className="demo-notice" role="status">当前展示模拟数据，不代表真实 GitHub 活动。</p>}
         </div>
@@ -169,7 +169,7 @@ export function DashboardPage({ api, isMock = false }: { api: LeadBoardApiClient
                   <div><span className="insight-icon">◎</span><div><strong>{load.data.summary.prs}</strong><p>个 Pull Request 参与了协作与代码审阅。</p></div></div>
                   <div><span className="insight-icon">#</span><div><strong>{load.data.summary.issues}</strong><p>个 Issue 记录需求、问题与讨论。</p></div></div>
                 </div>
-                <Link className="soft-cta" to="/join">验证复旦身份，加入贡献榜 <span>→</span></Link>
+                <Link className="soft-cta" to="/join">验证复旦身份，加入达人榜 <span>→</span></Link>
               </section>
             </div>
 

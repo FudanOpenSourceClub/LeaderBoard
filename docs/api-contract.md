@@ -651,7 +651,7 @@ IngestionResult 的 inserted/updated/skipped/errors 以输入 Activity 条数计
 
 ## 15. 复旦邮箱身份验证 API
 
-个人贡献榜的第一步只验证复旦身份邮箱。GitHub OAuth 与个人贡献采集在下一阶段接入。
+注册先通过 GitHub 官方 OAuth 取得已验证的稳定账号 ID，再验证复旦身份邮箱。客户端不提交 GitHub 用户名或账号 ID 作为身份凭据。
 
 ### 发送验证码
 
@@ -661,7 +661,8 @@ IngestionResult 的 inserted/updated/skipped/errors 以输入 Activity 条数计
 
 ```json
 {
-  "email": "student@fudan.edu.cn"
+  "email": "student@fudan.edu.cn",
+  "studentId": "26300000001"
 }
 ```
 
@@ -695,11 +696,13 @@ IngestionResult 的 inserted/updated/skipped/errors 以输入 Activity 条数计
 
 ```json
 {
-  "verified": true
+  "verified": true,
+  "registered": true,
+  "githubLink": { "available": false }
 }
 ```
 
-成功后创建或刷新同一 `email_fingerprint` 对应的 `members` 记录，不重复创建身份。
+成功后创建唯一 `members` 身份，绑定当前 OAuth 会话确认的 GitHub ID，重新读取已提交记录确认注册完成。
 
 ### 身份验证错误 code
 
@@ -728,7 +731,7 @@ EMAIL_AUTH_NOT_CONFIGURED
 
 ## 达人榜积分、每日增量与唯一注册
 
-- 默认 `range=all&metric=score`；`score` 是新增排序指标，接口最多返回 10 人，同分按 GitHub 用户名稳定排序，超额活动次数不参与破同分。
+- 默认 `range=all&metric=score`；`score` 是新增排序指标，接口按 `limit` 返回达人；页面默认展示前 10 人，点击“显示更多”每次增加 10 人，通过额外一条记录判断是否还有后续达人，同分按 GitHub 用户名稳定排序，超额活动次数不参与破同分。
 - Contributor rank/detail/repository 增加 `score`、`commitIssueScore`、`prOpenedScore`、`prMergedScore`、`mergedPrs`。
 - PR 仅在 `scoring_repositories.enabled=true` 的稳定 Repository ID 中计分，名称和 URL 不能代替 ID。根目录 `scoring-whitelist.json` 管理 PR 白名单候选及启用状态。PR 不受 Star 门槛限制。
 - Commit/Issue 不要求白名单，只要求公开仓库的 GitHub Star 数至少10颗；自己的仓库适用相同门槛。未核实 Star 数、仓库不可用或低于10颗的记录保留在贡献历史中，计0分且不占用任何额度。
@@ -736,15 +739,15 @@ EMAIL_AUTH_NOT_CONFIGURED
 - `repository_star_counts` 按 GitHub 仓库 ID 缓存已核实的 Star 数，每日刷新所有已有 Commit/Issue 的仓库，即使没有新贡献也刷新；使用最近成功同步的数量对已有历史重新计分。临时网络/限流错误保留上次核实值并报告同步失败，后续同步继续重试。首次未核实的仓库不计 Commit/Issue 分。
 - 每次计算先检查完整历史，再筛选展示范围；时间筛选和分组不重置额度。PR 在创建时得 20 分、在 `merged_at` 时另得 30 分，不使用 closed 状态冒充 merged。
 - CSV 增加仓库 ID、对象 ID、合并时间、白名单命中、自然月、两个额度的计数/超限标记、得分及 PR 分项。
-- `POST /auth/email/send-code` 现需 `{ email, studentId, githubLogin }`。先解析 GitHub 稳定 ID，再查邮箱、学号指纹、注册/绑定的 GitHub ID；重复返回 409 `ALREADY_REGISTERED`，不发邮件。
-- `POST /auth/email/verify` 仍需 `{ email, code }`。校验成功才创建用户，数据库唯一约束和事务锁保证并发只能注册一次；之后 OAuth 必须匹配预先填写的 GitHub 稳定 ID。
+- `POST /auth/email/send-code` 仅需 `{ email, studentId }`，必须携带已完成 GitHub OAuth 的 HttpOnly 会话。账号 ID 和当前 login 由服务器读取，忽略客户端伪造的账号字段；查邮箱、学号指纹及注册/绑定 GitHub ID，重复返回 409 `ALREADY_REGISTERED`，不发邮件。
+- `POST /auth/email/verify` 仍需 `{ email, code }`。校验成功才创建用户，数据库唯一约束和事务锁保证并发只能注册一次；验证码对应的账号 ID 必须与当前 OAuth 会话相同，然后直接绑定该身份，无需再次授权。
 - 邮箱验证后通过 7 天 HttpOnly/Secure/SameSite=Lax Cookie 恢复未完成绑定。`POST /auth/github/retry` 不重发验证码、不创建第二个用户，已完成绑定后不能继续绑定第二个账号；同一凭据可在有效期内查询已完成的注册状态。
 - 个人贡献每日增量采集，PR/Issue 按 `updated` 拉取，Commit 按 `committer-date` 拉取并保留重叠窗口。首次升级完整回填稳定仓库 ID 与合并状态；只有完整成功才推进游标。每批按用户 ID、贡献类型、仓库 ID、SHA/编号 upsert，永久保留历史。
 
 
 ## 后台确认注册成功（2026-10-22）
 
-`GET /api/v1/auth/registration/status` 使用 HttpOnly/Secure/SameSite=Lax 注册 Cookie，返回
+`GET /api/v1/auth/registration/status` 优先检查当前网站会话及完整校园绑定，兼容旧注册 Cookie；切换 GitHub 账号后不会沿用上一个账号的成功状态。返回
 `{registered:false}` 或 `{registered:true,login:"GitHub用户名"}`，并设置 `Cache-Control: no-store`。
 不返回学号、邮箱、指纹、成员 ID 或任何姓名字段；不采集姓名。
 
@@ -773,3 +776,11 @@ Contributor rank/detail 新增可选 `bonusScore`：独立开发奖励，包含�
 - `PROJECT_REVIEW_EMAIL` 指定通知邮箱。发送队列每30秒检查一次，立即尝试新申请；SMTP失败保留任务并退避重试。邮件链接不能执行审核操作。
 
 个人贡献刷新从 `/user/{github_id}` 获取当前用户名并核对 ID；某个用户失败不阻断其他用户，整批仍报告失败以便发现问题。仓库 PR/Issue 同步包含本轮更新、关闭或合并的历史对象，保留原始创建时间计算提交分，按合并时间计算合并分。
+
+
+## OAuth 上榜入口（2026-10-22）
+
+- `GET /auth/github/register`：立即 303 跳转 GitHub 官方授权页，使用 `register.` 前缀的一次性 state 及 HttpOnly/Secure/SameSite=Lax 浏览器凭据，复用现有回调地址。
+- 回调从 GitHub `/user` 获取稳定账号 ID 与当前 login，签发 30 分钟的注册用会话；尚未完成校园绑定的账号不能调用需要注册身份的接口。
+- `GET /auth/github/registration`：不缓存，仅返回 `{verified:false}` 或 `{verified:true,githubId,login}`。不返回学号、姓名、邮箱、指纹或 OAuth token。
+- 邮箱验证码成功后，使用该服务器已验证身份写入成员绑定和贡献者记录，确认提交成功，签发正式 30 天网站会话。旧的邮箱先行 OAuth 回调与继续认证接口保持可用。

@@ -49,6 +49,7 @@ const fixtures = [
   [c.ProjectProposalAdminSchema,{id:1,projectUrl:"https://github.com/org/repo",labName:"Fudan",notes:"Application",status:"pending",submitterLogin:null,createdAt:at,reviewedAt:null,reviewNotes:"",notificationSent:false,notificationAttempts:0}],
   [c.ProjectProposalAdminResponseSchema,{items:[]}],
   [c.RegistrationStatusSchema, {registered: true, login: "alice"}],
+  [c.GitHubRegistrationIdentitySchema, {verified: true, githubId:"2001", login:"alice"}],
   [c.GitHubLinkInfoSchema, { available: false }],
   [c.EmailCodeVerifyResponseSchema, { verified: true, githubLink: { available: false } }],
   [c.ProjectProposalRequestSchema, { projectUrl: "https://github.com/fudan/example", labName: "复旦大学示例实验室", notes: "这是一个用于测试的校内开源项目提议。" }],

@@ -174,3 +174,42 @@
 .empty-filter-state { border-color: #cee6d6; background: #f6fcf7; color: #6b8b77; }
 .profile-action-link, .profile-action-button { min-height: 42px; font-size: 12px; }
 .profile-action-button[aria-pressed="true"] { border-color: #c1dfaa; background: #f0f8e5; color: #4e7c41; }
+
+.github-nav-link { border: 1px solid #cfe5d6; background: #edf7ef; }
+.github-nav-link svg { width: 19px; height: 19px; flex-shrink: 0; }
+.sidebar-account .side-nav-copy strong { overflow: hidden; text-overflow: ellipsis; }
+.github-identity-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; margin: 0 0 22px; border: 1px solid #cde5d6; border-radius: 12px; background: #f1f9f3; }
+.github-identity-card > div { display: grid; gap: 5px; }
+.github-identity-card span, .github-identity-card small { color: #62816e; font-size: 12px; }
+.github-identity-card strong { color: #234b33; font-size: 20px; font-variant-numeric: tabular-nums; }
+.github-identity-card a { font-size: 12px; white-space: nowrap; }
+.github-link-state > p { color: #6c8775; font-size: 13px; line-height: 1.8; }
+.ranking-panel .ranking-row-with-favorite { grid-template-columns: 40px 48px minmax(0,1fr) minmax(140px,.7fr) 58px 34px 20px; }
+.ranking-panel .ranking-person { min-width: 0; }
+.ranking-panel .ranking-person > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ranking-panel .ranking-medalist { position: relative; border-radius: 14px; }
+.ranking-panel .ranking-medalist-1 { background: linear-gradient(100deg,#fff7df,#fffdf7 55%,#fff); border-color: #ead49b; }
+.ranking-panel .ranking-medalist-2 { background: linear-gradient(100deg,#edf2f6,#fafcfd 55%,#fff); border-color: #d1dce4; }
+.ranking-panel .ranking-medalist-3 { background: linear-gradient(100deg,#f9ede2,#fffcf9 55%,#fff); border-color: #e6c9b1; }
+.rank-medal { display: grid; place-items: center; width: 40px; height: 48px; }
+.rank-medal svg { display: block; width: 40px; height: 48px; filter: drop-shadow(0 3px 3px #00000012); }
+.rank-medal-1 { color: #c99a30; }
+.rank-medal-2 { color: #8e9eaf; }
+.rank-medal-3 { color: #b57b50; }
+.medal-ribbon { fill: #608f7b; }
+.ranking-more { display: grid; justify-items: center; gap: 12px; padding-top: 24px; }
+.ranking-more .toolbar-button { display: inline-flex; align-items: center; justify-content: center; gap: 28px; min-width: 180px; }
+.ranking-more button:disabled { cursor: default; color: #809489; border-color: #e0ebe3; background: #f7fbf8; }
+.ranking-more p { margin: 0; color: #a54d40; font-size: 13px; }
+@media (max-width: 1180px) {
+  .ranking-panel .ranking-row-with-favorite { grid-template-columns: 40px 48px minmax(0,1fr) 58px 34px 20px; }
+  .ranking-panel .ranking-metrics { display: none; }
+}
+@media (max-width: 560px) {
+  .ranking-panel .ranking-row-with-favorite { grid-template-columns: 32px 38px minmax(0,1fr) 44px 28px; gap: 8px; padding: 12px 8px; }
+  .ranking-panel .rank-medal, .ranking-panel .rank-medal svg { width: 32px; height: 40px; }
+  .ranking-panel .favorite-button { width: 28px; height: 32px; }
+  .ranking-panel .avatar-xl { width: 38px; height: 38px; }
+  .ranking-panel .ranking-person > strong { font-size: 12px; }
+  .ranking-panel .tag-row { flex-wrap: wrap; }
+}

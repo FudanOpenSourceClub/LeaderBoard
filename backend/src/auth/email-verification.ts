@@ -16,14 +16,14 @@ export interface VerificationEmailSender {
   }): Promise<void>;
 }
 
-export interface RegistrationInput { studentId: string; githubLogin: string }
+export interface RegistrationInput { studentId: string; githubLogin: string; githubId?: string }
 export interface EmailVerificationApi {
   sendCode(email: string, requesterIp: string, registration: RegistrationInput): Promise<{
     sent: true;
     retryAfterSeconds: number;
     expiresInSeconds: number;
   }>;
-  verifyCode(email: string, code: string): Promise<{ verified: true; memberId: string; registrationToken?: string }>;
+  verifyCode(email: string, code: string, expectedGithubId?: string): Promise<{ verified: true; memberId: string; registrationToken?: string }>;
   resumeRegistration?(token: string): Promise<string>;
 }
 
@@ -164,7 +164,9 @@ export class EmailVerificationService implements EmailVerificationApi {
         || !/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(registration.githubLogin.trim())) {
       throw new EmailAuthError("INVALID_REGISTRATION", 400, "请填写学号和 GitHub 用户名");
     }
-    const identity = await this.lookupGithubAccount(registration.githubLogin.trim());
+    const identity = registration.githubId && /^[1-9]\d*$/.test(registration.githubId)
+      ? {githubId: registration.githubId, login: registration.githubLogin.trim()}
+      : await this.lookupGithubAccount(registration.githubLogin.trim());
     const studentFingerprint = hmacFingerprint(this.options.hmacSecret, "student", registration.studentId.trim());
     const now = this.now();
     const fingerprint = hmacFingerprint(this.options.hmacSecret, "email", email);
@@ -249,7 +251,7 @@ export class EmailVerificationService implements EmailVerificationApi {
     return { sent: true, retryAfterSeconds: 60, expiresInSeconds: 600 };
   }
 
-  async verifyCode(rawEmail: string, code: string): Promise<{ verified: true; memberId: string; registrationToken?: string }> {
+  async verifyCode(rawEmail: string, code: string, expectedGithubId?: string): Promise<{ verified: true; memberId: string; registrationToken?: string }> {
     const email = normalizeEmail(rawEmail);
     const domain = emailDomain(email);
     if (!email.includes("@") || !isAllowedDomain(domain, this.domains)) {
@@ -289,6 +291,9 @@ export class EmailVerificationService implements EmailVerificationApi {
       );
       const challenge = found.rows[0];
       if (!challenge) return { kind: "invalid" as const };
+      if (expectedGithubId !== undefined && challenge.requested_github_id !== expectedGithubId) {
+        throw new EmailAuthError("GITHUB_ACCOUNT_MISMATCH", 409, "GitHub 账号已变化，请使用当前账号重新获取验证码");
+      }
       if (challenge.used_at) return { kind: "used" as const };
       if (challenge.expires_at.getTime() <= now.getTime()) return { kind: "expired" as const };
       if (challenge.attempt_count >= MAX_ATTEMPTS) return { kind: "locked" as const };

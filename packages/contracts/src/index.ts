@@ -188,7 +188,6 @@ const emailAddress = z.string().trim().max(254).email();
 export const EmailCodeRequestSchema = z.object({
   email: emailAddress,
   studentId: z.string().trim().regex(/^[0-9]{6,20}$/, "Expected a student number"),
-  githubLogin: z.string().trim().regex(/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i, "Expected a GitHub username"),
 });
 export type EmailCodeRequest = z.infer<typeof EmailCodeRequestSchema>;
 
@@ -220,9 +219,16 @@ export const RegistrationStatusSchema = z.discriminatedUnion("registered", [
 ]);
 export type RegistrationStatus = z.infer<typeof RegistrationStatusSchema>;
 
+export const GitHubRegistrationIdentitySchema = z.discriminatedUnion("verified", [
+  z.object({verified: z.literal(false)}),
+  z.object({verified: z.literal(true), githubId, login: text}),
+]);
+export type GitHubRegistrationIdentity = z.infer<typeof GitHubRegistrationIdentitySchema>;
+
 export const EmailCodeVerifyResponseSchema = z.object({
   verified: z.literal(true),
   githubLink: GitHubLinkInfoSchema,
+  registered: z.literal(true).optional(),
 });
 export type EmailCodeVerifyResponse = z.infer<typeof EmailCodeVerifyResponseSchema>;
 

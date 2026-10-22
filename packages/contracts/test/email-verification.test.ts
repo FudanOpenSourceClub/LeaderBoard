@@ -9,7 +9,7 @@ import {
 describe("email verification contracts", () => {
   it("accepts normalized email requests and six-digit codes", () => {
     expect(EmailCodeRequestSchema.parse({ email: " student@fudan.edu.cn ", studentId:"26300000001", githubLogin:"octocat" })).toEqual({
-      email: "student@fudan.edu.cn", studentId:"26300000001", githubLogin:"octocat",
+      email: "student@fudan.edu.cn", studentId:"26300000001",
     });
     expect(EmailCodeVerifyRequestSchema.parse({
       email: "student@m.fudan.edu.cn",

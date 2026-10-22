@@ -410,8 +410,8 @@ INDEX contributor_public_activities_time_idx (contributor_id, occurred_at)
 
 `members` 新增唯一的可空 `student_fingerprint TEXT`（HMAC-SHA256）、
 `registration_github_id BIGINT`、`registration_session_hash TEXT`，以及可空
-`registration_session_expires_at TIMESTAMPTZ`。旧用户字段可空以保留原记录，新注册必须填写学号和 GitHub。
-`email_verification_challenges` 保存同次注册的学号指纹、`requested_github_id BIGINT` 与 `requested_github_login TEXT`。
+`registration_session_expires_at TIMESTAMPTZ`。旧用户字段可空以保留原记录，新注册必须填写学号并通过 GitHub OAuth 自动取得稳定账号 ID。
+`email_verification_challenges` 保存同次注册的学号指纹、来自服务器 OAuth 会话的 `requested_github_id BIGINT` 与 `requested_github_login TEXT`。
 `member_single_github_account_idx(member_id)` 与现有 GitHub 账号所属唯一索引组成一对一约束。
 邮箱验证、注册和 OAuth 绑定共享事务锁，唯一约束负责最终防重。恢复注册的 Cookie 只允许继续原用户绑定，不能更换账号或新建用户。
 
@@ -432,7 +432,7 @@ award_key TEXT, points INTEGER CHECK(points>0), reason TEXT, awarded_at TIMESTAM
 
 ## 18. 网站会话与仓库审核
 
-`website_sessions` 保存随机会话 token 的 SHA256、GitHub ID、登录用户名、CSRF 随机值、过期时间；身份和管理权限每次在后端核验。`website_login_states` 保存一次性 OAuth state 哈希、浏览器凭据哈希、受限返回路径、过期/使用时间。
+`website_sessions` 保存随机会话 token 的 SHA256、GitHub ID、登录用户名、CSRF 随机值、过期时间；身份和管理权限每次在后端核验。注册 OAuth 签发的会话有效期 30 分钟，只允许读取已验证 GitHub 身份和完成注册；必须完成校园身份绑定后才能调用注册成员接口，成功后换发 30 天会话。`website_login_states` 保存一次性 OAuth state 哈希、浏览器凭据哈希、受限返回路径、过期/使用时间；`register.` 与 `login.` 前缀区分注册授权和正式登录。
 
 `project_proposals` 增加提交成员外键、稳定 GitHub 仓库 ID、审核人 GitHub ID、审核时间和备注；相同仓库仅允许一个待审核申请。历史匿名申请保留，但新请求必须关联已认证成员。
 

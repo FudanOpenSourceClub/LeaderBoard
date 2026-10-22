@@ -9,9 +9,12 @@ export type GitHubLinkInfo =
   | { available: false }
   | { available: true; authorizeUrl: string };
 
+export interface GitHubIdentity { githubId: string; login: string; avatarUrl: string | null }
+
 export interface GitHubLinkApi {
   createAuthorization(memberId: string): Promise<GitHubLinkInfo>;
   completeAuthorization(code: string, state: string, registrationToken: string): Promise<{ login: string }>;
+  completeVerifiedRegistration?(memberId: string, identity: GitHubIdentity, registrationToken: string): Promise<{ login: string }>;
 }
 
 export class GitHubLinkError extends Error {
@@ -267,6 +270,13 @@ export class GitHubOAuthLinkService implements GitHubLinkApi {
 
     const accessToken = await exchangeCode(this.config, code);
     const identity = await fetchGitHubIdentity(accessToken);
+
+    return this.completeVerifiedRegistration(memberId, identity, registrationToken);
+  }
+
+  /** Identity must come from a server-side OAuth session, never a submitted account name or ID. */
+  async completeVerifiedRegistration(memberId: string, identity: GitHubIdentity, registrationToken: string): Promise<{ login: string }> {
+    const now = new Date();
 
     await withTransaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(1279411270)");

@@ -12,6 +12,10 @@ function navClass({ isActive }: { isActive: boolean }) {
   return isActive ? "nav-link nav-link-active" : "nav-link";
 }
 
+function GitHubIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 19c-4.3 1.3-4.3-2-6-2.5m12 5v-3.8a3.3 3.3 0 0 0-.9-2.6c3-.3 6.2-1.5 6.2-6.8a5.3 5.3 0 0 0-1.4-3.7 5 5 0 0 0-.1-3.6s-1.2-.4-3.8 1.4a13 13 0 0 0-7 0C5.4.6 4.2 1 4.2 1a5 5 0 0 0-.1 3.6 5.3 5.3 0 0 0-1.4 3.7c0 5.3 3.2 6.5 6.2 6.8a3.3 3.3 0 0 0-.9 2.6v3.8" /></svg>;
+}
+
 export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient; isMock?: boolean }) {
   return <WebsiteSessionProvider><AppContent api={api}/></WebsiteSessionProvider>;
 }
@@ -31,8 +35,8 @@ function AppContent({api}:{api:LeadBoardApiClient}){
         <nav className="topnav" aria-label="主导航">
           <NavLink className={navClass} to="/projects">复旦开源项目</NavLink>
           <NavLink className={navClass} to="/contributors">复旦开源达人</NavLink>
-          <NavLink className={navClass} to="/join">加入贡献榜</NavLink>
-          {session.authenticated?<span>{session.login}</span>:<a href="/api/v1/auth/github/login?returnTo=/projects">GitHub 登录</a>}
+          <NavLink className={navClass} to="/join">加入达人榜</NavLink>
+          {session.authenticated?<span className="nav-link">{session.login}</span>:<a className="nav-link github-nav-link" href="/api/v1/auth/github/login?returnTo=/projects"><GitHubIcon />GitHub 登录</a>}
           {session.authenticated&&session.isAdmin&&<NavLink className={navClass} to="/admin">管理后台</NavLink>}
         </nav>
 
@@ -80,9 +84,17 @@ function AppContent({api}:{api:LeadBoardApiClient}){
                   <path d="M8 12h8m-3.5-3.5L16 12l-3.5 3.5" />
                 </svg>
               </span>
-              <span className="side-nav-copy"><strong>加入贡献榜</strong><small>展示你的开源贡献</small></span>
+              <span className="side-nav-copy"><strong>加入达人榜</strong><small>展示你的开源贡献</small></span>
               <span className="side-nav-arrow" aria-hidden="true">↗</span>
             </NavLink>
+            {session.authenticated ? <div className="nav-link sidebar-account"><span className="side-nav-icon"><GitHubIcon /></span><span className="side-nav-copy"><strong>{session.login}</strong><small>已登录 GitHub</small></span></div> : (
+              <a className="nav-link" href="/api/v1/auth/github/login?returnTo=/projects">
+                <span className="side-nav-icon"><GitHubIcon /></span>
+                <span className="side-nav-copy"><strong>GitHub 登录</strong><small>使用已绑定的账号登录</small></span>
+                <span className="side-nav-arrow" aria-hidden="true">↗</span>
+              </a>
+            )}
+            {session.authenticated && session.isAdmin && <NavLink className={navClass} to="/admin"><span className="side-nav-icon" aria-hidden="true">⚙</span><span className="side-nav-copy"><strong>管理后台</strong><small>审核仓库申请</small></span></NavLink>}
           </div>
         </aside>
 

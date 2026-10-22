@@ -8,6 +8,7 @@ import {
 import { Link } from "react-router";
 import { useWebsiteSession } from "../auth/session";
 import { useLocalFavorites } from "../lib/favorites";
+import { Badge, Button, Card, Input, Textarea } from "../components/ui/primitives";
 
 type SubmitState =
   | { status: "idle" }
@@ -97,7 +98,7 @@ export function ProjectBoardPage() {
 
       <section className="toolbar-card" aria-label="项目筛选">
         <label className="search-box" aria-label="搜索项目">
-          <input
+          <Input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -124,7 +125,7 @@ export function ProjectBoardPage() {
             <p className="section-kicker">FUDAN PROJECTS</p>
             <h2>复旦开源仓库必吃榜</h2>
           </div>
-          <span className="count-pill">{campusProjects.length} 个已核验项目</span>
+          <Badge className="count-pill">{campusProjects.length} 个已核验项目</Badge>
         </div>
 
         {catalogError&&<p role="alert" className="verify-notice verify-notice-error">{catalogError}</p>}
@@ -146,7 +147,7 @@ export function ProjectBoardPage() {
         ) : (
           <div className="project-grid">
             {visibleProjects.map((project) => (
-              <article className="project-card" key={project.repo}>
+              <Card className="project-card" key={project.repo}>
                 <div className="project-card-head">
                   <div>
                     <span className="project-lab">{project.lab}</span>
@@ -169,13 +170,13 @@ export function ProjectBoardPage() {
                 </div>
                 <p>{project.description}</p>
                 <div className="project-tags">
-                  {project.tags.map((item) => <span className="tag" key={item}>{item}</span>)}
+                  {project.tags.map((item) => <Badge className="tag" key={item}>{item}</Badge>)}
                 </div>
                 <div className="project-links">
                   <a href={project.url} target="_blank" rel="noreferrer">打开项目 ↗</a>
                   {project.labUrl&&<a href={project.labUrl} target="_blank" rel="noreferrer">查看实验室来源 ↗</a>}
                 </div>
-              </article>
+              </Card>
             ))}
           </div>
         )}
@@ -186,14 +187,14 @@ export function ProjectBoardPage() {
             <h2>漏掉你们实验室的宝藏仓库了？</h2>
             <p>丢给我们看看 👀。只要能说明这是复旦大学实验室在维护的开源项目，我们核实后就把它补进来。</p>
           </div>
-          <button className="button button-primary" type="button" disabled={sessionLoading} onClick={() => {
+          <Button className="button button-primary" type="button" disabled={sessionLoading} onClick={() => {
             if(!session.authenticated||!session.registered){setRegisterNotice(true);setShowForm(false);return;}
             setRegisterNotice(false);
             setShowForm((value) => !value);
             if (submit.status === "success") setSubmit({ status: "idle" });
           }}>
             {showForm ? "先收起来" : "加上我的项目"}
-          </button>
+          </Button>
         </section>
 
         {registerNotice&&<section className="panel" style={{padding:24}} role="alert"><h2>请先注册 LeaderBoard</h2><p>完成复旦邮箱验证和 GitHub 绑定后，即可申请加入仓库。</p><div className="profile-actions"><Link className="primary-button" to="/join">去注册网站</Link><a className="profile-action-link" href="/api/v1/auth/github/login?returnTo=/projects">已注册？使用 GitHub 登录</a></div></section>}
@@ -219,7 +220,7 @@ export function ProjectBoardPage() {
               <form className="proposal-form" onSubmit={submitProposal}>
                 <label className="form-field">
                   <span>项目地址</span>
-                  <input
+                  <Input
                     type="url"
                     value={projectUrl}
                     onChange={(event) => setProjectUrl(event.target.value)}
@@ -231,7 +232,7 @@ export function ProjectBoardPage() {
 
                 <label className="form-field">
                   <span>实验室 / 团队</span>
-                  <input
+                  <Input
                     type="text"
                     value={labName}
                     onChange={(event) => setLabName(event.target.value)}
@@ -245,7 +246,7 @@ export function ProjectBoardPage() {
 
                 <label className="form-field">
                   <span>再说两句</span>
-                  <textarea
+                  <Textarea
                     value={notes}
                     onChange={(event) => setNotes(event.target.value)}
                     placeholder="这个项目是做什么的？怎么能看出是实验室在维护？有实验室主页、论文页或其他佐证也可以一起放这里。"
@@ -256,9 +257,9 @@ export function ProjectBoardPage() {
                   <small>{notes.length}/1200 · 不用正式，信息够我们核验就行。</small>
                 </label>
 
-                <button className="primary-button" type="submit" disabled={submit.status === "submitting"}>
+                <Button className="primary-button" type="submit" disabled={submit.status === "submitting"}>
                   {submit.status === "submitting" ? "正在递过去…" : "提交加入提议"}
-                </button>
+                </Button>
 
                 {submit.status === "error" && (
                   <p className="verify-notice verify-notice-error" role="status">{submit.message}</p>

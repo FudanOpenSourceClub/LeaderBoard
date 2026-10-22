@@ -90,9 +90,7 @@ export function ProjectBoardPage() {
     <div className="page-canvas">
       <section className="page-hero campus-project-hero">
         <div>
-          <span className="hero-badge">FUDAN · OPEN SOURCE</span>
-          <h1>复旦开源项目</h1>
-          <p>复旦开源仓库必吃榜</p>
+          <h1>复旦开源仓库必吃榜</h1>
         </div>
       </section>
 
@@ -120,17 +118,11 @@ export function ProjectBoardPage() {
       </section>
 
       <section className="dashboard-content">
-        <div className="section-title-row">
-          <div>
-            <p className="section-kicker">FUDAN PROJECTS</p>
-            <h2>复旦开源仓库必吃榜</h2>
-          </div>
-          <Badge className="count-pill">{campusProjects.length} 个已核验项目</Badge>
-        </div>
+        <div className="project-list-count"><Badge className="count-pill">{campusProjects.length} 个项目</Badge></div>
 
         {catalogError&&<p role="alert" className="verify-notice verify-notice-error">{catalogError}</p>}
         <div className="project-search-summary">
-          <span>当前显示 {visibleProjects.length} / {campusProjects.length} 个项目</span>
+          <span aria-hidden="true"></span>
           {(query || tag || favoritesOnly) && (
             <button
               className="text-button"
@@ -150,9 +142,7 @@ export function ProjectBoardPage() {
               <Card className="project-card" key={project.repo}>
                 <div className="project-card-head">
                   <div>
-                    <span className="project-lab">{project.lab}</span>
-                    <h2>{project.name}</h2>
-                    <code>{project.repo}</code>
+                    <h2><a href={project.url} target="_blank" rel="noreferrer">{project.name} ↗</a></h2>
                   </div>
                   <div className="project-card-actions">
                     <button
@@ -165,10 +155,9 @@ export function ProjectBoardPage() {
                     >
                       {favorites.isFavorite(project.repo) ? "★" : "☆"}
                     </button>
-                    <span className="verified-chip">✓ 已核验</span>
+ 
                   </div>
                 </div>
-                <p>{project.description}</p>
                 <div className="project-tags">
                   {project.tags.map((item) => <Badge className="tag" key={item}>{item}</Badge>)}
                 </div>
@@ -183,9 +172,7 @@ export function ProjectBoardPage() {
 
         <section className="project-invite-card">
           <div className="project-invite-copy">
-            <span className="section-kicker">YOUR PROJECT?</span>
-            <h2>漏掉你们实验室的宝藏仓库了？</h2>
-            <p>丢给我们看看 👀。只要能说明这是复旦大学实验室在维护的开源项目，我们核实后就把它补进来。</p>
+            <h2>提交复旦开源项目</h2>
           </div>
           <Button className="button button-primary" type="button" disabled={sessionLoading} onClick={() => {
             if(!session.authenticated||!session.registered){setRegisterNotice(true);setShowForm(false);return;}
@@ -197,14 +184,12 @@ export function ProjectBoardPage() {
           </Button>
         </section>
 
-        {registerNotice&&<section className="panel" style={{padding:24}} role="alert"><h2>请先注册 LeaderBoard</h2><p>完成复旦邮箱验证和 GitHub 绑定后，即可申请加入仓库。</p><div className="profile-actions"><Link className="primary-button" to="/join">去注册网站</Link><a className="profile-action-link" href="/api/v1/auth/github/login?returnTo=/projects">已注册？使用 GitHub 登录</a></div></section>}
+        {registerNotice&&<section className="panel" style={{padding:24}} role="alert"><h2>请先注册 LeaderBoard</h2><div className="profile-actions"><Link className="primary-button" to="/join">去注册网站</Link><a className="profile-action-link" href="/api/v1/auth/github/login?returnTo=/projects">已注册？使用 GitHub 登录</a></div></section>}
         {showForm && (
           <section className="panel proposal-panel">
             <div className="panel-heading">
               <div>
-                <p className="section-kicker">PROJECT PROPOSAL</p>
-                <h2>发个加入提议</h2>
-                <p>不用写申请书，告诉我们项目在哪、哪个实验室在做，再补两句背景就行。</p>
+                <h2>提交项目</h2>
               </div>
             </div>
 
@@ -213,7 +198,7 @@ export function ProjectBoardPage() {
                 <span>✓</span>
                 <div>
                   <strong>收到啦。</strong>
-                  <p>申请已进入审核队列，管理员将收到邮件通知；通过后会加入项目列表。</p>
+                  <p>等待审核</p>
                 </div>
               </div>
             ) : (
@@ -227,7 +212,7 @@ export function ProjectBoardPage() {
                     placeholder="https://github.com/your-lab/your-project"
                     required
                   />
-                  <small>请填写公开的 GitHub 仓库地址。</small>
+                   
                 </label>
 
                 <label className="form-field">
@@ -241,7 +226,7 @@ export function ProjectBoardPage() {
                     maxLength={120}
                     required
                   />
-                  <small>写大家平时认得出来的名字就行。</small>
+                   
                 </label>
 
                 <label className="form-field">
@@ -249,12 +234,12 @@ export function ProjectBoardPage() {
                   <Textarea
                     value={notes}
                     onChange={(event) => setNotes(event.target.value)}
-                    placeholder="这个项目是做什么的？怎么能看出是实验室在维护？有实验室主页、论文页或其他佐证也可以一起放这里。"
+                    placeholder="项目介绍及官方来源链接"
                     minLength={10}
                     maxLength={1200}
                     required
                   />
-                  <small>{notes.length}/1200 · 不用正式，信息够我们核验就行。</small>
+                  <small>{notes.length}/1200</small>
                 </label>
 
                 <Button className="primary-button" type="submit" disabled={submit.status === "submitting"}>

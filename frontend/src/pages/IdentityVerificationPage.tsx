@@ -206,33 +206,32 @@ export function IdentityVerificationPage() {
     <div className="page-canvas">
       <section className="join-hero">
         <div className="join-copy">
-          <span className="hero-badge">FUDAN IDENTITY</span>
           {callbackParams.get("login")&&<p role="alert" className="verify-notice verify-notice-error">{callbackParams.get("login")==="registration_required"?"请先注册网站，再使用 GitHub 登录。":"GitHub 登录未完成，请重新尝试。"}</p>}
           <h1>我要上榜</h1>
-          <p>授权 GitHub 账号，验证复旦邮箱，加入达人榜。</p>
+           
           <div className="join-steps" aria-label="加入达人榜步骤">
-            <div className={`join-step ${githubIdentity.verified ? "join-step-done" : "join-step-active"}`}><span>{githubIdentity.verified ? "✓" : "1"}</span><div><strong>授权 GitHub</strong><small>自动获取账号 ID</small></div></div>
-            <div className={`join-step ${githubLinked ? "join-step-done" : githubIdentity.verified ? "join-step-active" : ""}`}><span>{githubLinked ? "✓" : "2"}</span><div><strong>验证复旦邮箱</strong><small>确认校园身份</small></div></div>
-            <div className={`join-step ${githubLinked ? "join-step-done" : ""}`}><span>{githubLinked ? "✓" : "3"}</span><div><strong>加入达人榜</strong><small>关联你的公开贡献</small></div></div>
+            <div className={`join-step ${githubIdentity.verified ? "join-step-done" : "join-step-active"}`}><span>{githubIdentity.verified ? "✓" : "1"}</span><div><strong>GitHub</strong></div></div>
+            <div className={`join-step ${githubLinked ? "join-step-done" : githubIdentity.verified ? "join-step-active" : ""}`}><span>{githubLinked ? "✓" : "2"}</span><div><strong>邮箱验证</strong></div></div>
+            <div className={`join-step ${githubLinked ? "join-step-done" : ""}`}><span>{githubLinked ? "✓" : "3"}</span><div><strong>完成</strong></div></div>
           </div>
         </div>
 
         <div className="verify-card">
           <div className="verify-card-head">
-            <span className="verify-icon" aria-hidden="true">✦</span>
-            <div><p>加入 LeaderBoard</p><h2>{githubLinked || verified ? "已加入达人榜" : !githubIdentity.verified ? "验证 GitHub 账号" : sent ? "输入邮箱验证码" : "验证复旦邮箱"}</h2></div>
+             
+            <div><h2>{githubLinked || verified ? "已加入达人榜" : !githubIdentity.verified ? "验证 GitHub 账号" : sent ? "输入邮箱验证码" : "验证复旦邮箱"}</h2></div>
           </div>
 
           {checkingRegistration ? <p role="status">正在向后台确认注册状态…</p> : githubLinked ? (
             <div className="verified-state" role="status">
               <span className="verified-mark" aria-hidden="true">✓</span>
               <h2>注册成功</h2>
-              <p>{githubLogin ? <>已确认账号 <strong>@{githubLogin}</strong> 的归属。</> : "GitHub 账号已经成功绑定。"}</p>
+              <p>{githubLogin ? <>@{githubLogin}</> : "GitHub 账号已绑定"}</p>
               <a className="primary-button github-link-button" href="/contributors">查看达人榜</a>
             </div>
           ) : !githubIdentity.verified ? (
             <div className="github-link-state">
-              <p>通过 GitHub 官方 OAuth 验证，自动读取你的账号 ID。</p>
+               
               <a className="primary-button github-link-button" href="/api/v1/auth/github/register">使用 GitHub 授权</a>
               {notice && <p className={`verify-notice verify-notice-${notice.tone}`} role="status">{notice.text}</p>}
               {githubCallbackStatus === "error" && <p className="verify-notice verify-notice-error" role="alert">{githubCallbackMessage(githubCallbackReason)}</p>}
@@ -267,7 +266,7 @@ export function IdentityVerificationPage() {
                     required
                     disabled={busy || sent}
                   />
-                  <small>支持 fudan.edu.cn 及其子域邮箱</small>
+                   
                 </label>
                 <Button className="primary-button" type="submit" disabled={busy || cooldown > 0 || sent}>
                   {busy && !sent ? "正在发送…" : cooldown > 0 ? `${cooldown} 秒后可重发` : sent ? "验证码已发送" : "发送验证码"}

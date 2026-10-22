@@ -10,6 +10,7 @@ import {
   OrganizationSummaryResponseSchema,
   ProjectProposalRequestSchema,
   ProjectProposalResponseSchema,
+  RegistrationStatusSchema,
   RepositoryStatsResponseSchema,
   TimeRangeSchema,
   type ApiErrorResponse,
@@ -33,6 +34,7 @@ import {
   type GitHubLinkApi,
 } from "../auth/index.js";
 import { GitHubClientError } from "../github/client.js";
+import { getRegistrationStatus } from "../auth/github-link.js";
 import { publicContributionCsv } from "../public-contributions/export.js";
 import { getContributorActivityExport } from "../public-contributions/enrollment.js";
 import { ProjectProposalService, type ProjectProposalApi } from "../projects/proposals.js";
@@ -53,6 +55,7 @@ export interface ApiDependencies {
   githubLink: GitHubLinkApi;
   projectProposals: ProjectProposalApi;
   contributorExport: typeof getContributorActivityExport;
+  registrationStatus: typeof getRegistrationStatus;
 }
 
 function sendError(res: Response, status: number, code: string, message: string): void {
@@ -63,6 +66,11 @@ function sendError(res: Response, status: number, code: string, message: string)
 function singleQuery(value: unknown): string | undefined {
   if (value === undefined) return undefined;
   return typeof value === "string" && value.length > 0 ? value : "";
+}
+
+function registrationCookie(cookieHeader: string | undefined): string {
+  return (cookieHeader ?? "").split(";").map(v=>v.trim())
+    .find(v=>v.startsWith("leaderboard_registration="))?.slice("leaderboard_registration=".length) ?? "";
 }
 
 function parseRange(value: unknown, res: Response): TimeRange | null {
@@ -147,7 +155,15 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
   const githubLink = dependencies.githubLink ?? new UnavailableGitHubLinkApi();
   const projectProposals = dependencies.projectProposals ?? new ProjectProposalService();
   const contributorExport = dependencies.contributorExport ?? getContributorActivityExport;
+  const registrationStatus = dependencies.registrationStatus ?? getRegistrationStatus;
   const router = Router();
+
+  router.get("/auth/registration/status", async (req,res,next) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      res.json(RegistrationStatusSchema.parse(await registrationStatus(registrationCookie(req.headers.cookie))));
+    } catch (error) { if (!handleServiceError(error,res)) next(error); }
+  });
 
   router.post("/auth/email/send-code", async (req, res, next) => {
     const parsed = EmailCodeRequestSchema.safeParse(req.body);
@@ -187,8 +203,7 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
 
   router.post("/auth/github/retry", async (req,res,next) => {
     try {
-      const cookie=(req.headers.cookie??"").split(";").map(v=>v.trim()).find(v=>v.startsWith("leaderboard_registration="));
-      const token=cookie?.slice("leaderboard_registration=".length)??"";
+      const token=registrationCookie(req.headers.cookie);
       if (!emailVerification.resumeRegistration) {sendError(res,401,"REGISTRATION_SESSION_REQUIRED","请先完成邮箱验证");return;}
       const memberId=await emailVerification.resumeRegistration(token);
       res.json(await githubLink.createAuthorization(memberId));
@@ -208,8 +223,12 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
       return;
     }
     try {
-      const result = await githubLink.completeAuthorization(code, state);
-      res.redirect(303, `/join?github=success&login=${encodeURIComponent(result.login)}`);
+      const token = registrationCookie(req.headers.cookie);
+      if (!token) throw new GitHubLinkError("REGISTRATION_SESSION_REQUIRED",401,"请先完成邮箱验证");
+      await githubLink.completeAuthorization(code, state, token);
+      const confirmation = await registrationStatus(token);
+      if (!confirmation.registered) throw new GitHubLinkError("REGISTRATION_WRITE_NOT_CONFIRMED",500,"未能确认注册记录");
+      res.redirect(303, "/join?github=success");
     } catch (error) {
       if (error instanceof GitHubLinkError) {
         const reason = error.code === "GITHUB_ACCOUNT_ALREADY_LINKED"

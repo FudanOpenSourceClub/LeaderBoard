@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { getDbPool, withTransaction } from "../db/index.js";
+import type { RegistrationStatus } from "@leadboard/contracts";
 
 const STATE_TTL_MS = 10 * 60_000;
 const REQUEST_TIMEOUT_MS = 12_000;
@@ -10,7 +11,7 @@ export type GitHubLinkInfo =
 
 export interface GitHubLinkApi {
   createAuthorization(memberId: string): Promise<GitHubLinkInfo>;
-  completeAuthorization(code: string, state: string): Promise<{ login: string }>;
+  completeAuthorization(code: string, state: string, registrationToken: string): Promise<{ login: string }>;
 }
 
 export class GitHubLinkError extends Error {
@@ -46,6 +47,25 @@ export interface GitHubOAuthConfig {
 
 function stateHash(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+/** Re-read committed records. Never infer success from URL parameters or an OAuth response alone. */
+export async function getRegistrationStatus(token: string): Promise<RegistrationStatus> {
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return { registered: false };
+  const result = await getDbPool().query<{ login: string }>(
+    `SELECT a.login FROM members m
+     JOIN member_github_accounts link ON link.member_id=m.id AND link.is_primary=TRUE
+     JOIN github_accounts a ON a.github_id=link.github_id AND a.github_id=m.registration_github_id
+     JOIN contributors c ON c.github_id=a.github_id AND c.enrolled_at IS NOT NULL AND c.is_bot=FALSE
+     WHERE m.registration_session_hash=$1 AND m.registration_session_expires_at>now()
+       AND m.verification_status='verified' AND m.student_fingerprint IS NOT NULL
+       AND (SELECT count(*) FROM member_github_accounts x WHERE x.member_id=m.id)=1
+       AND (SELECT count(*) FROM member_github_accounts x WHERE x.github_id=a.github_id)=1
+       AND NOT EXISTS (SELECT 1 FROM members other WHERE other.id<>m.id
+         AND (other.student_fingerprint=m.student_fingerprint OR other.registration_github_id=a.github_id))`,
+    [stateHash(token)],
+  );
+  return result.rows.length === 1 ? { registered: true, login: result.rows[0]!.login } : { registered: false };
 }
 
 function safeCallbackUrl(value: string): string {
@@ -208,23 +228,27 @@ export class GitHubOAuthLinkService implements GitHubLinkApi {
     return { available: true, authorizeUrl: authorize.toString() };
   }
 
-  async completeAuthorization(code: string, state: string): Promise<{ login: string }> {
+  async completeAuthorization(code: string, state: string, registrationToken: string): Promise<{ login: string }> {
     if (!code || code.length > 1024 || !state || state.length > 512) {
       throw new GitHubLinkError("INVALID_GITHUB_CALLBACK", 400, "GitHub 回调参数无效");
+    }
+    if (!/^[A-Za-z0-9_-]{43}$/.test(registrationToken)) {
+      throw new GitHubLinkError("REGISTRATION_SESSION_REQUIRED", 401, "请在验证邮箱的浏览器中继续 GitHub 绑定");
     }
 
     const hash = stateHash(state);
     const now = new Date();
     const memberId = await withTransaction(async (client) => {
       const found = await client.query<{ id: string; member_id: string }>(
-        `SELECT id::text, member_id::text
-           FROM github_oauth_states
-          WHERE state_hash=$1
-            AND used_at IS NULL
-            AND expires_at > $2
+        `SELECT s.id::text, s.member_id::text
+           FROM github_oauth_states s JOIN members m ON m.id=s.member_id
+          WHERE s.state_hash=$1
+            AND s.used_at IS NULL
+            AND s.expires_at > $2
+            AND m.registration_session_hash=$3 AND m.registration_session_expires_at>$2
           LIMIT 1
           FOR UPDATE`,
-        [hash, now],
+        [hash, now, stateHash(registrationToken)],
       );
       const row = found.rows[0];
       if (!row) {
@@ -246,12 +270,20 @@ export class GitHubOAuthLinkService implements GitHubLinkApi {
 
     await withTransaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(1279411270)");
-      const member=await client.query<{registration_github_id:string|null}>(
-        "SELECT registration_github_id::text FROM members WHERE id=$1 FOR UPDATE",[memberId]);
+      const member=await client.query<{registration_github_id:string|null;student_fingerprint:string|null}>(
+        `SELECT registration_github_id::text, student_fingerprint FROM members
+         WHERE id=$1 AND verification_status='verified' AND registration_session_hash=$2
+           AND registration_session_expires_at>now() FOR UPDATE`,[memberId,stateHash(registrationToken)]);
       const intended=member.rows[0]?.registration_github_id;
-      if (!member.rows[0] || (intended && intended!==identity.githubId)) {
+      if (!member.rows[0]?.student_fingerprint || intended!==identity.githubId) {
         throw new GitHubLinkError("GITHUB_ACCOUNT_MISMATCH",409,"请使用注册时填写的 GitHub 账号授权");
       }
+      const duplicate = await client.query(
+        `SELECT 1 FROM members WHERE id<>$1
+         AND (student_fingerprint=$2 OR registration_github_id=$3) LIMIT 1`,
+        [memberId, member.rows[0].student_fingerprint, identity.githubId],
+      );
+      if (duplicate.rows.length) throw new GitHubLinkError("GITHUB_ACCOUNT_ALREADY_LINKED",409,"该学号或 GitHub 账号已经注册");
       const bound=await client.query("SELECT 1 FROM member_github_accounts WHERE member_id=$1",[memberId]);
       if (bound.rows.length) throw new GitHubLinkError("GITHUB_ACCOUNT_ALREADY_LINKED",409,"此用户已经绑定 GitHub 账号");
       const existing = await client.query<{ member_id: string }>(
@@ -300,10 +332,14 @@ export class GitHubOAuthLinkService implements GitHubLinkApi {
            enrolled_at=coalesce(contributors.enrolled_at,EXCLUDED.enrolled_at),updated_at=$4`,
         [identity.githubId,identity.login,identity.avatarUrl,now],
       );
-      await client.query("UPDATE members SET registration_session_hash=NULL,registration_session_expires_at=NULL WHERE id=$1",[memberId]);
     });
 
-    return { login: identity.login };
+    // This query uses a new database operation AFTER withTransaction committed.
+    const confirmation = await getRegistrationStatus(registrationToken);
+    if (!confirmation.registered || confirmation.login !== identity.login) {
+      throw new GitHubLinkError("REGISTRATION_WRITE_NOT_CONFIRMED", 500, "未能确认注册记录，请重新检查注册状态");
+    }
+    return { login: confirmation.login };
   }
 }
 

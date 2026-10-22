@@ -101,10 +101,10 @@ export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
               <article className="metric-card metric-purple"><span>Commit</span><strong>{state.detail.commits}</strong><small>代码提交</small></article>
               <article className="metric-card metric-indigo"><span>Pull Request</span><strong>{state.detail.prs}</strong><small>协作变更</small></article>
               <article className="metric-card metric-blue"><span>Issue</span><strong>{state.detail.issues}</strong><small>讨论与问题</small></article>
-              <article className="metric-card metric-mint"><span>积分</span><strong>{state.detail.score ?? 0}</strong><small>白名单贡献积分</small></article>
+              <article className="metric-card metric-mint"><span>积分</span><strong>{state.detail.score ?? 0}</strong><small>贡献积分（含开发奖励）</small></article>
             </div>
 
-            <p className="filter-caption">Commit / Issue：{state.detail.commitIssueScore ?? 0} 分 · 提交 PR：{state.detail.prOpenedScore ?? 0} 分 · PR 合并：{state.detail.prMergedScore ?? 0} 分</p>
+            <p className="filter-caption">Commit / Issue：{state.detail.commitIssueScore ?? 0} 分 · 提交 PR：{state.detail.prOpenedScore ?? 0} 分 · PR 合并：{state.detail.prMergedScore ?? 0} 分 · 开发贡献奖励：{state.detail.bonusScore ?? 0} 分</p>
             <section className="panel repository-panel">
               <div className="panel-heading">
                 <div><p className="section-kicker">REPOSITORIES</p><h2>仓库贡献</h2><p>看看贡献主要发生在哪些项目里。</p></div>

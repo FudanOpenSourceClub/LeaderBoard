@@ -33,6 +33,10 @@ const tables = {
     public_sync_truncated: required("boolean", "false"), public_sync_incomplete: required("boolean", "false"),
     created_at: required(timestamp, "now()"), updated_at: required(timestamp, "now()"),
   },
+  contributor_score_awards: {
+    contributor_id: required("bigint"), award_key: required("text"), points: required("integer"),
+    reason: required("text"), awarded_at: required(timestamp,"now()"),
+  },
   scoring_repositories: {github_id:required("bigint"),full_name:required("text"),html_url:required("text"),enabled:required("boolean","false"),updated_at:required(timestamp,"now()")},
   contributor_public_activities: {
     id:id(),repository_github_id:optional("bigint"),object_github_id:optional("bigint"),merged_at:optional(timestamp),
@@ -102,6 +106,7 @@ const tables = {
 };
 
 const foreignKeys = [
+  ["contributor_score_awards", "contributor_id", "contributors", "id"],
   ["repositories", "group_id", "groups", "id"],
   ["commits", "repository_id", "repositories", "id"],
   ["commits", "contributor_id", "contributors", "id"],
@@ -149,6 +154,7 @@ const primaryKeys = {
   groups: ["id"],
   repositories: ["id"],
   contributors: ["id"],
+  contributor_score_awards: ["contributor_id", "award_key"],
   scoring_repositories:["github_id"],
   contributor_public_activities: ["id"],
   commits: ["id"],
@@ -222,7 +228,7 @@ try {
   if (problems.length) {
     for (const problem of problems) console.error(problem);
     process.exitCode = 1;
-  } else console.info("Database schema verified: 15 tables, columns, foreign keys, unique constraints, and indexes.");
+  } else console.info("Database schema verified: 16 tables, columns, foreign keys, unique constraints, and indexes.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;

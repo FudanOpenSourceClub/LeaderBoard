@@ -416,3 +416,16 @@ INDEX contributor_public_activities_time_idx (contributor_id, occurred_at)
 邮箱验证、注册和 OAuth 绑定共享事务锁，唯一约束负责最终防重。恢复注册的 Cookie 只允许继续原用户绑定，不能更换账号或新建用户。
 
 个人历史只做 upsert；限额与分数不覆盖贡献事实。旧第 15 节的完整快照替换策略由本节的永久增量策略替代，刷新间隔改为每日。
+
+
+## 17. 开发贡献奖励与完成注册确认
+
+`contributor_score_awards(contributor_id BIGINT REFERENCES contributors(id) ON DELETE CASCADE,
+award_key TEXT, points INTEGER CHECK(points>0), reason TEXT, awarded_at TIMESTAMPTZ DEFAULT now())`。
+`PRIMARY KEY(contributor_id,award_key)` 确保同一账号同一奖励只发一次。
+`leaderboard-development-v1` 为四位实际开发者各 50 分；迁移只增加 contributor 和奖励，
+不虚构邮箱、学号或 OAuth 认证记录。重复部署/重新绑定不重复发奖。
+
+注册会话哈希在 OAuth 完成后保留到原有效期，作为只读完成凭据；
+`resumeRegistration` 仍禁止已绑定成员重复绑定。状态查询检查学号指纹存在且唯一、
+稳定 GitHub ID 一致且仅绑定一个成员、贡献者确实存在，查询不输出任何学号信息。

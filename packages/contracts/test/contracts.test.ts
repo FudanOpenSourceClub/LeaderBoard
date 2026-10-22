@@ -42,6 +42,7 @@ const fixtures = [
   [c.EmailCodeRequestSchema, { email: "student@fudan.edu.cn",studentId:"26300000001",githubLogin:"octocat" }],
   [c.EmailCodeVerifyRequestSchema, { email: "student@fudan.edu.cn", code: "012345" }],
   [c.EmailCodeSendResponseSchema, { sent: true, retryAfterSeconds: 60, expiresInSeconds: 600 }],
+  [c.RegistrationStatusSchema, {registered: true, login: "alice"}],
   [c.GitHubLinkInfoSchema, { available: false }],
   [c.EmailCodeVerifyResponseSchema, { verified: true, githubLink: { available: false } }],
   [c.ProjectProposalRequestSchema, { projectUrl: "https://github.com/fudan/example", labName: "复旦大学示例实验室", notes: "这是一个用于测试的校内开源项目提议。" }],

@@ -4,6 +4,7 @@ import {
   EmailCodeSendResponseSchema,
   GitHubLinkInfoSchema,
   EmailCodeVerifyResponseSchema,
+  RegistrationStatusSchema,
 } from "@leadboard/contracts";
 
 type Notice = { tone: "info" | "success" | "error"; text: string } | null;
@@ -100,9 +101,32 @@ export function IdentityVerificationPage() {
   const [githubAuthorizeUrl, setGithubAuthorizeUrl] = useState<string | null>(null);
   const callbackParams = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
   const githubCallbackStatus = callbackParams.get("github");
-  const githubLogin = callbackParams.get("login");
+  const [githubLogin, setGithubLogin] = useState<string | null>(null);
   const githubCallbackReason = callbackParams.get("reason");
-  const githubLinked = githubCallbackStatus === "success";
+  const [githubLinked, setGithubLinked] = useState(false);
+  const [checkingRegistration, setCheckingRegistration] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/v1/auth/registration/status", { cache: "no-store", credentials: "same-origin" })
+      .then(async response => {
+        if (!response.ok) throw new Error("Registration confirmation unavailable");
+        return RegistrationStatusSchema.parse(await response.json());
+      })
+      .then(status => {
+        if (!active) return;
+        setGithubLinked(status.registered);
+        setGithubLogin(status.registered ? status.login : null);
+        if (!status.registered && githubCallbackStatus === "success") {
+          setNotice({ tone: "error", text: "后台未确认注册成功，请继续邮箱验证或 GitHub 绑定。" });
+        }
+      })
+      .catch(() => {
+        if (active) setNotice({ tone: "error", text: "暂时无法确认注册状态，请刷新后重试。" });
+      })
+      .finally(() => { if (active) setCheckingRegistration(false); });
+    return () => { active = false; };
+  }, [githubCallbackStatus]);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -193,12 +217,12 @@ export function IdentityVerificationPage() {
             <div><p>加入 LeaderBoard</p><h2>{githubLinked ? "GitHub 绑定完成" : verified ? "继续绑定 GitHub" : sent ? "输入邮箱验证码" : "验证复旦邮箱"}</h2></div>
           </div>
 
-          {githubLinked ? (
+          {checkingRegistration ? <p role="status">正在向后台确认注册状态…</p> : githubLinked ? (
             <div className="verified-state" role="status">
               <span className="verified-mark" aria-hidden="true">✓</span>
-              <h2>GitHub 绑定成功</h2>
+              <h2>注册成功</h2>
               <p>{githubLogin ? <>已确认账号 <strong>@{githubLogin}</strong> 的归属。</> : "GitHub 账号已经成功绑定。"}</p>
-              <div className="success-band">邮箱身份 + GitHub 身份已关联 · OAuth token 未保存</div>
+              <div className="success-band">学号去重已检查 · GitHub 绑定已写入并核验</div>
             </div>
           ) : verified ? (
             <div className="verified-state github-link-state" role="status">

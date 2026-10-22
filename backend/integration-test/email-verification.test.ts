@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getRegistrationStatus } from "../src/auth/github-link.js";
 import { getDbPool } from "../src/db/index.js";
 import {
   EmailAuthError,
@@ -74,6 +75,12 @@ describe("Fudan email verification integration", () => {
   });
 
   it("allows only one registration when two verified challenges race for one GitHub ID",async()=>{
+    now = new Date();
+    // An administrator-enrolled contributor may claim their existing profile.
+    await pool.query(`INSERT INTO contributors(github_id,login,actor_type,is_bot,enrolled_at)
+      VALUES (123456789,'octocat','User',FALSE,now())`);
+    await pool.query(`INSERT INTO contributor_score_awards(contributor_id,award_key,points,reason)
+      SELECT id,'fixture-development',50,'Development' FROM contributors WHERE github_id=123456789`);
     const auth=service(new FakeSender());
     await auth.sendCode("first@fudan.edu.cn","203.0.113.1",{studentId:"26300000001",githubLogin:"octocat"});
     await auth.sendCode("second@fudan.edu.cn","203.0.113.2",{studentId:"26300000002",githubLogin:"renamed"});
@@ -83,6 +90,12 @@ describe("Fudan email verification integration", () => {
   });
 
   it("requires OAuth to match the reserved account and enforces one account per user",async()=>{
+    now = new Date();
+    // An administrator-enrolled contributor may claim their existing profile.
+    await pool.query(`INSERT INTO contributors(github_id,login,actor_type,is_bot,enrolled_at)
+      VALUES (123456789,'octocat','User',FALSE,now())`);
+    await pool.query(`INSERT INTO contributor_score_awards(contributor_id,award_key,points,reason)
+      SELECT id,'fixture-development',50,'Development' FROM contributors WHERE github_id=123456789`);
     const auth=service(new FakeSender());
     await auth.sendCode("first@fudan.edu.cn","203.0.113.1",{studentId:"26300000001",githubLogin:"octocat"});
     const verified=await auth.verifyCode("first@fudan.edu.cn","123456");
@@ -92,14 +105,18 @@ describe("Fudan email verification integration", () => {
       ? {access_token:"fixture-token"} : {id,login:"octocat",avatar_url:"https://example.test/avatar.png"}),{status:200})));
     const wrong=await github.createAuthorization(verified.memberId);
     if (!wrong.available) throw new Error("Expected OAuth URL");
-    await expect(github.completeAuthorization("code",new URL(wrong.authorizeUrl).searchParams.get("state")!))
+    await expect(github.completeAuthorization("code",new URL(wrong.authorizeUrl).searchParams.get("state")!, verified.registrationToken!))
       .rejects.toMatchObject({code:"GITHUB_ACCOUNT_MISMATCH"});
     expect((await pool.query("SELECT * FROM member_github_accounts")).rows).toHaveLength(0);
     id=123456789;
     const right=await github.createAuthorization(verified.memberId);
     if (!right.available) throw new Error("Expected OAuth URL");
-    await expect(github.completeAuthorization("code",new URL(right.authorizeUrl).searchParams.get("state")!)).resolves.toEqual({login:"octocat"});
+    await expect(github.completeAuthorization("code",new URL(right.authorizeUrl).searchParams.get("state")!, verified.registrationToken!)).resolves.toEqual({login:"octocat"});
     expect((await pool.query("SELECT * FROM member_github_accounts")).rows).toHaveLength(1);
+    await expect(getRegistrationStatus(verified.registrationToken!)).resolves.toEqual({registered:true,login:"octocat"});
+    await expect(getRegistrationStatus("x".repeat(43))).resolves.toEqual({registered:false});
+    expect((await pool.query("SELECT count(*)::int AS count FROM contributors WHERE github_id=123456789")).rows[0].count).toBe(1);
+    expect((await pool.query("SELECT points FROM contributor_score_awards WHERE award_key='fixture-development'")).rows[0].points).toBe(50);
     await expectAuthError(auth.resumeRegistration(verified.registrationToken!),"REGISTRATION_SESSION_REQUIRED");
     await expect(pool.query("INSERT INTO member_github_accounts(member_id,github_id) VALUES ($1,$2)",[verified.memberId,"123456789"]))
       .rejects.toMatchObject({code:"23505"});

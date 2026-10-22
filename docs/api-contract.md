@@ -734,7 +734,26 @@ EMAIL_AUTH_NOT_CONFIGURED
 - Commit/Issue 共用每用户自然月 10 次、每用户每仓库每自然月 3 次额度，每次 1 分。北京时间划分月份，按贡献时间和稳定身份确定次序。先检查仓库额度，未超仓库额度的记录再检查个人月度额度。
 - 每次计算先检查完整历史，再筛选展示范围；时间筛选和分组不重置额度。PR 在创建时得 20 分、在 `merged_at` 时另得 30 分，不使用 closed 状态冒充 merged。
 - CSV 增加仓库 ID、对象 ID、合并时间、白名单命中、自然月、两个额度的计数/超限标记、得分及 PR 分项。
-- `POST /auth/email/send-code` 现需 `{ email, studentId, githubLogin }`。先解析 GitHub 稳定 ID，再查邮箱、学号指纹、注册/绑定的 GitHub ID 和已收录账号；重复返回 409 `ALREADY_REGISTERED`，不发邮件。
+- `POST /auth/email/send-code` 现需 `{ email, studentId, githubLogin }`。先解析 GitHub 稳定 ID，再查邮箱、学号指纹、注册/绑定的 GitHub ID；重复返回 409 `ALREADY_REGISTERED`，不发邮件。
 - `POST /auth/email/verify` 仍需 `{ email, code }`。校验成功才创建用户，数据库唯一约束和事务锁保证并发只能注册一次；之后 OAuth 必须匹配预先填写的 GitHub 稳定 ID。
-- 邮箱验证后通过 7 天 HttpOnly/Secure/SameSite=Lax Cookie 恢复未完成绑定。`POST /auth/github/retry` 不重发验证码、不创建第二个用户，已完成绑定的恢复凭证作废。
+- 邮箱验证后通过 7 天 HttpOnly/Secure/SameSite=Lax Cookie 恢复未完成绑定。`POST /auth/github/retry` 不重发验证码、不创建第二个用户，已完成绑定后不能继续绑定第二个账号；同一凭据可在有效期内查询已完成的注册状态。
 - 个人贡献每日增量采集，PR/Issue 按 `updated` 拉取，Commit 按 `committer-date` 拉取并保留重叠窗口。首次升级完整回填稳定仓库 ID 与合并状态；只有完整成功才推进游标。每批按用户 ID、贡献类型、仓库 ID、SHA/编号 upsert，永久保留历史。
+
+
+## 后台确认注册成功（2026-10-22）
+
+`GET /api/v1/auth/registration/status` 使用 HttpOnly/Secure/SameSite=Lax 注册 Cookie，返回
+`{registered:false}` 或 `{registered:true,login:"GitHub用户名"}`，并设置 `Cache-Control: no-store`。
+不返回学号、邮箱、指纹、成员 ID 或任何姓名字段；不采集姓名。
+
+OAuth 回调必须携带与该 state 对应成员一致的注册 Cookie。绑定事务内检查学号指纹、
+GitHub 稳定账号 ID 和一对一绑定关系；事务提交后重新查询 members、member_github_accounts、
+github_accounts、contributors，确认唯一且完整才跳回成功页面。前端再次调用状态接口，
+网址中的 `github=success` 或 `login` 不能作为注册成功凭据。
+
+手工收录的 contributor 不是注册身份，允许通过邮箱验证及匹配该账号的 GitHub OAuth
+认领已有档案，不创建重复 contributor，保留贡献及开发奖励。已注册成员仍拒绝重复注册。
+
+Contributor rank/detail 新增可选 `bonusScore`：独立开发奖励，包含在 `score` 中，
+按奖励发放时间进入 7d/30d/90d/all；实验室分组筛选不包含全站开发奖励。
+奖励不伪装成 Commit/Issue/PR，不占白名单贡献配额。

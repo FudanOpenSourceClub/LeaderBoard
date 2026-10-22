@@ -136,7 +136,7 @@ export type OrganizationActivitySummary = z.infer<typeof OrganizationActivitySum
 export const RepositoryStatSchema = z.object({ githubId, fullName: text, group: text, contributors: count, ...activityCounts });
 export type RepositoryStat = z.infer<typeof RepositoryStatSchema>;
 
-export const ContributorRankSchema = z.object({ rank: positive, login: text, avatarUrl: webUrl.nullable(), ...activityCounts, ...scoringCounts });
+export const ContributorRankSchema = z.object({ rank: positive, login: text, avatarUrl: webUrl.nullable(), ...activityCounts, ...scoringCounts, bonusScore: count.optional() });
 export type ContributorRank = z.infer<typeof ContributorRankSchema>;
 
 export const ContributorRepositoryStatSchema = z.object({ githubId: githubId.nullable(), fullName: text, group: text, ...activityCounts, ...scoringCounts });
@@ -144,7 +144,7 @@ export type ContributorRepositoryStat = z.infer<typeof ContributorRepositoryStat
 
 export const ContributorDetailSchema = z.object({
   login: text, avatarUrl: webUrl.nullable(), range: TimeRangeSchema,
-  ...activityCounts, ...scoringCounts, repositories: z.array(ContributorRepositoryStatSchema),
+  ...activityCounts, ...scoringCounts, bonusScore: count.optional(), repositories: z.array(ContributorRepositoryStatSchema),
 });
 export type ContributorDetail = z.infer<typeof ContributorDetailSchema>;
 
@@ -213,6 +213,12 @@ export const GitHubLinkInfoSchema = z.discriminatedUnion("available", [
   }),
 ]);
 export type GitHubLinkInfo = z.infer<typeof GitHubLinkInfoSchema>;
+
+export const RegistrationStatusSchema = z.discriminatedUnion("registered", [
+  z.object({ registered: z.literal(false) }),
+  z.object({ registered: z.literal(true), login: text }),
+]);
+export type RegistrationStatus = z.infer<typeof RegistrationStatusSchema>;
 
 export const EmailCodeVerifyResponseSchema = z.object({
   verified: z.literal(true),

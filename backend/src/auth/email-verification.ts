@@ -131,7 +131,7 @@ export class EmailVerificationService implements EmailVerificationApi {
     const duplicate=await client.query(
       `SELECT 1 FROM members WHERE email_fingerprint=$1 OR student_fingerprint=$2 OR registration_github_id=$3
        UNION ALL SELECT 1 FROM github_accounts WHERE github_id=$3
-       UNION ALL SELECT 1 FROM contributors WHERE github_id=$3 AND enrolled_at IS NOT NULL LIMIT 1`,
+       LIMIT 1`,
       [email,student,githubId],
     );
     if (duplicate.rows.length) throw new EmailAuthError("ALREADY_REGISTERED",409,"该学号、邮箱或 GitHub 账号已经注册，不能重复注册");

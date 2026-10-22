@@ -14,6 +14,7 @@ import {
 } from "@leadboard/contracts";
 import type { Pool } from "pg";
 import { getDbPool } from "../db/index.js";
+import { getContributorAwards } from "./awards.js";
 import { emptyScore, getContributionScores, type ScoreDecision } from "./scoring.js";
 
 function sumScores(decisions: ScoreDecision[]) {
@@ -182,6 +183,7 @@ export class AnalyticsService {
   async getContributorLeaderboard(input: LeaderboardQuery): Promise<ContributorRank[]> {
     const bounds = rangeBounds(input.range, this.clock());
     const scoring = await getContributionScores(this.pool, bounds.from, bounds.to);
+    const awards = input.group === undefined ? await getContributorAwards(this.pool, bounds.from, bounds.to) : new Map<string, number>();
     const decisions = scoring.decisions.filter(d => input.group === undefined || d.group===input.group);
     const activeIds = [...new Set(decisions.filter(d=>d.points>0).map(d=>d.contributorId))];
     const result = await this.pool.query<{
@@ -202,15 +204,21 @@ export class AnalyticsService {
       [bounds.from, bounds.to, input.group ?? null, activeIds],
     );
 
-    const rows = result.rows.map((row) => ({
+    const rows = result.rows.map((row) => {
+      const contributionScore = sumScores(decisions.filter(d=>d.contributorId===row.id));
+      const bonusScore = awards.get(row.id) ?? 0;
+      return {
       login: row.login,
       avatarUrl: row.avatar_url,
       commits: safeNumber(row.commits),
       prs: safeNumber(row.prs),
       issues: safeNumber(row.issues),
       total: safeNumber(row.total),
-      ...sumScores(decisions.filter(d=>d.contributorId===row.id)),
-    }));
+      ...contributionScore,
+      bonusScore,
+      score: contributionScore.score + bonusScore,
+    };
+    });
     rows.sort((a, b) => b[input.metric] - a[input.metric] || a.login.localeCompare(b.login));
     return rows.slice(0, Math.min(10,input.limit)).map((row, index) =>
       ContributorRankSchema.parse({ rank: index + 1, ...row }),
@@ -230,6 +238,7 @@ export class AnalyticsService {
     const bounds = rangeBounds(range, this.clock());
     const scoring = await getContributionScores(this.pool, bounds.from, bounds.to);
     const personalScores = scoring.users.get(actor.id) ?? emptyScore();
+    const bonusScore = (await getContributorAwards(this.pool, bounds.from, bounds.to)).get(actor.id) ?? 0;
     const result = await this.pool.query<{
       github_id: string | null; full_name: string; group_name: string;
       commits: string; prs: string; issues: string; total: string;
@@ -278,6 +287,8 @@ export class AnalyticsService {
       total: commits + prs + issues,
       repositories,
       ...personalScores,
+      bonusScore,
+      score: personalScores.score + bonusScore,
     });
   }
 }

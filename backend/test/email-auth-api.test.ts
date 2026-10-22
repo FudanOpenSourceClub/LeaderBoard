@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
-import { createApiRouter } from "../src/api/router.js";
+import { createApiRouter, type ApiDependencies } from "../src/api/router.js";
 import { EmailAuthError } from "../src/auth/index.js";
 
 function emailDependencies() {
@@ -17,7 +17,7 @@ function emailDependencies() {
   };
 }
 
-function routerWithEmail(emailVerification?: ReturnType<typeof emailDependencies>["emailVerification"]) {
+function routerWithEmail(emailVerification?: ReturnType<typeof emailDependencies>["emailVerification"], overrides: Partial<ApiDependencies> = {}) {
   return createApiRouter({
     analytics: {
       async getGroups() { return []; },
@@ -37,6 +37,7 @@ function routerWithEmail(emailVerification?: ReturnType<typeof emailDependencies
       };
     },
     ...(emailVerification === undefined ? {} : { emailVerification }),
+    ...overrides,
   });
 }
 
@@ -151,6 +152,7 @@ describe("GitHub linking HTTP API", () => {
         },
         emailVerification: deps.emailVerification,
         githubLink,
+        registrationStatus: vi.fn().mockResolvedValue({ registered: true, login: "octocat" }),
       }),
     });
 
@@ -194,14 +196,46 @@ describe("GitHub linking HTTP API", () => {
           };
         },
         githubLink,
+        registrationStatus: vi.fn().mockResolvedValue({ registered: true, login: "octocat" }),
       }),
     });
 
     const response = await request(app)
       .get("/api/v1/auth/github/callback?code=abc&state=xyz")
+      .set("Cookie", `leaderboard_registration=${"a".repeat(43)}`)
       .expect(303);
 
-    expect(response.headers.location).toBe("/join?github=success&login=octocat");
-    expect(githubLink.completeAuthorization).toHaveBeenCalledWith("abc", "xyz");
+    expect(response.headers.location).toBe("/join?github=success");
+    expect(githubLink.completeAuthorization).toHaveBeenCalledWith("abc", "xyz", "a".repeat(43));
+  });
+});
+
+
+describe("backend-confirmed registration", () => {
+  it("returns no success without a valid browser receipt, ignoring forged query parameters", async () => {
+    const app = createApp({apiRouter:routerWithEmail()});
+    await request(app).get("/api/v1/auth/registration/status?github=success&login=octocat")
+      .expect("Cache-Control","no-store").expect(200,{registered:false});
+    const response = await request(app).get("/api/v1/auth/github/callback?code=abc&state=xyz").expect(303);
+    expect(response.headers.location).not.toContain("github=success");
+  });
+
+  it("does not report success when the database re-read cannot confirm the write", async () => {
+    const githubLink = {createAuthorization:vi.fn(),completeAuthorization:vi.fn().mockResolvedValue({login:"octocat"})};
+    const registrationStatus = vi.fn().mockResolvedValue({registered:false});
+    const app=createApp({apiRouter:routerWithEmail(undefined,{githubLink,registrationStatus})});
+    const response=await request(app).get("/api/v1/auth/github/callback?code=abc&state=xyz")
+      .set("Cookie", `leaderboard_registration=${"a".repeat(43)}`).expect(303);
+    expect(githubLink.completeAuthorization).toHaveBeenCalled();
+    expect(registrationStatus).toHaveBeenCalledAfter(githubLink.completeAuthorization);
+    expect(response.headers.location).not.toContain("github=success");
+  });
+
+  it("returns only registration status and GitHub login, never student data", async () => {
+    const app=createApp({apiRouter:routerWithEmail(undefined,{registrationStatus:vi.fn().mockResolvedValue({
+      registered:true,login:"octocat",studentId:"26300000001",student_fingerprint:"private",name:"private",
+    })})});
+    await request(app).get("/api/v1/auth/registration/status")
+      .expect(200,{registered:true,login:"octocat"});
   });
 });

@@ -82,18 +82,16 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
     <div className="page-canvas">
       <section className="page-hero compact-hero">
         <div>
-          <span className="hero-badge">FUDAN CONTRIBUTORS</span>
-          <h1>复旦开源达人</h1>
-          <p>每一次提交、协作和讨论，都会在这里留下清晰的记录。</p>
+          <h1>开源达人榜</h1>
         </div>
-        <div className="hero-stamp" aria-hidden="true">🏆</div>
+ 
       </section>
 
       <section className="filter-card leaderboard-filters" aria-label="积分规则">
-        <div>
-          <span className="filter-title">贡献积分规则</span>
-          <p className="filter-caption">Commit 与 Issue 仅在仓库 Star ≥ 10 时计分，不受白名单限制，自己的仓库也适用；两者合计每月最多 10 次、同一仓库每月最多 3 次，每次 1 分。PR 仅在白名单仓库计分：提交得 20 分，合并再加 30 分。Star 数按每日同步结果判断。LeaderBoard 开发者另有一次性 50 分开发贡献奖励。</p>
-        </div>
+        <details>
+          <summary>查看积分规则</summary>
+          <p className="filter-caption">Commit / Issue：Star ≥ 10，每次 1 分，每月合计最多 10 次，每仓库最多 3 次。PR：仅白名单仓库，提交 20 分，合并另加 30 分。LeaderBoard 开发贡献奖励 50 分。Star 数按每日同步结果判断。</p>
+        </details>
       </section>
 
       <section className="toolbar-card" aria-label="贡献者搜索和操作">
@@ -145,22 +143,8 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
         )}
         {state.status === "ready" && state.leaderboard.items.length > 0 && (
           <>
-            <div className="section-title-row">
-              <div>
-                <p className="section-kicker">OPEN SOURCE MAKERS</p>
-                <h2>达人榜</h2>
-                <p>按贡献积分排序，保留全部历史积分。</p>
-              </div>
-              <Badge className="count-pill">{Math.min(visibleCount, state.leaderboard.items.length)} 位达人</Badge>
-            </div>
-
+            <div className="section-title-row"><Badge className="count-pill">{Math.min(visibleCount, state.leaderboard.items.length)} 位达人</Badge></div>
             <Card className="panel ranking-panel">
-              <div className="panel-heading">
-                <div>
-                  <p className="section-kicker">CONTRIBUTOR RANKING</p>
-                  <h2>贡献排行榜</h2>
-                </div>
-              </div>
               <div className="ranking-list">
                 {visibleItems.map((item) => (
                   <div className={`ranking-row ranking-row-with-favorite ${item.rank <= 3 ? `ranking-medalist ranking-medalist-${item.rank}` : ""}`} key={item.login}>

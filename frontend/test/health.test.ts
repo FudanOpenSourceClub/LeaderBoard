@@ -23,7 +23,7 @@ it.each([
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response()));
   await expect(fetchHealth()).rejects.toThrow();
 });
-it("renders the Fudan project board without a header status widget", () => {
+it("renders the compact dark homepage with real navigation routes", () => {
   const html = renderToStaticMarkup(
     createElement(MemoryRouter, null,
       createElement(FiltersProvider, null,
@@ -31,14 +31,24 @@ it("renders the Fudan project board without a header status widget", () => {
       ),
     ),
   );
-  expect(html).not.toContain("服务正常");
-  expect(html).not.toContain("服务异常");
+  expect(html).toContain("LeaderBoard");
   expect(html).toContain("复旦开源项目");
-  expect(html).toContain("复旦开源达人");
+  expect(html).toContain("开源达人榜");
+  expect(html).toContain("mobile-bottom-nav");
+  expect(html).toContain("mobile-tab");
+  expect(html).not.toContain("服务正常");
   expect(html).not.toContain("校内开源项目");
-  expect(html).not.toContain("校内开源达人");
-  expect(html).toContain("加上我的项目");
-  expect(html).toContain("复旦开源仓库必吃榜");
-  expect(html).not.toContain("先放几个我们能核验的");
   expect(html).not.toContain("让每一份微小贡献都被看见");
+});
+
+it("keeps repository discovery and submission on the projects route", () => {
+  const html = renderToStaticMarkup(
+    createElement(MemoryRouter, { initialEntries: ["/projects"] },
+      createElement(FiltersProvider, null,
+        createElement(App, { api: createMockApiClient(), isMock: true }),
+      ),
+    ),
+  );
+  expect(html).toContain("复旦开源仓库必吃榜");
+  expect(html).toContain("加上我的项目");
 });

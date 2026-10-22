@@ -3,546 +3,546 @@
     "githubId": "32873313",
     "fullName": "systemd/systemd",
     "url": "https://github.com/systemd/systemd",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "75821432",
     "fullName": "llvm/llvm-project",
     "url": "https://github.com/llvm/llvm-project",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "724712",
     "fullName": "rust-lang/rust",
     "url": "https://github.com/rust-lang/rust",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "81598961",
     "fullName": "python/cpython",
     "url": "https://github.com/python/cpython",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "27193779",
     "fullName": "nodejs/node",
     "url": "https://github.com/nodejs/node",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "133442384",
     "fullName": "denoland/deno",
     "url": "https://github.com/denoland/deno",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "20929025",
     "fullName": "microsoft/TypeScript",
     "url": "https://github.com/microsoft/TypeScript",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "41881900",
     "fullName": "microsoft/vscode",
     "url": "https://github.com/microsoft/vscode",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "37912398",
     "fullName": "nginx/nginx",
     "url": "https://github.com/nginx/nginx",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "65214191",
     "fullName": "envoyproxy/envoy",
     "url": "https://github.com/envoyproxy/envoy",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "54230994",
     "fullName": "coredns/coredns",
     "url": "https://github.com/coredns/coredns",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "569041",
     "fullName": "curl/curl",
     "url": "https://github.com/curl/curl",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "7634677",
     "fullName": "openssl/openssl",
     "url": "https://github.com/openssl/openssl",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "156018",
     "fullName": "redis/redis",
     "url": "https://github.com/redis/redis",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "775743011",
     "fullName": "valkey-io/valkey",
     "url": "https://github.com/valkey-io/valkey",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "184981",
     "fullName": "memcached/memcached",
     "url": "https://github.com/memcached/memcached",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "62117812",
     "fullName": "apache/pulsar",
     "url": "https://github.com/apache/pulsar",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "924551",
     "fullName": "rabbitmq/rabbitmq-server",
     "url": "https://github.com/rabbitmq/rabbitmq-server",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "6443435",
     "fullName": "nats-io/nats-server",
     "url": "https://github.com/nats-io/nats-server",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "75164823",
     "fullName": "apache/rocketmq",
     "url": "https://github.com/apache/rocketmq",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "356066",
     "fullName": "apache/trafficserver",
     "url": "https://github.com/apache/trafficserver",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "20580498",
     "fullName": "kubernetes/kubernetes",
     "url": "https://github.com/kubernetes/kubernetes",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "46089560",
     "fullName": "containerd/containerd",
     "url": "https://github.com/containerd/containerd",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "7691631",
     "fullName": "moby/moby",
     "url": "https://github.com/moby/moby",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "36960321",
     "fullName": "opencontainers/runc",
     "url": "https://github.com/opencontainers/runc",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "88013053",
     "fullName": "docker/cli",
     "url": "https://github.com/docker/cli",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "43723161",
     "fullName": "helm/helm",
     "url": "https://github.com/helm/helm",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "6838921",
     "fullName": "prometheus/prometheus",
     "url": "https://github.com/prometheus/prometheus",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "15111821",
     "fullName": "grafana/grafana",
     "url": "https://github.com/grafana/grafana",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "11225014",
     "fullName": "etcd-io/etcd",
     "url": "https://github.com/etcd-io/etcd",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "74175805",
     "fullName": "istio/istio",
     "url": "https://github.com/istio/istio",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "113106184",
     "fullName": "linkerd/linkerd2",
     "url": "https://github.com/linkerd/linkerd2",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "48109239",
     "fullName": "cilium/cilium",
     "url": "https://github.com/cilium/cilium",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "42408804",
     "fullName": "traefik/traefik",
     "url": "https://github.com/traefik/traefik",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "120896210",
     "fullName": "argoproj/argo-cd",
     "url": "https://github.com/argoproj/argo-cd",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "258469100",
     "fullName": "fluxcd/flux2",
     "url": "https://github.com/fluxcd/flux2",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "185861173",
     "fullName": "open-telemetry/opentelemetry-collector",
     "url": "https://github.com/open-telemetry/opentelemetry-collector",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "24494032",
     "fullName": "mysql/mysql-server",
     "url": "https://github.com/mysql/mysql-server",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "507775",
     "fullName": "elastic/elasticsearch",
     "url": "https://github.com/elastic/elasticsearch",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "334274271",
     "fullName": "opensearch-project/OpenSearch",
     "url": "https://github.com/opensearch-project/OpenSearch",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "60246359",
     "fullName": "ClickHouse/ClickHouse",
     "url": "https://github.com/ClickHouse/ClickHouse",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "99919302",
     "fullName": "apache/doris",
     "url": "https://github.com/apache/doris",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "17165658",
     "fullName": "apache/spark",
     "url": "https://github.com/apache/spark",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "33884891",
     "fullName": "apache/airflow",
     "url": "https://github.com/apache/airflow",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "166515022",
     "fullName": "trinodb/trino",
     "url": "https://github.com/trinodb/trino",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "138754790",
     "fullName": "duckdb/duckdb",
     "url": "https://github.com/duckdb/duckdb",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "10270250",
     "fullName": "react/react",
     "url": "https://github.com/react/react",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "137078487",
     "fullName": "vuejs/core",
     "url": "https://github.com/vuejs/core",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "24195339",
     "fullName": "angular/angular",
     "url": "https://github.com/angular/angular",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "74293321",
     "fullName": "sveltejs/svelte",
     "url": "https://github.com/sveltejs/svelte",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "70107786",
     "fullName": "vercel/next.js",
     "url": "https://github.com/vercel/next.js",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "257485422",
     "fullName": "vitejs/vite",
     "url": "https://github.com/vitejs/vite",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "3678731",
     "fullName": "webpack/webpack",
     "url": "https://github.com/webpack/webpack",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "24560307",
     "fullName": "babel/babel",
     "url": "https://github.com/babel/babel",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "65600975",
     "fullName": "pytorch/pytorch",
     "url": "https://github.com/pytorch/pytorch",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "45717250",
     "fullName": "tensorflow/tensorflow",
     "url": "https://github.com/tensorflow/tensorflow",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "843222",
     "fullName": "scikit-learn/scikit-learn",
     "url": "https://github.com/scikit-learn/scikit-learn",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "908607",
     "fullName": "numpy/numpy",
     "url": "https://github.com/numpy/numpy",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "858127",
     "fullName": "pandas-dev/pandas",
     "url": "https://github.com/pandas-dev/pandas",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "965415649",
     "fullName": "openai/codex",
     "url": "https://github.com/openai/codex",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "1103012935",
     "fullName": "openclaw/openclaw",
     "url": "https://github.com/openclaw/openclaw",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "908531752",
     "fullName": "deepseek-ai/DeepSeek-V3",
     "url": "https://github.com/deepseek-ai/DeepSeek-V3",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "919443098",
     "fullName": "deepseek-ai/DeepSeek-R1",
     "url": "https://github.com/deepseek-ai/DeepSeek-R1",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "1007222028",
     "fullName": "openai/gpt-oss",
     "url": "https://github.com/openai/gpt-oss",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "573203730",
     "fullName": "openai/tiktoken",
     "url": "https://github.com/openai/tiktoken",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "968197216",
     "fullName": "google-gemini/gemini-cli",
     "url": "https://github.com/google-gemini/gemini-cli",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "599547518",
     "fullName": "vllm-project/vllm",
     "url": "https://github.com/vllm-project/vllm",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "740303686",
     "fullName": "sgl-project/sglang",
     "url": "https://github.com/sgl-project/sglang",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "612354784",
     "fullName": "ggml-org/llama.cpp",
     "url": "https://github.com/ggml-org/llama.cpp",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "658928958",
     "fullName": "ollama/ollama",
     "url": "https://github.com/ollama/ollama",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "155220641",
     "fullName": "huggingface/transformers",
     "url": "https://github.com/huggingface/transformers",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "498011141",
     "fullName": "huggingface/diffusers",
     "url": "https://github.com/huggingface/diffusers",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "679366051",
     "fullName": "NVIDIA/TensorRT-LLM",
     "url": "https://github.com/NVIDIA/TensorRT-LLM",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "235860204",
     "fullName": "deepspeedai/DeepSpeed",
     "url": "https://github.com/deepspeedai/DeepSpeed",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "71932349",
     "fullName": "ray-project/ray",
     "url": "https://github.com/ray-project/ray",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "552661142",
     "fullName": "langchain-ai/langchain",
     "url": "https://github.com/langchain-ai/langchain",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "676672661",
     "fullName": "langchain-ai/langgraph",
     "url": "https://github.com/langchain-ai/langgraph",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "560704231",
     "fullName": "run-llama/llama_index",
     "url": "https://github.com/run-llama/llama_index",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "710601088",
     "fullName": "crewAIInc/crewAI",
     "url": "https://github.com/crewAIInc/crewAI",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "607289185",
     "fullName": "microsoft/semantic-kernel",
     "url": "https://github.com/microsoft/semantic-kernel",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "890668799",
     "fullName": "modelcontextprotocol/servers",
     "url": "https://github.com/modelcontextprotocol/servers",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "862584018",
     "fullName": "modelcontextprotocol/python-sdk",
     "url": "https://github.com/modelcontextprotocol/python-sdk",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "946380199",
     "fullName": "openai/openai-agents-python",
     "url": "https://github.com/openai/openai-agents-python",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "958830659",
     "fullName": "google/adk-python",
     "url": "https://github.com/google/adk-python",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "771302083",
     "fullName": "OpenHands/OpenHands",
     "url": "https://github.com/OpenHands/OpenHands",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "644686905",
     "fullName": "continuedev/continue",
     "url": "https://github.com/continuedev/continue",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "638629097",
     "fullName": "Aider-AI/aider",
     "url": "https://github.com/Aider-AI/aider",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "824874689",
     "fullName": "cline/cline",
     "url": "https://github.com/cline/cline",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "881458615",
     "fullName": "browser-use/browser-use",
     "url": "https://github.com/browser-use/browser-use",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "752925682",
     "fullName": "QwenLM/Qwen3",
     "url": "https://github.com/QwenLM/Qwen3",
-    "enabled": false
+    "enabled": true
   },
   {
     "githubId": "725205304",
     "fullName": "unslothai/unsloth",
     "url": "https://github.com/unslothai/unsloth",
-    "enabled": false
+    "enabled": true
   }
 ]

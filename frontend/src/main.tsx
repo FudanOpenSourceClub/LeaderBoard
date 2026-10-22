@@ -6,6 +6,7 @@ import { App } from "./App";
 import { FiltersProvider } from "./state/filters";
 import "./style.css";
 import "./shadcn-theme.css";
+import "./dark-ui.css";
 
 const isMock = import.meta.env.DEV && import.meta.env.VITE_LEADBOARD_API_MODE === "mock";
 const api = createFrontendApiClient(isMock ? "mock" : "real");

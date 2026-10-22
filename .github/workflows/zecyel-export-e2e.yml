@@ -2,6 +2,9 @@ name: Contributor Enrollment and Export E2E
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zecyel-export-e2e.yml"]
   workflow_run:
     workflows: ["Deploy LeadBoard"]
     types: [completed]
@@ -76,22 +79,21 @@ jobs:
           assert "达人榜" in bundle
           assert "studentId" in bundle and "githubLogin" in bundle
           assert all(r["GitHub仓库ID"] for r in rows)
-          assert detail["score"] == sum(int(r["得分"]) for r in rows)
+          assert detail["score"] == sum(int(r["得分"]) for r in rows) + detail.get("bonusScore", 0)
           assert all(r["超过仓库月限3次"] in ["true","false"] for r in rows)
           assert all(r["超过总月限10次"] in ["true","false"] for r in rows)
-          request = urllib.request.Request(base+"/api/v1/auth/email/send-code",method="POST",
-              data=json.dumps({"email":"duplicate-check@fudan.edu.cn","studentId":"26399999999","githubLogin":"Zecyel"}).encode(),
-              headers={"Content-Type":"application/json"})
-          try:
-              urllib.request.urlopen(request,context=context,timeout=25)
-              raise AssertionError("Duplicate GitHub account was allowed to request email")
-          except urllib.error.HTTPError as error:
-              assert error.code == 409
-              assert json.loads(error.read())["error"]["code"] == "ALREADY_REGISTERED"
+          # Enrollment is not completed registration. Never send real email in a public smoke test.
+          status = json.loads(get("/api/v1/auth/registration/status?github=success&login=FakeUser"))
+          assert status == {"registered": False}, "Forged success parameters must not confirm registration"
+          for login in ["swiftgorge5-eng", "Alpha-dev-code", "Linscon", "Joseph2433"]:
+              developer = json.loads(get(f"/api/v1/contributors/{login}?range=all"))
+              assert developer["bonusScore"] == 50, f"Incorrect development reward for {login}"
+              assert developer["score"] >= 50
+              assert not any(field in developer for field in ["studentId", "student_fingerprint", "email_fingerprint", "name"])
           assert "公开贡献采集试点" not in bundle
           assert "PUBLIC CONTRIBUTION PILOT" not in bundle
           assert "不计入复旦正式排名" not in bundle
-          print("Verified: Zecyel is enrolled in all 20 leaderboard views; profile/export totals match; project title and user interface are current")
+          print("Verified: Zecyel is enrolled in all 20 leaderboard views; profile/export totals match; developer rewards are present; forged registration success is rejected")
           print("Export verified: %d total public source-linked events" % len(rows))
           print("Events by type: " + str(dict(kinds)))
           print("Sample verified URL: " + rows[0]["原始链接"])

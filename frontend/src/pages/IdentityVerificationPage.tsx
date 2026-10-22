@@ -8,6 +8,7 @@ import {
   EmailCodeVerifyResponseSchema,
   RegistrationStatusSchema,
 } from "@leadboard/contracts";
+import { Button, Input } from "../components/ui/primitives";
 
 type Notice = { tone: "info" | "success" | "error"; text: string } | null;
 
@@ -250,14 +251,14 @@ export function IdentityVerificationPage() {
               <form onSubmit={sendCode}>
                 <label className="form-field">
                   <span>学号</span>
-                  <input type="text" inputMode="numeric" value={studentId}
+                  <Input type="text" inputMode="numeric" value={studentId}
                     onChange={event=>setStudentId(event.target.value.replace(/\D/g,""))}
                     pattern="[0-9]{6,20}" maxLength={20} placeholder="填写本人学号" required disabled={busy||sent} />
 
                 </label>
                 <label className="form-field">
                   <span>复旦邮箱</span>
-                  <input
+                  <Input
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
@@ -268,9 +269,9 @@ export function IdentityVerificationPage() {
                   />
                   <small>支持 fudan.edu.cn 及其子域邮箱</small>
                 </label>
-                <button className="primary-button" type="submit" disabled={busy || cooldown > 0 || sent}>
+                <Button className="primary-button" type="submit" disabled={busy || cooldown > 0 || sent}>
                   {busy && !sent ? "正在发送…" : cooldown > 0 ? `${cooldown} 秒后可重发` : sent ? "验证码已发送" : "发送验证码"}
-                </button>
+                </Button>
               </form>
               {notice?.tone === "error" && notice.text.includes("已注册") && <button className="text-button" type="button" disabled={busy} onClick={() => void resumeRegistration()}>继续上次注册</button>}
 
@@ -278,7 +279,7 @@ export function IdentityVerificationPage() {
                 <form className="verification-form" onSubmit={verify}>
                   <label className="form-field">
                     <span>6 位验证码</span>
-                    <input
+                    <Input
                       className="code-input"
                       type="text"
                       inputMode="numeric"
@@ -293,9 +294,9 @@ export function IdentityVerificationPage() {
                     />
                     <small>验证码 10 分钟内有效</small>
                   </label>
-                  <button className="primary-button" type="submit" disabled={busy || code.length !== 6}>
+                  <Button className="primary-button" type="submit" disabled={busy || code.length !== 6}>
                     {busy ? "正在验证…" : "验证并加入达人榜"}
-                  </button>
+                  </Button>
                   <button
                     className="text-button"
                     type="button"

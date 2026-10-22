@@ -51,9 +51,8 @@ export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
           ? <img className="profile-avatar" src={state.detail.avatarUrl} alt="" />
           : <span className="profile-avatar avatar-placeholder" aria-hidden="true">{username.slice(0, 1).toUpperCase()}</span>}
         <div className="profile-copy">
-          <span className="hero-badge">CONTRIBUTOR PROFILE</span>
           <h1>{username || "贡献者详情"}</h1>
-          <p>从公开 GitHub 活动中汇总的个人贡献记录。</p>
+           
           {username && (
             <div className="profile-actions">
               <a
@@ -93,16 +92,16 @@ export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
         {state.status === "ready" && (
           <>
             <div className="metric-grid detail-metrics">
-              <article className="metric-card metric-purple"><span>Commit</span><strong>{state.detail.commits}</strong><small>代码提交</small></article>
-              <article className="metric-card metric-indigo"><span>Pull Request</span><strong>{state.detail.prs}</strong><small>协作变更</small></article>
-              <article className="metric-card metric-blue"><span>Issue</span><strong>{state.detail.issues}</strong><small>讨论与问题</small></article>
-              <article className="metric-card metric-mint"><span>积分</span><strong>{state.detail.score ?? 0}</strong><small>贡献积分（含开发奖励）</small></article>
+              <article className="metric-card metric-purple"><span>Commit</span><strong>{state.detail.commits}</strong></article>
+              <article className="metric-card metric-indigo"><span>PR</span><strong>{state.detail.prs}</strong></article>
+              <article className="metric-card metric-blue"><span>Issue</span><strong>{state.detail.issues}</strong></article>
+              <article className="metric-card metric-mint"><span>积分</span><strong>{state.detail.score ?? 0}</strong></article>
             </div>
 
-            <p className="filter-caption">Commit / Issue：{state.detail.commitIssueScore ?? 0} 分 · 提交 PR：{state.detail.prOpenedScore ?? 0} 分 · PR 合并：{state.detail.prMergedScore ?? 0} 分 · 开发贡献奖励：{state.detail.bonusScore ?? 0} 分</p>
+            <details className="score-breakdown"><summary>积分明细</summary><p className="filter-caption">Commit / Issue：{state.detail.commitIssueScore ?? 0} · PR：{state.detail.prOpenedScore ?? 0} · 合并 PR：{state.detail.prMergedScore ?? 0} · 开发奖励：{state.detail.bonusScore ?? 0}</p></details>
             <section className="panel repository-panel">
               <div className="panel-heading">
-                <div><p className="section-kicker">REPOSITORIES</p><h2>仓库贡献</h2><p>看看贡献主要发生在哪些项目里。</p></div>
+                <div><h2>仓库贡献</h2></div>
               </div>
               {state.detail.repositories.length === 0 ? <EmptyState label="当前时间范围内没有仓库活动" /> : (
                 <div className="table-wrap">

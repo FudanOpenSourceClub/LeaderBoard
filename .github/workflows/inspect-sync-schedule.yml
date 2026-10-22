@@ -1,0 +1,38 @@
+name: Inspect LeaderBoard Sync Schedule
+
+on:
+  push:
+    paths:
+      - ".github/workflows/inspect-sync-schedule.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 5
+    steps:
+      - name: Read schedule and sync status without exposing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== Server clock ==="
+          date -u '+UTC_NOW=%Y-%m-%dT%H:%M:%SZ'
+          date '+LOCAL_NOW=%Y-%m-%dT%H:%M:%S%:z'
+          timedatectl show -p Timezone --value 2>/dev/null | sed 's/^/SYSTEM_TIMEZONE=/' || true
+          echo "=== Non-sensitive scheduler settings ==="
+          for key in INGESTION_CRON_SCHEDULE TZ; do
+            value="$(sudo -n grep -E "^$key=" /etc/leadboard/leadboard.env 2>/dev/null | tail -n 1 || true)"
+            if [ -z "$value" ]; then
+              echo "$key=<unset: service default applies>"
+            else
+              echo "$value"
+            fi
+          done
+          echo "=== Runtime ==="
+          systemctl is-active leadboard.service || true
+          echo "=== Live sync status JSON ==="
+          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3000/api/v1/sync/status || true
+          printf '\n'

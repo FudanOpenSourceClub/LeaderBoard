@@ -9,6 +9,7 @@ import type { LeadBoardApiClient } from "../api/client";
 import { EmptyState, ErrorState, LoadingState } from "../components/AsyncStates";
 import { useLocalFavorites } from "../lib/favorites";
 import { useFilters } from "../state/filters";
+import { Badge, Button, Card, Input } from "../components/ui/primitives";
 
 type State =
   | { status: "loading" }
@@ -97,7 +98,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
 
       <section className="toolbar-card" aria-label="贡献者搜索和操作">
         <label className="search-box" aria-label="搜索贡献者">
-          <input
+          <Input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -150,10 +151,10 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
                 <h2>达人榜</h2>
                 <p>按贡献积分排序，保留全部历史积分。</p>
               </div>
-              <span className="count-pill">{Math.min(visibleCount, state.leaderboard.items.length)} 位达人</span>
+              <Badge className="count-pill">{Math.min(visibleCount, state.leaderboard.items.length)} 位达人</Badge>
             </div>
 
-            <section className="panel ranking-panel">
+            <Card className="panel ranking-panel">
               <div className="panel-heading">
                 <div>
                   <p className="section-kicker">CONTRIBUTOR RANKING</p>
@@ -170,9 +171,9 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
                     <Link className="ranking-person" to={`/contributors/${encodeURIComponent(item.login)}`}>
                       <strong>{item.login}</strong>
                       <span className="tag-row">
-                        <span className="tag tag-purple">{item.commits} Commit</span>
-                        <span className="tag tag-blue">{item.prs} PR</span>
-                        <span className="tag tag-gold">{item.issues} Issue</span>
+                        <Badge className="tag tag-purple">{item.commits} Commit</Badge>
+                        <Badge className="tag tag-blue">{item.prs} PR</Badge>
+                        <Badge className="tag tag-gold">{item.issues} Issue</Badge>
                       </span>
                     </Link>
                     <span className="ranking-metrics">
@@ -197,9 +198,9 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
               </div>
               <div className="ranking-more">
                 {moreError && <p role="alert">{moreError}</p>}
-                <button className="toolbar-button" type="button" disabled={loadingMore || !hasMore} onClick={() => void showMore()}>{loadingMore ? "正在加载…" : hasMore ? "显示更多" : "已显示全部达人"}<span aria-hidden="true">{hasMore ? "↓" : "✓"}</span></button>
+                <Button className="toolbar-button" variant="outline" type="button" disabled={loadingMore || !hasMore} onClick={() => void showMore()}>{loadingMore ? "正在加载…" : hasMore ? "显示更多" : "已显示全部达人"}<span aria-hidden="true">{hasMore ? "↓" : "✓"}</span></Button>
               </div>
-            </section>
+            </Card>
           </>
         )}
       </section>

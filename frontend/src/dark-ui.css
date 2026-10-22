@@ -242,6 +242,21 @@ select option { background: #121821; color: #e7eef9; }
 .error-state,.verify-notice-error { color: #f3b4b4; border-color: #62424a; background: #2b1c23; }
 .empty-filter-state { color: #94a7be; border-color: #304054; background: #141d2b; }
 
+
+/* Every interactive affordance does something: entire cards navigate, badges filter. */
+.project-list-count { display: flex; justify-content: flex-end; margin: 0 0 10px; }
+.project-card { position: relative; }
+.project-card h2 a::after { content: ""; position: absolute; z-index: 1; inset: 0; border-radius: inherit; }
+.project-card h2 a:focus-visible::after { outline: 2px solid #80b6ff; outline-offset: -3px; }
+.project-card .favorite-button,.project-card .project-tag-button,.project-card .project-links a { position: relative; z-index: 2; }
+.project-tag-button { padding: 4px 9px; cursor: pointer; font: inherit; border-radius: 7px; }
+.project-tag-button:hover { background: #2a425f; border-color: #4e6990; color: #dbeaff; }
+.project-card .project-links:empty { display: none; }
+.project-card .project-links:empty { margin: 0; }
+.score-breakdown { margin: 0 0 19px; border: 1px solid #303d50; border-radius: 10px; padding: 12px 15px; background: #141c29; color: #b7c9df; }
+.score-breakdown summary { cursor: pointer; font-size: 12px; font-weight: 650; }
+.score-breakdown p { margin: 12px 0 0; }
+
 /* Account, form and data detail */
 .profile-hero { align-items: center; gap: 17px; padding-top: 46px; }
 .back-link { top: 6px; left: 0; color: #a8c8fa; }

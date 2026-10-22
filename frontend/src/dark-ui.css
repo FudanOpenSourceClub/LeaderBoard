@@ -257,6 +257,9 @@ select option { background: #121821; color: #e7eef9; }
 .score-breakdown summary { cursor: pointer; font-size: 12px; font-weight: 650; }
 .score-breakdown p { margin: 12px 0 0; }
 
+.github-login-secondary { display: block; margin-top: 13px; padding: 9px; color: #9bc4fa; text-align: center; text-decoration: none; font-size: 12px; font-weight: 650; }
+.github-login-secondary:hover { color: #fff; text-decoration: underline; }
+
 /* Account, form and data detail */
 .profile-hero { align-items: center; gap: 17px; padding-top: 46px; }
 .back-link { top: 6px; left: 0; color: #a8c8fa; }

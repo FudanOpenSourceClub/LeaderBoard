@@ -1,6 +1,6 @@
 # Repository Rules / Branch Protection
 
-LeadBoard 的 CI 和 PR Policy 已经放在仓库中，但 GitHub 的 Ruleset / Branch Protection 属于仓库管理设置，需要 Maintainer 在 GitHub Settings 中启用。
+LeaderBoard 的 CI 和 PR Policy 已经放在仓库中，但 GitHub 的 Ruleset / Branch Protection 属于仓库管理设置，需要 Maintainer 在 GitHub Settings 中启用。
 
 ## 推荐 main 规则
 

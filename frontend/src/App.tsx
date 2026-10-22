@@ -20,7 +20,7 @@ function AppContent({api}:{api:LeadBoardApiClient}){
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="https://github.com/swiftgorge5-eng/LeadBoard" aria-label="LeaderBoard GitHub 仓库">
+        <a className="brand" href="https://github.com/swiftgorge5-eng/LeaderBoard" aria-label="LeaderBoard GitHub 仓库">
           <span className="brand-mark" aria-hidden="true">L</span>
           <span className="brand-copy">
             <strong>LeaderBoard</strong>

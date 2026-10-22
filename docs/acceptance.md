@@ -1,11 +1,11 @@
-# LeadBoard Phase 1 — 验收规范
+# LeaderBoard Phase 1 — 验收规范
 
 > 本文定义“一个 Issue / PR 到底什么时候算完成”。  
 > Issue 中的验收标准是任务级要求；本文是全项目统一的验收底线。二者同时满足，才允许 Merge。
 
 ## 1. 验收原则
 
-LeadBoard 采用 **Contract First + Automated Gates + Maintainer Review + Integration Evidence**。
+LeaderBoard 采用 **Contract First + Automated Gates + Maintainer Review + Integration Evidence**。
 
 任何 PR 都必须证明四件事：
 

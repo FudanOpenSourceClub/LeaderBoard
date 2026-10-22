@@ -16,7 +16,7 @@
 - GitHub stable ID 优先于 login / repository name
 - HTTP Base Path：`/api/v1`
 - 支持时间范围：`7d | 30d | 90d | all`
-- `all` 表示 LeadBoard **已经入库的全部历史**，不承诺等于 GitHub 账号/仓库的全部历史
+- `all` 表示 LeaderBoard **已经入库的全部历史**，不承诺等于 GitHub 账号/仓库的全部历史
 - 所有可重复执行的写入必须幂等
 - 正式收录用户的榜单和详情包含已保存的个人公开贡献，与已监控仓库事件按身份去重；组织统计仍使用仓库范围。
 

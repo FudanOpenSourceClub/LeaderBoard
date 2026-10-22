@@ -34,7 +34,7 @@ React Dashboard
 ## 2. Monorepo 规划
 
 ```text
-LeadBoard/
+LeaderBoard/
 ├── backend/
 │   └── src/
 │       ├── config/

@@ -42,7 +42,7 @@
 - `npm run test:bootstrap`：真实启动编译后后端和网页预览，静态 JS、health 代理、API JSON 404 全部通过；不包含浏览器交互。
 - `npm run check:integration`：通过，明确列出尚未实现阶段。
 - `npm run check:phase1`：按预期失败，列出缺少的数据库、GitHub、仓库筛选、采集、入库、同步、统计、API、E2E 实现。它不是项目完成的证据。
-- 修复 PR #26 的 GitHub CI（e18bcce）：[CI 通过](https://github.com/swiftgorge5-eng/LeadBoard/actions/runs/36103612815)，包括 Docker PostgreSQL 启动与 SQL 连接；[PR Policy 通过](https://github.com/swiftgorge5-eng/LeadBoard/actions/runs/36103612774)。数据库业务/集成/Pipeline/E2E 仍是未实现阶段，不能据此称业务链路已通过。
+- 修复 PR #26 的 GitHub CI（e18bcce）：[CI 通过](https://github.com/swiftgorge5-eng/LeaderBoard/actions/runs/36103612815)，包括 Docker PostgreSQL 启动与 SQL 连接；[PR Policy 通过](https://github.com/swiftgorge5-eng/LeaderBoard/actions/runs/36103612774)。数据库业务/集成/Pipeline/E2E 仍是未实现阶段，不能据此称业务链路已通过。
 
 ## 尚不能证明的部分
 

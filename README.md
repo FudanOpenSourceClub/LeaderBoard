@@ -1,12 +1,12 @@
-# LeadBoard
+# LeaderBoard
 
-LeadBoard 是一个面向开源社区的 **GitHub 开源活动统计与贡献排行榜平台**。
+LeaderBoard 是一个面向开源社区的 **GitHub 开源活动统计与贡献排行榜平台**。
 
 项目目标是把一组明确纳入统计范围的开源仓库，转换成透明、可追溯、可重复计算的仓库活动数据与贡献者排行榜。
 
 当前处在 Phase 1 阶段。#2 工程底座已实现（按 PR 流程验收）；其余业务模块欢迎认领 Issue。
 
-## 在自己的电脑上运行 LeadBoard（现在不要做）
+## 在自己的电脑上运行 LeaderBoard（现在不要做）
 
 “本地启动”就是让网站在你自己的电脑上运行，再用浏览器打开它。
 
@@ -29,20 +29,20 @@ npm -v
 
 ### 第二步：下载并打开项目
 
-如果电脑上已经有 LeadBoard，直接用 VS Code 打开它所在的文件夹。
+如果电脑上已经有 LeaderBoard，直接用 VS Code 打开它所在的文件夹。
 
 如果还没有：
 
 1. 在本仓库页面点击绿色 **Code** 按钮，再点击 **Download ZIP**。
 2. 解压下载的文件。
-3. 在 VS Code 中点击 **“文件” → “打开文件夹”**，选择解压后的项目文件夹（通常叫 `LeadBoard-main`）。
+3. 在 VS Code 中点击 **“文件” → “打开文件夹”**，选择解压后的项目文件夹（通常叫 `LeaderBoard-main`）。
 4. 确认左侧能直接看到 `package.json`、`backend`、`frontend` 和 `.env.example`。
 
 如果你已经安装 Git，也可以在准备存放项目的位置打开终端，依次运行：
 
 ```text
-git clone https://github.com/swiftgorge5-eng/LeadBoard.git
-cd LeadBoard
+git clone https://github.com/swiftgorge5-eng/LeaderBoard.git
+cd LeaderBoard
 ```
 
 **下面的命令都在项目最外层文件夹中运行，也就是有 `package.json` 的那一层。** 用 VS Code 打开这个文件夹后，再选择“终端 → 新建终端”即可。
@@ -88,7 +88,7 @@ npm run dev
 
 **http://localhost:5173**
 
-看到 LeadBoard Dashboard 和 **“后端已连接”**，说明当前已实现的基础部分启动成功。若未启用模拟数据，业务 API 尚未完成时 Dashboard 的数据区域显示错误状态是正常的。
+看到 LeaderBoard Dashboard 和 **“后端已连接”**，说明当前已实现的基础部分启动成功。若未启用模拟数据，业务 API 尚未完成时 Dashboard 的数据区域显示错误状态是正常的。
 
 也可以打开 http://localhost:3000/health 检查后端。这里显示的是服务状态数据，不是网站页面；它也不代表 GitHub 采集或数据库功能已经完成。
 
@@ -209,7 +209,7 @@ React Dashboard
 
 ## 1. Phase 1 的行为：
 
-给定一个 GitHub Organization 和访问 Token，LeadBoard 应当能够：
+给定一个 GitHub Organization 和访问 Token，LeaderBoard 应当能够：
 
 1. 自动发现目标 Organization 下的仓库；
 2. 读取 Repository Custom Property `leadboard_group`；
@@ -270,7 +270,7 @@ Phase 1 暂不引入 Redis。
 ## 4. Monorepo 规划
 
 ```text
-LeadBoard/
+LeaderBoard/
 ├── backend/
 │   └── src/
 │       ├── config/
@@ -303,7 +303,7 @@ LeadBoard/
 
 多人并行开发时，我们需要共享接口文档。
 
-LeadBoard 的共享接口说明：
+LeaderBoard 的共享接口说明：
 
 ```text
 docs/api-contract.md
@@ -477,7 +477,7 @@ repositoryGithubId + kind + externalId
 
 `range=all` 的含义是：
 
-> LeadBoard 数据库中已经采集到的全部历史。
+> LeaderBoard 数据库中已经采集到的全部历史。
 
 它不承诺等于 GitHub 仓库从创建至今的完整历史。
 
@@ -548,7 +548,7 @@ group = group name
 
 每个 Issue 原则上控制在 **2–5 小时**，具体要实现的接口、使用的接口、产物和验收要求都写在对应 Issue 中。
 
-**现在优先推进 [#3](https://github.com/swiftgorge5-eng/LeadBoard/issues/3) 数据库、[#4](https://github.com/swiftgorge5-eng/LeadBoard/issues/4) GitHub 请求工具、[#16](https://github.com/swiftgorge5-eng/LeadBoard/issues/16) 前端基础页面，这三个任务可以同时做。** #2 工程底座已实现；验收与合并状态仍以对应 PR 为准。认领情况以 Issue 的负责人和评论为准，下表表示开发顺序，不代表无人认领。
+**现在优先推进 [#3](https://github.com/swiftgorge5-eng/LeaderBoard/issues/3) 数据库、[#4](https://github.com/swiftgorge5-eng/LeaderBoard/issues/4) GitHub 请求工具、[#16](https://github.com/swiftgorge5-eng/LeaderBoard/issues/16) 前端基础页面，这三个任务可以同时做。** #2 工程底座已实现；验收与合并状态仍以对应 PR 为准。认领情况以 Issue 的负责人和评论为准，下表表示开发顺序，不代表无人认领。
 
 ### 数据库方向
 
@@ -556,9 +556,9 @@ group = group name
 
 | Issue | 要做什么 | 什么时候做 | 依赖 |
 |---|---|---|---|
-| [#3](https://github.com/swiftgorge5-eng/LeadBoard/issues/3) | 建立数据库表、数据库连接和建表命令 | **现在优先做** | #2 |
-| [#8](https://github.com/swiftgorge5-eng/LeadBoard/issues/8) | 把采集结果存入数据库，处理重复记录、仓库变更和机器人识别 | 后做，等数据库和采集模块可用 | #3、#5、#6、#7 |
-| [#14](https://github.com/swiftgorge5-eng/LeadBoard/issues/14) | 从数据库统计贡献数量，计算排行榜和贡献者详情 | 后做，等表结构和数据写入模块可用 | #3、#8 |
+| [#3](https://github.com/swiftgorge5-eng/LeaderBoard/issues/3) | 建立数据库表、数据库连接和建表命令 | **现在优先做** | #2 |
+| [#8](https://github.com/swiftgorge5-eng/LeaderBoard/issues/8) | 把采集结果存入数据库，处理重复记录、仓库变更和机器人识别 | 后做，等数据库和采集模块可用 | #3、#5、#6、#7 |
+| [#14](https://github.com/swiftgorge5-eng/LeaderBoard/issues/14) | 从数据库统计贡献数量，计算排行榜和贡献者详情 | 后做，等表结构和数据写入模块可用 | #3、#8 |
 
 ### 后端方向
 
@@ -566,12 +566,12 @@ group = group name
 
 | Issue | 要做什么 | 什么时候做 | 依赖 |
 |---|---|---|---|
-| [#4](https://github.com/swiftgorge5-eng/LeadBoard/issues/4) | 封装访问 GitHub 的公共工具，处理授权、分页、限流和重试 | **现在优先做** | #2 |
-| [#5](https://github.com/swiftgorge5-eng/LeadBoard/issues/5) | 获取组织下的仓库，筛选出需要统计的仓库和分组 | #4 完成后做 | #4 |
-| [#6](https://github.com/swiftgorge5-eng/LeadBoard/issues/6) | 采集默认分支的代码提交记录（Commit） | #5 完成后，与 #7 同时做 | #4、#5 |
-| [#7](https://github.com/swiftgorge5-eng/LeadBoard/issues/7) | 采集 Pull Request 和 Issue 记录 | #5 完成后，与 #6 同时做 | #4、#5 |
-| [#13](https://github.com/swiftgorge5-eng/LeadBoard/issues/13) | 串起采集和入库流程，定时更新，记录同步状态 | #8 完成后，可与 #14 同时做 | #5、#6、#7、#8 |
-| [#15](https://github.com/swiftgorge5-eng/LeadBoard/issues/15) | 把统计结果和同步状态做成网页可以调用的接口 | #13、#14 完成后做 | #13、#14 |
+| [#4](https://github.com/swiftgorge5-eng/LeaderBoard/issues/4) | 封装访问 GitHub 的公共工具，处理授权、分页、限流和重试 | **现在优先做** | #2 |
+| [#5](https://github.com/swiftgorge5-eng/LeaderBoard/issues/5) | 获取组织下的仓库，筛选出需要统计的仓库和分组 | #4 完成后做 | #4 |
+| [#6](https://github.com/swiftgorge5-eng/LeaderBoard/issues/6) | 采集默认分支的代码提交记录（Commit） | #5 完成后，与 #7 同时做 | #4、#5 |
+| [#7](https://github.com/swiftgorge5-eng/LeaderBoard/issues/7) | 采集 Pull Request 和 Issue 记录 | #5 完成后，与 #6 同时做 | #4、#5 |
+| [#13](https://github.com/swiftgorge5-eng/LeaderBoard/issues/13) | 串起采集和入库流程，定时更新，记录同步状态 | #8 完成后，可与 #14 同时做 | #5、#6、#7、#8 |
+| [#15](https://github.com/swiftgorge5-eng/LeaderBoard/issues/15) | 把统计结果和同步状态做成网页可以调用的接口 | #13、#14 完成后做 | #13、#14 |
 
 ### 前端方向
 
@@ -579,15 +579,15 @@ group = group name
 
 | Issue | 要做什么 | 什么时候做 | 依赖 |
 |---|---|---|---|
-| [#16](https://github.com/swiftgorge5-eng/LeadBoard/issues/16) | 搭页面结构、路由、统一请求工具和加载/错误提示 | **现在优先做，不必等后端业务接口** | #2；先用模拟数据，之后接 #15 |
-| [#17](https://github.com/swiftgorge5-eng/LeadBoard/issues/17) | 做贡献排行榜和贡献者详情页，支持筛选和切换 | #16 完成后即可做，不必等整条后端流程 | #16；先用模拟数据，之后接 #15 |
-| [#18](https://github.com/swiftgorge5-eng/LeadBoard/issues/18) | 展示仓库活动和同步新鲜度，并验证整套系统能跑通 | **最后集成验收**，需要前后端同学配合 | #13、#15、#17；复用 #16 的请求工具 |
+| [#16](https://github.com/swiftgorge5-eng/LeaderBoard/issues/16) | 搭页面结构、路由、统一请求工具和加载/错误提示 | **现在优先做，不必等后端业务接口** | #2；先用模拟数据，之后接 #15 |
+| [#17](https://github.com/swiftgorge5-eng/LeaderBoard/issues/17) | 做贡献排行榜和贡献者详情页，支持筛选和切换 | #16 完成后即可做，不必等整条后端流程 | #16；先用模拟数据，之后接 #15 |
+| [#18](https://github.com/swiftgorge5-eng/LeaderBoard/issues/18) | 展示仓库活动和同步新鲜度，并验证整套系统能跑通 | **最后集成验收**，需要前后端同学配合 | #13、#15、#17；复用 #16 的请求工具 |
 
 ### 公共基础
 
 | Issue | 要做什么 | 当前安排 |
 |---|---|---|
-| [#2](https://github.com/swiftgorge5-eng/LeadBoard/issues/2) | 建好前后端工程、共享类型、运行命令和本地数据库环境 | 工程实现已有，按 PR 流程验收；后续任务基于它开发 |
+| [#2](https://github.com/swiftgorge5-eng/LeaderBoard/issues/2) | 建好前后端工程、共享类型、运行命令和本地数据库环境 | 工程实现已有，按 PR 流程验收；后续任务基于它开发 |
 
 #1 是 GitHub 写权限测试；#9–#12 是已关闭的重复 Issue，均不属于正式开发任务。
 

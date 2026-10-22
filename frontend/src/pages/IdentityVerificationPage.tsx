@@ -233,6 +233,7 @@ export function IdentityVerificationPage() {
             <div className="github-link-state">
                
               <a className="primary-button github-link-button" href="/api/v1/auth/github/register">使用 GitHub 授权</a>
+              <a className="github-login-secondary" href="/api/v1/auth/github/login?returnTo=/projects">已有账号？GitHub 登录 →</a>
               {notice && <p className={`verify-notice verify-notice-${notice.tone}`} role="status">{notice.text}</p>}
               {githubCallbackStatus === "error" && <p className="verify-notice verify-notice-error" role="alert">{githubCallbackMessage(githubCallbackReason)}</p>}
             </div>

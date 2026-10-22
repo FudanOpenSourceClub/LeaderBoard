@@ -1,0 +1,129 @@
+name: LeaderBoard PHP Security Audit
+
+on:
+  push:
+    branches:
+      - ops/php-security-audit-20261023
+    paths:
+      - ".github/workflows/php-security-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Check production PHP exposure
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 5
+    steps:
+      - name: Inspect runtime, packages, web handlers, and containers
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -n python3 - <<'PY'
+          import datetime, glob, json, os, pathlib, re, shutil, subprocess, urllib.request
+          
+          def run(argv, timeout=20):
+              try:
+                  result = subprocess.run(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+                  return result.returncode, result.stdout, result.stderr
+              except (OSError, subprocess.TimeoutExpired) as exc:
+                  return 127, "", type(exc).__name__
+          
+          report = {"checked_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+          code, current, _ = run(["systemctl", "show", "-p", "WorkingDirectory", "--value", "leadboard.service"])
+          current = current.strip()
+          if code or not current.startswith("/opt/leadboard/") or not pathlib.Path(current).is_dir():
+              raise SystemExit("Expected LeaderBoard production deployment was not found; audit stopped.")
+          report["deployment"] = current
+          code, active, _ = run(["systemctl", "is-active", "leadboard.service"])
+          report["website_service"] = active.strip()
+          _, pid, _ = run(["systemctl", "show", "-p", "MainPID", "--value", "leadboard.service"])
+          try:
+              executable = os.readlink("/proc/" + str(int(pid.strip())) + "/exe")
+              report["website_executable"] = executable
+              report["website_runtime_version"] = run([executable, "--version"])[1].strip()
+          except (OSError, ValueError):
+              report["website_executable"] = "unavailable"
+          
+          code, packages, _ = run(["dpkg-query", "-W", "-f=${db:Status-Abbrev}\t${binary:Package}\t${Version}\n"])
+          report["package_inventory_complete"] = code == 0
+          report["installed_php_packages"] = []
+          for line in packages.splitlines():
+              fields = line.split("\t")
+              if len(fields) == 3 and fields[0].startswith("ii") and re.match(r"^(php(?:[0-9.]|$|-)|libapache2-mod-php|lsphp|frankenphp)", fields[1]):
+                  report["installed_php_packages"].append({"name": fields[1], "version": fields[2]})
+          
+          candidates = set()
+          for pattern in ["/usr/bin/php*", "/usr/sbin/php*", "/usr/local/bin/php*", "/usr/local/sbin/php*", "/usr/lib/cgi-bin/php*", "/opt/*/bin/php*", "/www/server/php/*/bin/php", "/usr/bin/lsphp*", "/usr/local/lsws/lsphp*/bin/lsphp", "/usr/local/bin/frankenphp"]:
+              for entry in glob.glob(pattern):
+                  if pathlib.Path(entry).is_file() and re.fullmatch(r"(?:php(?:[0-9.]+)?(?:-fpm|-cgi)?|php-(?:fpm|cgi)(?:[0-9.]+)?|lsphp[0-9.]*|frankenphp)", pathlib.Path(entry).name):
+                      candidates.add(str(pathlib.Path(entry).resolve()))
+          report["php_binaries"] = sorted(candidates)
+          report["php_versions"] = {path: run([path, "--version"])[1].splitlines()[:2] for path in sorted(candidates)}
+          report["php_processes"] = []
+          for entry in pathlib.Path("/proc").iterdir():
+              if entry.name.isdigit():
+                  try:
+                      name = (entry / "comm").read_text().strip()
+                      if re.match(r"^(php|lsphp|frankenphp|litespeed)", name, re.I):
+                          report["php_processes"].append({"pid": int(entry.name), "name": name})
+                  except OSError:
+                      pass
+          
+          code, units, _ = run(["systemctl", "list-unit-files", "--type=service", "--no-legend", "--no-pager"])
+          report["service_inventory_complete"] = code == 0
+          report["php_service_units"] = [line for line in units.splitlines() if re.search(r"(?:php|lsphp|frankenphp|litespeed)", line, re.I)]
+          nginx = shutil.which("nginx") or "/usr/sbin/nginx"
+          code, config, _ = run([nginx, "-T"])
+          report["nginx_config_readable"] = code == 0
+          report["nginx_php_handler"] = bool(re.search(r"(?mi)^\s*(?:location\b[^\n]*php|fastcgi_pass\b|fastcgi_param\s+SCRIPT_FILENAME\b)", config))
+          report["nginx_proxies_to_node_port_3000"] = bool(re.search(r"(?m)^\s*proxy_pass\s+http://(?:127\.0\.0\.1|localhost):3000", config))
+          apache = shutil.which("apache2ctl") or shutil.which("apachectl")
+          report["apache_installed"] = bool(apache)
+          if apache:
+              code, modules, err = run([apache, "-M"])
+              report["apache_modules_readable"] = code == 0
+              report["apache_php_module"] = bool(re.search(r"php.*module", modules + err, re.I))
+          
+          docker = shutil.which("docker")
+          report["docker_installed"] = bool(docker)
+          report["containers"] = []
+          report["container_php_binaries"] = []
+          if docker:
+              code, containers, err = run([docker, "ps", "-a", "--format", "{{.ID}}\t{{.Image}}\t{{.Names}}\t{{.State}}"])
+              report["docker_inventory_complete"] = code == 0
+              report["docker_daemon_inactive"] = bool("Cannot connect to the Docker daemon" in err)
+              for line in containers.splitlines():
+                  fields = line.split("\t")
+                  if len(fields) == 4:
+                      ident, image, name, state = fields
+                      report["containers"].append({"image": image, "name": name, "state": state})
+                      if state == "running":
+                          code, found, _ = run([docker, "exec", ident, "sh", "-c", "command -v php || command -v php-fpm || command -v lsphp || command -v frankenphp || true"])
+                          if code:
+                              report.setdefault("container_probe_incomplete", []).append(name)
+                          elif found.strip():
+                              report["container_php_binaries"].append({"container": name, "binary": found.strip()})
+              code, images, _ = run([docker, "image", "ls", "--format", "{{.Repository}}:{{.Tag}}"])
+              report["php_container_images"] = [line for line in images.splitlines() if re.search(r"php|franken|litespeed", line, re.I)]
+          
+          try:
+              with urllib.request.urlopen("http://127.0.0.1:3000/health", timeout=10) as response:
+                  health = json.load(response)
+                  report["website_health"] = {"http_status": response.status, "status": health.get("status")}
+          except Exception as exc:
+              report["website_health"] = {"error": type(exc).__name__}
+          
+          signals = [key for key in ["installed_php_packages", "php_binaries", "php_processes", "php_service_units", "nginx_php_handler", "apache_php_module", "container_php_binaries", "php_container_images"] if report.get(key)]
+          complete = all(report.get(key) for key in ["package_inventory_complete", "service_inventory_complete", "nginx_config_readable"])
+          complete = complete and not report.get("container_probe_incomplete") and not (docker and not report.get("docker_inventory_complete") and not report.get("docker_daemon_inactive"))
+          complete = complete and not (apache and not report.get("apache_modules_readable"))
+          report["php_detected_by"] = signals
+          report["audit_complete"] = bool(complete)
+          report["result"] = "PHP_DETECTED_REQUIRES_REVIEW" if signals else ("NO_PHP_FOUND" if complete else "INCOMPLETE")
+          print(json.dumps(report, ensure_ascii=False, indent=2))
+          if not complete or report["website_health"].get("status") != "ok":
+              raise SystemExit(1)
+          PY

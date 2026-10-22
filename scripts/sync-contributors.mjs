@@ -18,20 +18,21 @@ try {
   } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   console.info(`Repository whitelist: ${whitelist.filter(r => r.enabled).length} enabled, ${whitelist.length} candidates`);
   const accounts = JSON.parse(await readFile(new URL("../contributors.json", import.meta.url), "utf8"));
-  if (!Array.isArray(accounts) || !accounts.every((name) => typeof name === "string")) {
-    throw new Error("contributors.json must contain GitHub usernames");
+  if (!Array.isArray(accounts) || !accounts.every((account) => /^[1-9]\d*$/.test(account.githubId) && typeof account.login === "string")) {
+    throw new Error("contributors.json must contain stable GitHub IDs and display logins");
   }
-  for (const name of accounts) {
+  for (const account of accounts) {
+    const name=account.login;
     const existing = await pool.query(
-      `SELECT 1 FROM contributors WHERE lower(login)=lower($1) AND enrolled_at IS NOT NULL AND public_sync_version=2
+      `SELECT 1 FROM contributors WHERE github_id=$1 AND enrolled_at IS NOT NULL AND public_sync_version=2
          AND public_synced_at >= now() - interval '1 day'`,
-      [name],
+      [account.githubId],
     );
     if (existing.rowCount) {
       console.info(`${name}: enrolled, public activity is current`);
       continue;
     }
-    const result = await enrollContributor(name, process.env.GITHUB_TOKEN ?? "", pool);
+    const result = await enrollContributor(name, process.env.GITHUB_TOKEN ?? "", pool, fetch, account.githubId);
     console.info(`${result.login}: enrolled with ${result.events} public contribution records`);
   }
 } catch (error) {

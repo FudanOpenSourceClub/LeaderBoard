@@ -80,21 +80,12 @@ describe("Phase 1 API router", () => {
     expect(response.body.error.code).toBe("CONTRIBUTOR_NOT_FOUND");
   });
 
-  it("exports any saved contributor through the profile and existing download routes", async () => {
-    const contributorExport = vi.fn().mockResolvedValue({
-      rows: [{ kind: "issue", repository: "example/repo", identifier: "1", occurredAt: "2026-09-24T10:00:00Z", title: "Issue", url: "https://github.com/example/repo/issues/1" }],
-      totals: { commit: 0, pull_request: 0, issue: 1 }, truncated: false, incomplete: false,
-    });
-    const app = createApp({ apiRouter: createApiRouter({ ...dependencies(), contributorExport }) });
-    for (const prefix of ["contributors", "public-contributors"]) {
-      const response = await request(app).get(`/api/v1/${prefix}/alice/export.csv`).expect(200).expect("Content-Type", /text\/csv/);
-      expect(response.headers["x-leaderboard-event-count"]).toBe("1");
-      expect(response.headers["content-disposition"]).toContain("LeaderBoard-alice");
-      expect(response.text).toContain("https://github.com/example/repo/issues/1");
+  it("disables profile and legacy contribution export routes",async()=>{
+    const contributorExport=vi.fn();const app=createApp({apiRouter:createApiRouter({...dependencies(),contributorExport})});
+    for(const prefix of ["contributors","public-contributors"]){
+      const response=await request(app).get(`/api/v1/${prefix}/alice/export.csv`).expect(410);
+      expect(response.body.error.code).toBe("EXPORT_DISABLED");
     }
-    expect(contributorExport).toHaveBeenCalledWith("alice");
-    contributorExport.mockResolvedValueOnce(null);
-    await request(app).get("/api/v1/contributors/missing/export.csv").expect(404);
-    await request(app).get("/api/v1/contributors/invalid!login/export.csv").expect(400);
+    expect(contributorExport).not.toHaveBeenCalled();
   });
 });

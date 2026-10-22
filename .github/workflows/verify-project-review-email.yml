@@ -1,0 +1,35 @@
+name: Verify Project Review Email
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Deploy LeadBoard"]
+    types: [completed]
+permissions:
+  contents: read
+jobs:
+  mail-check:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 4
+    concurrency:
+      group: leadboard-project-review-email-check
+      cancel-in-progress: false
+    steps:
+      - name: Send one requested notification-channel test using existing server SMTP
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker=/var/lib/leadboard/project-review-mail-v1.ok
+          if sudo test -f "$marker"; then echo 'Notification channel already checked.'; exit 0; fi
+          release="$(systemctl show -p WorkingDirectory --value leadboard.service)"
+          sudo /usr/local/bin/leadboard-node --env-file=/etc/leadboard/leadboard.env --input-type=module - "$release" <<'JS'
+          import {pathToFileURL} from 'node:url';
+          const {smtpSender}=await import(pathToFileURL(process.argv[2]+'/backend/dist/auth/index.js'));
+          const sender=smtpSender(process.env);
+          if(typeof sender.sendMail!=='function')throw new Error('Notification sender unavailable');
+          const recipient=process.env.PROJECT_REVIEW_EMAIL?.trim()||'swiftgorge5@gmail.com';
+          await sender.sendMail({to:recipient,subject:'LeaderBoard 仓库申请通知测试',text:'仓库申请邮件通知通道已配置。\n\n这是一封测试邮件，不对应真实申请。注册用户提交申请后，系统会保存申请并发送通知；你可以使用自己的 GitHub 账号登录后台查看内容，决定通过或拒绝。\n\n管理后台：https://47.116.20.196/admin\n\n邮件链接只打开后台，不会自动批准任何申请。'});
+          console.log('Notification test accepted by the SMTP service.');
+          JS
+          sudo mkdir -p /var/lib/leadboard
+          sudo touch "$marker"

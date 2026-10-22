@@ -20,7 +20,7 @@ function boolSetting(value: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
-function smtpSender(env: NodeJS.ProcessEnv): VerificationEmailSender {
+export function smtpSender(env: NodeJS.ProcessEnv): SmtpEmailSender | UnavailableEmailSender {
   const host = env.SMTP_HOST?.trim();
   const user = env.SMTP_USER?.trim();
   const password = env.SMTP_PASSWORD?.trim();

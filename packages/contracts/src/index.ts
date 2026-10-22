@@ -226,8 +226,30 @@ export const EmailCodeVerifyResponseSchema = z.object({
 });
 export type EmailCodeVerifyResponse = z.infer<typeof EmailCodeVerifyResponseSchema>;
 
+export const WebsiteSessionSchema = z.discriminatedUnion("authenticated", [
+  z.object({authenticated:z.literal(false)}),
+  z.object({authenticated:z.literal(true),login:text,registered:z.boolean(),isAdmin:z.boolean(),csrfToken:text}),
+]);
+export type WebsiteSession = z.infer<typeof WebsiteSessionSchema>;
+export const CampusProjectSchema = z.object({
+  name:text,repo:text,url:webUrl,lab:text,labUrl:webUrl.nullable(),description:text,tags:z.array(text),
+});
+export const CampusProjectsResponseSchema = z.object({items:z.array(CampusProjectSchema)});
+export type CampusProject = z.infer<typeof CampusProjectSchema>;
+export const ProjectReviewRequestSchema = z.object({
+  decision:z.enum(["approve","reject"]),reviewNotes:z.string().max(1000).default(""),
+  description:z.string().trim().max(500).optional(),labUrl:webUrl.optional(),tags:z.array(z.string().trim().min(1).max(40)).max(6).optional(),
+}).refine(v=>v.decision!=="approve" || (v.description?.length??0)>=10,{message:"通过前请填写至少10字的公开简介"});
+export type ProjectReviewRequest = z.infer<typeof ProjectReviewRequestSchema>;
+export const ProjectProposalAdminSchema = z.object({
+  id:positive,projectUrl:webUrl,labName:text,notes:text,status:z.enum(["pending","approved","rejected"]),
+  submitterLogin:text.nullable(),createdAt:utc,reviewedAt:utc.nullable(),reviewNotes:z.string(),notificationSent:z.boolean(),notificationAttempts:count,
+});
+export const ProjectProposalAdminResponseSchema=z.object({items:z.array(ProjectProposalAdminSchema)});
+export type ProjectProposalAdmin = z.infer<typeof ProjectProposalAdminSchema>;
+
 export const ProjectProposalRequestSchema = z.object({
-  projectUrl: z.url({ protocol: /^https?$/ }).max(500),
+  projectUrl: z.string().trim().max(500).regex(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/),
   labName: z.string().trim().min(2).max(120),
   notes: z.string().trim().min(10).max(1200),
 });

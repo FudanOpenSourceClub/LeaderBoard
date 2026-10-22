@@ -28,6 +28,8 @@ export interface PublicContributionExport {
 
 type SearchKind = PublicContribution["kind"];
 interface SearchItem {
+  author?: {id?: number} | null;
+  user?: {id?: number} | null;
   id?: number;
   html_url?: string;
   repository_url?: string;
@@ -68,7 +70,7 @@ export async function collectPublicContributions(
   username: string,
   githubToken: string,
   fetcher: typeof fetch = fetch,
-  options: { since?: string } = {},
+  options: { since?: string; contributorGithubId?: string } = {},
 ): Promise<PublicContributionExport> {
   if (!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(username)) {
     throw new Error("Invalid GitHub username");
@@ -152,6 +154,9 @@ export async function collectPublicContributions(
 
     function addItems(items: SearchItem[]) {
       for (const item of items) {
+        if(options.contributorGithubId && String((kind==="commit"?item.author:item.user)?.id)!==options.contributorGithubId) {
+          throw new Error("GitHub contribution author does not match the enrolled stable ID");
+        }
         if (seen.size >= MAX_PER_KIND) break;
         const url = item.html_url;
         if (!url?.startsWith("https://github.com/") || seen.has(url)) continue;

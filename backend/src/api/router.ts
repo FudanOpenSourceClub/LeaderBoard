@@ -1,4 +1,8 @@
 import {
+  CampusProjectsResponseSchema,
+  ProjectProposalAdminResponseSchema,
+  ProjectReviewRequestSchema,
+  WebsiteSessionSchema,
   ContributorDetailSchema,
   ContributorLeaderboardResponseSchema,
   EmailCodeRequestSchema,
@@ -23,7 +27,7 @@ import {
   type SyncStatus,
   type TimeRange,
 } from "@leadboard/contracts";
-import { Router, type RequestHandler, type Response } from "express";
+import { Router, type Request, type RequestHandler, type Response } from "express";
 import { AnalyticsService } from "../analytics/index.js";
 import {
   EmailAuthError,
@@ -35,9 +39,9 @@ import {
 } from "../auth/index.js";
 import { GitHubClientError } from "../github/client.js";
 import { getRegistrationStatus } from "../auth/github-link.js";
-import { publicContributionCsv } from "../public-contributions/export.js";
+import { createWebsiteAuthFromEnv, csrfMatches, WebsiteAuthError, type WebsiteAuthApi } from "../auth/website-session.js";
 import { getContributorActivityExport } from "../public-contributions/enrollment.js";
-import { ProjectProposalService, type ProjectProposalApi } from "../projects/proposals.js";
+import { ProjectError, ProjectProposalService, type ProjectProposalApi } from "../projects/proposals.js";
 import { getSyncStatus as defaultGetSyncStatus, SyncAlreadyRunningError } from "../sync/index.js";
 
 interface AnalyticsApi {
@@ -56,6 +60,9 @@ export interface ApiDependencies {
   projectProposals: ProjectProposalApi;
   contributorExport: typeof getContributorActivityExport;
   registrationStatus: typeof getRegistrationStatus;
+  websiteAuth: WebsiteAuthApi;
+  projectReview: Pick<ProjectProposalService,"projects"|"list"|"review">;
+  notifyProjects(): Promise<void>;
 }
 
 function sendError(res: Response, status: number, code: string, message: string): void {
@@ -126,7 +133,7 @@ function parseGroup(value: unknown, res: Response): string | undefined | null {
 }
 
 function handleServiceError(error: unknown, res: Response): boolean {
-  if (error instanceof EmailAuthError || error instanceof GitHubLinkError) {
+  if (error instanceof EmailAuthError || error instanceof GitHubLinkError || error instanceof WebsiteAuthError || error instanceof ProjectError) {
     sendError(res, error.status, error.code, error.message);
     return true;
   }
@@ -156,7 +163,35 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
   const projectProposals = dependencies.projectProposals ?? new ProjectProposalService();
   const contributorExport = dependencies.contributorExport ?? getContributorActivityExport;
   const registrationStatus = dependencies.registrationStatus ?? getRegistrationStatus;
+  const websiteAuth=dependencies.websiteAuth??createWebsiteAuthFromEnv();
+  const projectReview=dependencies.projectReview??new ProjectProposalService();
+  const cookie=(req:Request,name:string)=>(req.headers.cookie??"").split(";").map(v=>v.trim()).find(v=>v.startsWith(name+"="))?.slice(name.length+1)??"";
+  const sessionCookie=(res:Response,token:string)=>res.cookie("leaderboard_session",token,{httpOnly:true,secure:true,sameSite:"lax",maxAge:30*86400000,path:"/"});
+  const requireUser=async(req:Request,admin=false)=>{
+    const user=await websiteAuth.getSession(cookie(req,"leaderboard_session"));
+    if(!user)throw new WebsiteAuthError("REGISTRATION_REQUIRED",401,"请先注册网站，已注册用户请先登录");
+    if(admin&&!user.isAdmin)throw new WebsiteAuthError("ADMIN_REQUIRED",403,"仅管理员可以处理申请");
+    if(!admin&&!user.memberId)throw new WebsiteAuthError("REGISTRATION_REQUIRED",401,"请先完成网站注册");
+    if(req.method!=="GET"&&!csrfMatches(user,req.get("X-CSRF-Token")))throw new WebsiteAuthError("INVALID_CSRF",403,"登录状态已变化，请刷新后重试");
+    return user;
+  };
   const router = Router();
+
+  router.get("/auth/session",async(req,res,next)=>{
+    res.setHeader("Cache-Control","no-store");
+    try{
+      let token=cookie(req,"leaderboard_session");
+      if(!token){const issued=await websiteAuth.fromRegistration(registrationCookie(req.headers.cookie));if(issued){token=issued;sessionCookie(res,token)}}
+      const user=await websiteAuth.getSession(token);
+      res.json(WebsiteSessionSchema.parse(user?{authenticated:true,login:user.login,registered:!!user.memberId,isAdmin:user.isAdmin,csrfToken:user.csrfToken}:{authenticated:false}));
+    }catch(error){if(!handleServiceError(error,res))next(error)}
+  });
+  router.get("/auth/github/login",async(req,res,next)=>{
+    try{const result=await websiteAuth.startLogin(singleQuery(req.query.returnTo)??"/projects");
+      res.cookie("leaderboard_login",result.browserToken,{httpOnly:true,secure:true,sameSite:"lax",maxAge:10*60000,path:"/api/v1/auth"});
+      res.redirect(303,result.authorizeUrl);
+    }catch(error){if(!handleServiceError(error,res))next(error)}
+  });
 
   router.get("/auth/registration/status", async (req,res,next) => {
     res.setHeader("Cache-Control", "no-store");
@@ -223,11 +258,18 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
       return;
     }
     try {
+      if(state.startsWith("login.")){
+        try{const result=await websiteAuth.completeLogin(code,state,cookie(req,"leaderboard_login"));
+          sessionCookie(res,result.sessionToken);res.clearCookie("leaderboard_login",{path:"/api/v1/auth"});res.redirect(303,result.returnPath);return;
+        }catch(error){res.redirect(303,error instanceof WebsiteAuthError&&error.code==="REGISTRATION_REQUIRED"?"/join?login=registration_required":"/join?login=failed");return;}
+      }
       const token = registrationCookie(req.headers.cookie);
       if (!token) throw new GitHubLinkError("REGISTRATION_SESSION_REQUIRED",401,"请先完成邮箱验证");
       await githubLink.completeAuthorization(code, state, token);
       const confirmation = await registrationStatus(token);
       if (!confirmation.registered) throw new GitHubLinkError("REGISTRATION_WRITE_NOT_CONFIRMED",500,"未能确认注册记录");
+      const sessionToken=await websiteAuth.fromRegistration(token);
+      if(sessionToken)sessionCookie(res,sessionToken);
       res.redirect(303, "/join?github=success");
     } catch (error) {
       if (error instanceof GitHubLinkError) {
@@ -244,18 +286,32 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
     }
   });
 
-  router.post("/project-proposals", async (req, res, next) => {
-    const parsed = ProjectProposalRequestSchema.safeParse(req.body);
-    if (!parsed.success) {
-      sendError(res, 400, "INVALID_PROJECT_PROPOSAL", "请把项目地址、实验室和补充说明填写完整");
-      return;
-    }
-    try {
-      const result = await projectProposals.submit(parsed.data);
+  router.get("/projects",async(_req,res,next)=>{
+    try{res.json(CampusProjectsResponseSchema.parse({items:await projectReview.projects()}));}
+    catch(error){if(!handleServiceError(error,res))next(error)}
+  });
+  router.post("/project-proposals",async(req,res,next)=>{
+    try{
+      const user=await requireUser(req);
+      const parsed=ProjectProposalRequestSchema.safeParse(req.body);
+      if(!parsed.success){sendError(res,400,"INVALID_PROJECT_PROPOSAL","请填写 GitHub 仓库地址、实验室和完整说明");return}
+      const result=await projectProposals.submit(parsed.data,user.memberId!);
       res.status(201).json(ProjectProposalResponseSchema.parse(result));
-    } catch (error) {
-      if (!handleServiceError(error, res)) next(error);
-    }
+      void dependencies.notifyProjects?.().catch(()=>undefined);
+    }catch(error){if(!handleServiceError(error,res))next(error)}
+  });
+  router.get("/admin/project-proposals",async(req,res,next)=>{
+    res.setHeader("Cache-Control","no-store");
+    try{await requireUser(req,true);res.json(ProjectProposalAdminResponseSchema.parse({items:await projectReview.list()}));}
+    catch(error){if(!handleServiceError(error,res))next(error)}
+  });
+  router.post("/admin/project-proposals/:id/review",async(req,res,next)=>{
+    try{
+      const user=await requireUser(req,true);const id=Number(req.params.id);
+      const parsed=ProjectReviewRequestSchema.safeParse(req.body);
+      if(!Number.isSafeInteger(id)||id<1||!parsed.success){sendError(res,400,"INVALID_REVIEW","请填写审核结论；通过时需填写公开简介");return}
+      await projectReview.review(id,parsed.data,user.githubId);res.json({reviewed:true});
+    }catch(error){if(!handleServiceError(error,res))next(error)}
   });
 
   router.get("/organization/summary", async (req, res, next) => {
@@ -316,32 +372,9 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
     }
   });
 
-  const exportContributor: RequestHandler<{ username: string }> = async (req, res, next) => {
-    const username = req.params.username;
-    if (!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(username)) {
-      sendError(res, 400, "INVALID_USERNAME", "Invalid GitHub username");
-      return;
-    }
-    try {
-      const data = await contributorExport(username);
-      if (data === null) {
-        sendError(res, 404, "CONTRIBUTOR_NOT_FOUND", "Contributor not found");
-        return;
-      }
-      res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename="LeaderBoard-${username}-public-contributions.csv"`);
-      res.setHeader("Cache-Control", "no-store");
-      res.setHeader("X-LeaderBoard-Truncated", String(data.truncated));
-      res.setHeader("X-LeaderBoard-Incomplete", String(data.incomplete));
-      res.setHeader("X-LeaderBoard-Event-Count", String(data.rows.length));
-      res.send(publicContributionCsv(data));
-    } catch (error) {
-      if (!handleServiceError(error, res)) next(error);
-    }
-  };
-  router.get("/contributors/:username/export.csv", exportContributor);
-  // Preserve existing contribution download links.
-  router.get("/public-contributors/:username/export.csv", exportContributor);
+  const disabledExport: RequestHandler = (_req,res)=>{res.setHeader("Cache-Control","no-store");sendError(res,410,"EXPORT_DISABLED","贡献导出已关闭");};
+  router.get("/contributors/:username/export.csv",disabledExport);
+  router.get("/public-contributors/:username/export.csv",disabledExport);
 
   router.get("/contributors/:username", async (req, res, next) => {
     const range = parseRange(req.query.range, res);

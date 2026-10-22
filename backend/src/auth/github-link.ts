@@ -81,7 +81,7 @@ function safeCallbackUrl(value: string): string {
   return parsed.toString();
 }
 
-async function exchangeCode(config: GitHubOAuthConfig, code: string): Promise<string> {
+export async function exchangeCode(config: GitHubOAuthConfig, code: string): Promise<string> {
   let response: Response;
   try {
     response = await fetch("https://github.com/login/oauth/access_token", {
@@ -129,7 +129,7 @@ async function exchangeCode(config: GitHubOAuthConfig, code: string): Promise<st
   return payload.access_token;
 }
 
-async function fetchGitHubIdentity(accessToken: string): Promise<{
+export async function fetchGitHubIdentity(accessToken: string): Promise<{
   githubId: string;
   login: string;
   avatarUrl: string | null;

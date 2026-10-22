@@ -19,6 +19,7 @@ interface RestActivity {
   number: number;
   user: RestActor | null;
   created_at: string;
+  updated_at?: string;
   closed_at: string | null;
   html_url: string | null;
   state: "open" | "closed";
@@ -47,7 +48,13 @@ function inRange(createdAt: string, range: CollectRange): boolean {
   return created >= Date.parse(range.from) && created < Date.parse(range.to);
 }
 
-/** Collects the current API snapshot of activities created within [from, to). */
+function changedInRange(item: RestActivity, range: CollectRange): boolean {
+  return Date.parse(item.created_at) < Date.parse(range.to) &&
+    [item.created_at, item.updated_at, item.closed_at, "merged_at" in item ? (item as RestPullRequest).merged_at : null]
+      .some(at => typeof at === "string" && inRange(at, range));
+}
+
+/** Refresh changed objects while preserving their original creation time for scoring. */
 export class PullRequestIssueCollector {
   constructor(private readonly client: GitHubClient) {}
 
@@ -57,7 +64,7 @@ export class PullRequestIssueCollector {
       { state: "all" },
     );
 
-    return items.filter((item) => inRange(item.created_at, range)).map((item) => ({
+    return items.filter((item) => changedInRange(item, range)).map((item) => ({
       kind: "pull_request",
       repositoryGithubId: repo.githubId,
       externalId: String(item.id),
@@ -78,7 +85,7 @@ export class PullRequestIssueCollector {
     );
 
     return items
-      .filter((item) => !("pull_request" in item) && inRange(item.created_at, range))
+      .filter((item) => !("pull_request" in item) && changedInRange(item, range))
       .map((item) => ({
         kind: "issue",
         repositoryGithubId: repo.githubId,

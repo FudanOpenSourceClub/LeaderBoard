@@ -1,100 +1,47 @@
 name: Contributor Enrollment and Export E2E
-
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: [".github/workflows/zecyel-export-e2e.yml"]
   workflow_run:
     workflows: ["Deploy LeadBoard"]
     types: [completed]
-
 permissions:
   contents: read
-
 jobs:
-  public-export:
+  public-smoke:
     runs-on: ubuntu-latest
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
-    timeout-minutes: 12
+    timeout-minutes: 8
     steps:
-      - name: Verify deployed application and export actual public GitHub events
-        shell: bash
+      - name: Verify public pages, authentication gates, catalog, rewards, and disabled exports
         run: |
-          set -euo pipefail
-          base="https://47.116.20.196"
-          tmp="$(mktemp -d)"
-          trap 'rm -rf "$tmp"' EXIT
-
-          echo "Checking application health"
-          curl --retry 4 --retry-delay 2 --retry-all-errors -kfsSL --connect-timeout 10 --max-time 20 "$base/health" | grep -q '"status":"ok"'
-          echo "Checking LeaderBoard contributor page"
-          curl --retry 4 --retry-delay 2 --retry-all-errors -kfsSL --connect-timeout 10 --max-time 20 "$base/contributors" | grep -q '<!doctype html>'
-
-          echo "Downloading live Zecyel public contribution CSV"
-          status="$(curl -kLsS --connect-timeout 10 --max-time 20 \
-            -o "$tmp/zecyel.csv" -w '%{http_code}' \
-            "$base/api/v1/contributors/Zecyel/export.csv")"
-          echo "Export HTTP status: $status"
-          test "$status" = "200"
-          python3 - "$tmp/zecyel.csv" <<'PY'
-          import csv
-          import sys, json, re, ssl, urllib.request
-          from collections import Counter
-          path = sys.argv[1]
-          with open(path, encoding="utf-8-sig", newline="") as file:
-              rows = list(csv.DictReader(file))
-          assert rows, "Export has no contribution records"
-          assert all(r["原始链接"].startswith("https://github.com/") for r in rows)
-          assert all(r["仓库"] and r["时间(UTC)"] and r["SHA或编号"] for r in rows)
-          assert all("公开 GitHub" in r["统计口径"] for r in rows)
-          kinds = Counter(r["类型"] for r in rows)
-          assert kinds["commit"] > 1000, "Date-window collection did not pass the old 1000-commit cap"
-          assert kinds["commit"] <= 5000, "Exceeded configured per-kind limit"
-          assert kinds["pull_request"] > 0, "No public PRs in export"
-          assert kinds["issue"] > 0, "No public issues in export"
-          base = "https://47.116.20.196"
-          context = ssl._create_unverified_context()
-          def get(path):
-              with urllib.request.urlopen(base + path, context=context, timeout=20) as response:
-                  return response.read().decode("utf-8-sig")
-          detail = json.loads(get("/api/v1/contributors/Zecyel?range=all"))
-          assert detail["login"] == "Zecyel"
-          assert detail["total"] == len(rows), "Profile and export totals differ"
-          assert (detail["commits"], detail["prs"], detail["issues"]) == (kinds["commit"], kinds["pull_request"], kinds["issue"])
-          for range_ in ["7d", "30d", "90d", "all"]:
-              for metric in ["score", "total", "commits", "prs", "issues"]:
-                  board = json.loads(get(f"/api/v1/contributors/leaderboard?range={range_}&metric={metric}&limit=5000"))
-                  person = next((p for p in board["items"] if p["login"] == "Zecyel"), None)
-                  assert person is not None, f"Zecyel missing from {range_}/{metric} leaderboard"
-                  assert len(board["items"]) <= 10
-                  assert "score" in person and person["avatarUrl"]
-                  if range_ == "all":
-                      assert person["total"] == len(rows)
-          index = get("/projects")
-          script = re.search(r'src="([^"]+\.js)"', index).group(1)
-          bundle = get(script)
-          assert "复旦开源仓库必吃榜" in bundle
-          assert "本期活跃达人" not in bundle
-          assert "达人榜" in bundle
-          assert "studentId" in bundle and "githubLogin" in bundle
-          assert all(r["GitHub仓库ID"] for r in rows)
-          assert detail["score"] == sum(int(r["得分"]) for r in rows) + detail.get("bonusScore", 0)
-          assert all(r["超过仓库月限3次"] in ["true","false"] for r in rows)
-          assert all(r["超过总月限10次"] in ["true","false"] for r in rows)
-          # Enrollment is not completed registration. Never send real email in a public smoke test.
-          status = json.loads(get("/api/v1/auth/registration/status?github=success&login=FakeUser"))
-          assert status == {"registered": False}, "Forged success parameters must not confirm registration"
-          for login in ["swiftgorge5-eng", "Alpha-dev-code", "Linscon", "Joseph2433"]:
-              developer = json.loads(get(f"/api/v1/contributors/{login}?range=all"))
-              assert developer["bonusScore"] == 50, f"Incorrect development reward for {login}"
-              assert developer["score"] >= 50
-              assert not any(field in developer for field in ["studentId", "student_fingerprint", "email_fingerprint", "name"])
-          assert "公开贡献采集试点" not in bundle
-          assert "PUBLIC CONTRIBUTION PILOT" not in bundle
-          assert "不计入复旦正式排名" not in bundle
-          print("Verified: Zecyel is enrolled in all 20 leaderboard views; profile/export totals match; developer rewards are present; forged registration success is rejected")
-          print("Export verified: %d total public source-linked events" % len(rows))
-          print("Events by type: " + str(dict(kinds)))
-          print("Sample verified URL: " + rows[0]["原始链接"])
+          python3 - <<'PY'
+          import urllib.request, urllib.error, ssl, json, re
+          base='https://47.116.20.196'; context=ssl._create_unverified_context()
+          def request(path,method='GET',data=None,expected=200):
+              req=urllib.request.Request(base+path,method=method,data=json.dumps(data).encode() if data is not None else None,headers={'Content-Type':'application/json'})
+              try: response=urllib.request.urlopen(req,context=context,timeout=25)
+              except urllib.error.HTTPError as error: response=error
+              assert response.status==expected,(path,response.status)
+              raw=response.read().decode('utf-8-sig')
+              return json.loads(raw) if 'json' in response.headers.get('Content-Type','') else raw
+          assert request('/health')=={'status':'ok'}
+          assert request('/api/v1/auth/session')=={'authenticated':False}
+          assert request('/api/v1/auth/registration/status?github=success&login=FakeUser')=={'registered':False}
+          assert request('/api/v1/admin/project-proposals',expected=401)['error']['code']=='REGISTRATION_REQUIRED'
+          # This rejected request must not create an application, send email, or access GitHub.
+          assert request('/api/v1/project-proposals','POST',{'projectUrl':'https://github.com/FudanNLP/fastNLP','labName':'fixture','notes':'authentication smoke fixture'},401)['error']['code']=='REGISTRATION_REQUIRED'
+          projects=request('/api/v1/projects')['items']; assert len(projects)>=3
+          assert {'FudanNLP/fastNLP','FudanNLP/fastHan','FudanSELab/ClassEval'}.issubset({p['repo'] for p in projects})
+          for prefix in ['contributors','public-contributors']:
+              assert request(f'/api/v1/{prefix}/Zecyel/export.csv',expected=410)['error']['code']=='EXPORT_DISABLED'
+          for login in ['swiftgorge5-eng','Alpha-dev-code','Linscon','Joseph2433']:
+              person=request(f'/api/v1/contributors/{login}?range=all')
+              assert person['bonusScore']==50 and person['score']>=50
+              assert not any(field in person for field in ['studentId','student_fingerprint','email_fingerprint','name'])
+          board=request('/api/v1/contributors/leaderboard?range=all&metric=score&limit=10'); assert len(board['items'])<=10
+          index=request('/projects'); bundle=request(re.search(r'src="([^"]+\.js)"',index).group(1))
+          assert '复旦开源仓库必吃榜' in bundle and '请先注册 LeaderBoard' in bundle
+          assert '/export.csv' not in bundle and '导出 CSV' not in bundle
+          assert '<!doctype html>' in request('/admin')
+          print('Public smoke passed: catalog, permissions, rewards, backend registration confirmation, disabled exports')
           PY

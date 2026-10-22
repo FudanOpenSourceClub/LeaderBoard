@@ -133,10 +133,17 @@ function wrapBase64(value: string): string {
   return Buffer.from(value, "utf8").toString("base64").match(/.{1,76}/g)?.join("\r\n") ?? "";
 }
 
-export class SmtpEmailSender implements VerificationEmailSender {
+export interface MailSender { sendMail(input: { to: string; subject: string; text: string }): Promise<void> }
+
+export class SmtpEmailSender implements VerificationEmailSender, MailSender {
   constructor(private readonly config: SmtpConfig) {}
 
   async sendVerificationCode(input: { to: string; code: string; expiresInMinutes: number }): Promise<void> {
+    return this.sendMail({to: input.to, subject: "LeaderBoard 复旦身份验证码",
+      text: `你的 LeaderBoard 验证码是：${input.code}\n\n验证码 ${input.expiresInMinutes} 分钟内有效，请勿转发给他人。\n\n如果这不是你的操作，可以忽略此邮件。`});
+  }
+
+  async sendMail(input: { to: string; subject: string; text: string }): Promise<void> {
     let socket: SmtpSocket;
     let reader: ResponseReader;
 
@@ -147,11 +154,13 @@ export class SmtpEmailSender implements VerificationEmailSender {
         servername: this.config.host,
         minVersion: "TLSv1.2",
       });
+      secureSocket.setTimeout(15000, () => secureSocket.destroy(new Error("SMTP timeout")));
       await once(secureSocket, "secureConnect");
       socket = secureSocket;
       reader = new ResponseReader(socket);
     } else {
       const plainSocket = connectNet({ host: this.config.host, port: this.config.port });
+      plainSocket.setTimeout(15000, () => plainSocket.destroy(new Error("SMTP timeout")));
       await once(plainSocket, "connect");
       socket = plainSocket;
       reader = new ResponseReader(socket);
@@ -168,6 +177,7 @@ export class SmtpEmailSender implements VerificationEmailSender {
           servername: this.config.host,
           minVersion: "TLSv1.2",
         });
+        secureSocket.setTimeout(15000, () => secureSocket.destroy(new Error("SMTP timeout")));
         await once(secureSocket, "secureConnect");
         socket = secureSocket;
         reader = new ResponseReader(socket);
@@ -183,8 +193,8 @@ export class SmtpEmailSender implements VerificationEmailSender {
       await command(socket, reader, `RCPT TO:<${headerValue(input.to)}>`, [250, 251]);
       await command(socket, reader, "DATA", 354);
 
-      const subject = encodeSubject("LeaderBoard 复旦身份验证码");
-      const body = `你的 LeaderBoard 验证码是：${input.code}\n\n验证码 ${input.expiresInMinutes} 分钟内有效，请勿转发给他人。\n\n如果这不是你的操作，可以忽略此邮件。`;
+      const subject = encodeSubject(headerValue(input.subject));
+      const body = input.text;
       const message = [
         `From: ${headerValue(this.config.from)}`,
         `To: ${headerValue(input.to)}`,
@@ -206,7 +216,8 @@ export class SmtpEmailSender implements VerificationEmailSender {
   }
 }
 
-export class UnavailableEmailSender implements VerificationEmailSender {
+export class UnavailableEmailSender implements VerificationEmailSender, MailSender {
+  async sendMail(): Promise<never> { throw new Error("SMTP is not configured"); }
   async sendVerificationCode(): Promise<never> {
     throw new Error("SMTP is not configured");
   }

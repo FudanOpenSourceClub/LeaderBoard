@@ -1,39 +1,13 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   ApiErrorResponseSchema,
+  CampusProjectsResponseSchema,
+  type CampusProject,
   ProjectProposalResponseSchema,
 } from "@leadboard/contracts";
+import { Link } from "react-router";
+import { useWebsiteSession } from "../auth/session";
 import { useLocalFavorites } from "../lib/favorites";
-
-const campusProjects = [
-  {
-    name: "fastNLP",
-    repo: "FudanNLP/fastNLP",
-    url: "https://github.com/FudanNLP/fastNLP",
-    lab: "复旦大学自然语言处理实验室",
-    labUrl: "https://nlp.fudan.edu.cn/28699/list.htm",
-    description: "面向自然语言处理任务的模块化、可扩展框架，复旦 NLP 实验室官网将其列为开源项目。",
-    tags: ["NLP", "Python", "开源框架"],
-  },
-  {
-    name: "fastHan",
-    repo: "FudanNLP/fastHan",
-    url: "https://github.com/FudanNLP/fastHan",
-    lab: "复旦大学自然语言处理实验室",
-    labUrl: "https://nlp.fudan.edu.cn/28699/list.htm",
-    description: "中文分词、词性标注、依存分析和命名实体识别工具，同样收录在实验室官方开源项目页面。",
-    tags: ["中文 NLP", "Python", "工具"],
-  },
-  {
-    name: "ClassEval",
-    repo: "FudanSELab/ClassEval",
-    url: "https://github.com/FudanSELab/ClassEval",
-    lab: "复旦大学软件工程实验室",
-    labUrl: "https://datascience.fudan.edu.cn/80/db/c13525a688347/page.htm",
-    description: "面向类级代码生成的 benchmark。项目位于 FudanSELab 组织，复旦校方页面可核验软件工程实验室信息。",
-    tags: ["Software Engineering", "Benchmark", "Python"],
-  },
-] as const;
 
 type SubmitState =
   | { status: "idle" }
@@ -42,6 +16,13 @@ type SubmitState =
   | { status: "error"; message: string };
 
 export function ProjectBoardPage() {
+  const {session,loading:sessionLoading}=useWebsiteSession();
+  const [campusProjects,setProjects]=useState<CampusProject[]>([]);
+  const [catalogLoading,setCatalogLoading]=useState(true);
+  const [catalogError,setCatalogError]=useState("");
+  const [registerNotice,setRegisterNotice]=useState(false);
+  useEffect(()=>{let active=true;void fetch("/api/v1/projects",{cache:"no-store"}).then(async r=>{if(!r.ok)throw new Error("项目列表加载失败，请刷新后重试");return CampusProjectsResponseSchema.parse(await r.json())})
+    .then(p=>{if(active)setProjects(p.items)}).catch(e=>{if(active)setCatalogError(e.message)}).finally(()=>{if(active)setCatalogLoading(false)});return()=>{active=false};},[]);
   const [showForm, setShowForm] = useState(false);
   const [projectUrl, setProjectUrl] = useState("");
   const [labName, setLabName] = useState("");
@@ -54,7 +35,7 @@ export function ProjectBoardPage() {
 
   const availableTags = useMemo(
     () => [...new Set(campusProjects.flatMap((project) => [...project.tags]))].sort(),
-    [],
+    [campusProjects],
   );
 
   const visibleProjects = useMemo(() => {
@@ -71,20 +52,22 @@ export function ProjectBoardPage() {
       const matchesFavorite = !favoritesOnly || favorites.isFavorite(project.repo);
       return matchesQuery && matchesTag && matchesFavorite;
     });
-  }, [query, tag, favoritesOnly, favorites.items]);
+  }, [campusProjects, query, tag, favoritesOnly, favorites.items]);
 
   async function submitProposal(event: FormEvent) {
     event.preventDefault();
     if (submit.status === "submitting") return;
+    if(!session.authenticated||!session.registered){setShowForm(false);setRegisterNotice(true);return;}
     setSubmit({ status: "submitting" });
 
     try {
       const response = await fetch("/api/v1/project-proposals", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token":session.csrfToken },
         body: JSON.stringify({ projectUrl, labName, notes }),
       });
       const payload: unknown = await response.json().catch(() => null);
+      if(response.status===401){setShowForm(false);setRegisterNotice(true);return;}
       if (!response.ok) {
         const parsed = ApiErrorResponseSchema.safeParse(payload);
         throw new Error(parsed.success ? parsed.data.error.message : "提交失败");
@@ -145,6 +128,7 @@ export function ProjectBoardPage() {
           <span className="count-pill">{campusProjects.length} 个已核验项目</span>
         </div>
 
+        {catalogError&&<p role="alert" className="verify-notice verify-notice-error">{catalogError}</p>}
         <div className="project-search-summary">
           <span>当前显示 {visibleProjects.length} / {campusProjects.length} 个项目</span>
           {(query || tag || favoritesOnly) && (
@@ -158,7 +142,7 @@ export function ProjectBoardPage() {
           )}
         </div>
 
-        {visibleProjects.length === 0 ? (
+        {catalogLoading ? <p role="status">正在加载项目…</p> : visibleProjects.length === 0 ? (
           <div className="empty-filter-state">没有匹配的项目。换个关键词，或者清除筛选再看看。</div>
         ) : (
           <div className="project-grid">
@@ -190,7 +174,7 @@ export function ProjectBoardPage() {
                 </div>
                 <div className="project-links">
                   <a href={project.url} target="_blank" rel="noreferrer">打开项目 ↗</a>
-                  <a href={project.labUrl} target="_blank" rel="noreferrer">查看实验室来源 ↗</a>
+                  {project.labUrl&&<a href={project.labUrl} target="_blank" rel="noreferrer">查看实验室来源 ↗</a>}
                 </div>
               </article>
             ))}
@@ -203,7 +187,9 @@ export function ProjectBoardPage() {
             <h2>漏掉你们实验室的宝藏仓库了？</h2>
             <p>丢给我们看看 👀。只要能说明这是复旦大学实验室在维护的开源项目，我们核实后就把它补进来。</p>
           </div>
-          <button className="button button-primary" type="button" onClick={() => {
+          <button className="button button-primary" type="button" disabled={sessionLoading} onClick={() => {
+            if(!session.authenticated||!session.registered){setRegisterNotice(true);setShowForm(false);return;}
+            setRegisterNotice(false);
             setShowForm((value) => !value);
             if (submit.status === "success") setSubmit({ status: "idle" });
           }}>
@@ -211,6 +197,7 @@ export function ProjectBoardPage() {
           </button>
         </section>
 
+        {registerNotice&&<section className="panel" style={{padding:24}} role="alert"><h2>请先注册 LeaderBoard</h2><p>完成复旦邮箱验证和 GitHub 绑定后，即可申请加入仓库。</p><div className="profile-actions"><Link className="primary-button" to="/join">去注册网站</Link><a className="profile-action-link" href="/api/v1/auth/github/login?returnTo=/projects">已注册？使用 GitHub 登录</a></div></section>}
         {showForm && (
           <section className="panel proposal-panel">
             <div className="panel-heading">
@@ -226,7 +213,7 @@ export function ProjectBoardPage() {
                 <span>✓</span>
                 <div>
                   <strong>收到啦。</strong>
-                  <p>我们先去逛一圈仓库、核一下实验室信息，确认后再把它放上来。</p>
+                  <p>申请已进入审核队列，管理员将收到邮件通知；通过后会加入项目列表。</p>
                 </div>
               </div>
             ) : (
@@ -240,7 +227,7 @@ export function ProjectBoardPage() {
                     placeholder="https://github.com/your-lab/your-project"
                     required
                   />
-                  <small>GitHub、Gitee 或项目主页都可以，能直接看到项目最好。</small>
+                  <small>请填写公开的 GitHub 仓库地址。</small>
                 </label>
 
                 <label className="form-field">

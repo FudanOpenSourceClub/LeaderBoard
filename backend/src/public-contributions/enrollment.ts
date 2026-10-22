@@ -84,11 +84,14 @@ export async function enrollContributor(
   githubToken: string,
   pool: Pool = getDbPool(),
   fetcher: typeof fetch = fetch,
+  expectedGithubId?: string,
 ): Promise<{ login: string; events: number }> {
   if (!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(username) || !githubToken.trim()) {
     throw new Error("A valid GitHub username and token are required");
   }
-  const response = await fetcher(`https://api.github.com/users/${encodeURIComponent(username)}`, {
+  if (expectedGithubId !== undefined && !/^[1-9]\d*$/.test(expectedGithubId)) throw new Error("Invalid stable GitHub ID");
+  const accountPath = expectedGithubId ? `user/${expectedGithubId}` : `users/${encodeURIComponent(username)}`;
+  const response = await fetcher(`https://api.github.com/${accountPath}`, {
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${githubToken}`,
@@ -99,7 +102,7 @@ export async function enrollContributor(
   if (!response.ok) throw new Error(`GitHub account lookup returned HTTP ${response.status}`);
   const user = await response.json() as { id?: unknown; login?: unknown; avatar_url?: unknown; type?: unknown };
   if (typeof user.id !== "number" || !Number.isSafeInteger(user.id) || user.id <= 0
-      || typeof user.login !== "string" || user.login.toLowerCase() !== username.toLowerCase()
+      || typeof user.login !== "string" || (expectedGithubId ? String(user.id) !== expectedGithubId : user.login.toLowerCase() !== username.toLowerCase())
       || user.type !== "User"
       || !(user.avatar_url === null || typeof user.avatar_url === "string")) {
     throw new Error("GitHub returned an invalid user account");
@@ -110,7 +113,7 @@ export async function enrollContributor(
   const last = previous.rows[0];
   const since = last?.public_sync_version === 2 && last.public_synced_at
     ? new Date(last.public_synced_at.getTime() - 86400000).toISOString() : undefined;
-  const data = await collectPublicContributions(user.login, githubToken, fetcher, since ? { since } : {});
+  const data = await collectPublicContributions(user.login, githubToken, fetcher, {...(since?{since}:{}),contributorGithubId:String(user.id)});
   const repositoryIds = new Map<string, string>();
   for (const row of data.rows) if (row.repositoryGithubId) repositoryIds.set(row.repository.toLowerCase(), row.repositoryGithubId);
   for (const row of data.rows) {
@@ -130,13 +133,18 @@ export async function enrollContributor(
   return { login: user.login, events: data.rows.length };
 }
 
-export async function refreshEnrolledContributors(githubToken: string, pool: Pool = getDbPool()): Promise<void> {
-  const result = await pool.query<{ login: string }>(
-    `SELECT login FROM contributors WHERE enrolled_at IS NOT NULL
+export async function refreshEnrolledContributors(githubToken: string, pool: Pool = getDbPool(), fetcher: typeof fetch = fetch): Promise<void> {
+  const result = await pool.query<{ login: string; github_id: string }>(
+    `SELECT login, github_id::text FROM contributors WHERE enrolled_at IS NOT NULL
        AND (public_synced_at IS NULL OR public_synced_at < now() - interval '1 day' OR public_sync_version < 2)
      ORDER BY id`,
   );
-  for (const row of result.rows) await enrollContributor(row.login, githubToken, pool);
+  let failures = 0;
+  for (const row of result.rows) {
+    try { await enrollContributor(row.login, githubToken, pool, fetcher, row.github_id); }
+    catch { failures++; }
+  }
+  if (failures) throw new Error(`${failures} enrolled contributor synchronization(s) failed`);
 }
 
 export async function getContributorActivityExport(

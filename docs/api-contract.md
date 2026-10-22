@@ -757,3 +757,17 @@ github_accounts、contributors，确认唯一且完整才跳回成功页面。�
 Contributor rank/detail 新增可选 `bonusScore`：独立开发奖励，包含在 `score` 中，
 按奖励发放时间进入 7d/30d/90d/all；实验室分组筛选不包含全站开发奖励。
 奖励不伪装成 Commit/Issue/PR，不占白名单贡献配额。
+
+## 注册会话、项目审核与关闭导出（2026-10-22）
+
+- `GET /auth/session`：返回 `{authenticated:false}`，或已认证 GitHub 用户名、`registered`、`isAdmin`、会话专用 `csrfToken`。不返回学号、姓名、邮箱或内部成员 ID。
+- `GET /auth/github/login?returnTo=/projects|/admin|/join`：GitHub 官方登录；复用既有 OAuth 回调地址，通过独立 state 与 HttpOnly 浏览器凭据防止回调串用。已注册用户和配置中的管理员可登录。网站会话有效期30天。
+- `POST /project-proposals`：仅注册且登录的成员可用，须携带 `X-CSRF-Token`。服务器固定提交者身份，忽略客户端伪造的 memberId。只接受公开 GitHub 仓库，按稳定仓库 ID 防止重复待审/已收录申请。申请与邮件 outbox 在同一事务提交。
+- `GET /admin/project-proposals`：仅管理员可读申请原文、申请人 GitHub、审核结论、通知状态。
+- `POST /admin/project-proposals/:id/review`：仅管理员且须 CSRF。`decision=approve|reject`；通过时须提供10至500字 `description`，可选 `labUrl`、`tags`、`reviewNotes`。通过后事务性写入网站项目目录，重复审核返回409；拒绝不加入目录。
+- `GET /projects`：公开数据库目录；不公开原始申请说明、内部成员信息。审批收录与贡献计分白名单独立，不自动改变计分范围。
+- 贡献页面不再提供导出按钮；两个历史 CSV 下载路由均返回410 `EXPORT_DISABLED`。
+- 网站后台权限按 `ADMIN_GITHUB_IDS` 判断，默认仓库所有者的稳定 ID；管理员身份与是否完成复旦注册分开，未完成注册的管理员也不能提交用户申请。
+- `PROJECT_REVIEW_EMAIL` 指定通知邮箱。发送队列每30秒检查一次，立即尝试新申请；SMTP失败保留任务并退避重试。邮件链接不能执行审核操作。
+
+个人贡献刷新从 `/user/{github_id}` 获取当前用户名并核对 ID；某个用户失败不阻断其他用户，整批仍报告失败以便发现问题。仓库 PR/Issue 同步包含本轮更新、关闭或合并的历史对象，保留原始创建时间计算提交分，按合并时间计算合并分。

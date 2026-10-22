@@ -98,7 +98,12 @@ const tables = {
     expires_at: required(timestamp), used_at: optional(timestamp),
     created_at: required(timestamp, "now()"),
   },
+  website_sessions: {token_hash:required("text"),github_id:required("bigint"),login:required("text"),csrf_token:required("text"),expires_at:required(timestamp),created_at:required(timestamp,"now()")},
+  website_login_states: {state_hash:required("text"),browser_hash:required("text"),return_path:required("text"),expires_at:required(timestamp),used_at:optional(timestamp),created_at:required(timestamp,"now()")},
+  campus_projects: {id:id(),repository_github_id:required("bigint"),full_name:required("text"),name:required("text"),html_url:required("text"),lab_name:required("text"),lab_url:optional("text"),description:required("text"),tags:required("ARRAY","'{}'::text[]"),proposal_id:optional("bigint"),created_at:required(timestamp,"now()")},
+  project_notification_outbox: {id:id(),proposal_id:required("bigint"),attempt_count:required("integer","0"),sent_at:optional(timestamp),next_attempt_at:required(timestamp,"now()"),lease_until:optional(timestamp),last_error:optional("text"),created_at:required(timestamp,"now()")},
   project_proposals: {
+    member_id:optional("bigint"),repository_github_id:optional("bigint"),reviewed_by:optional("bigint"),reviewed_at:optional(timestamp),review_notes:required("text","''::text"),
     id: id(), project_url: required("text"), lab_name: required("text"), notes: required("text"),
     status: required("text", "'pending'::text"),
     created_at: required(timestamp, "now()"), updated_at: required(timestamp, "now()"),
@@ -106,6 +111,9 @@ const tables = {
 };
 
 const foreignKeys = [
+  ["project_proposals","member_id","members","id"],
+  ["campus_projects","proposal_id","project_proposals","id"],
+  ["project_notification_outbox","proposal_id","project_proposals","id"],
   ["contributor_score_awards", "contributor_id", "contributors", "id"],
   ["repositories", "group_id", "groups", "id"],
   ["commits", "repository_id", "repositories", "id"],
@@ -120,6 +128,8 @@ const foreignKeys = [
   ["contributor_public_activities", "contributor_id", "contributors", "id"],
 ];
 const uniques = [
+  ["campus_projects","repository_github_id"],["campus_projects","html_url"],["campus_projects","proposal_id"],
+  ["project_notification_outbox","proposal_id"],
   ["groups", "name"], ["repositories", "github_id"], ["repositories", "node_id"],
   ["contributors", "github_id"], ["commits", "repository_id", "sha"],
   ["pull_requests", "repository_id", "github_id"], ["issues", "repository_id", "github_id"],
@@ -151,6 +161,7 @@ const indexes = {
 };
 
 const primaryKeys = {
+  website_sessions:["token_hash"],website_login_states:["state_hash"],campus_projects:["id"],project_notification_outbox:["id"],
   groups: ["id"],
   repositories: ["id"],
   contributors: ["id"],
@@ -228,7 +239,7 @@ try {
   if (problems.length) {
     for (const problem of problems) console.error(problem);
     process.exitCode = 1;
-  } else console.info("Database schema verified: 16 tables, columns, foreign keys, unique constraints, and indexes.");
+  } else console.info("Database schema verified: 20 tables, columns, foreign keys, unique constraints, and indexes.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;

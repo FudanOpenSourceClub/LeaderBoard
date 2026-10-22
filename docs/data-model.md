@@ -429,3 +429,13 @@ award_key TEXT, points INTEGER CHECK(points>0), reason TEXT, awarded_at TIMESTAM
 注册会话哈希在 OAuth 完成后保留到原有效期，作为只读完成凭据；
 `resumeRegistration` 仍禁止已绑定成员重复绑定。状态查询检查学号指纹存在且唯一、
 稳定 GitHub ID 一致且仅绑定一个成员、贡献者确实存在，查询不输出任何学号信息。
+
+## 18. 网站会话与仓库审核
+
+`website_sessions` 保存随机会话 token 的 SHA256、GitHub ID、登录用户名、CSRF 随机值、过期时间；身份和管理权限每次在后端核验。`website_login_states` 保存一次性 OAuth state 哈希、浏览器凭据哈希、受限返回路径、过期/使用时间。
+
+`project_proposals` 增加提交成员外键、稳定 GitHub 仓库 ID、审核人 GitHub ID、审核时间和备注；相同仓库仅允许一个待审核申请。历史匿名申请保留，但新请求必须关联已认证成员。
+
+`campus_projects` 保存网站公开展示字段，以 GitHub 仓库 ID 和 URL 唯一；初始三个项目由原有页面迁入。审批写入申请外键，不自动启用积分白名单。
+
+`project_notification_outbox` 每个申请一条持久化邮件任务，记录尝试次数、发送时间、下次尝试时间、租约和安全错误标记。任务通过数据库锁领取，发送失败退避重试，成功后不再领取；服务重启可继续。SMTP投递采用至少一次语义，极端断电场景可能重复通知，不能保证收件方邮箱的最终投递。

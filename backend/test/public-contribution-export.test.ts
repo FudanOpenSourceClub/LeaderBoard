@@ -84,6 +84,19 @@ describe("Public contributor activity export", () => {
     expect(queries[2]).toContain("updated:>=2026-10-01");
   });
 
+  it("checks stable author IDs before accepting results for a renamed login",async()=>{
+    let changedAuthor=false;
+    const fetcher=vi.fn(async(url:URL|RequestInfo)=>{
+      const response=await mockFetcher(url);
+      const payload=await response.json() as {items:Array<Record<string,unknown>>};
+      payload.items=payload.items.map(item=>({...item,author:{id:111},user:{id:changedAuthor?999:111}}));
+      return new Response(JSON.stringify(payload));
+    }) as typeof fetch;
+    expect((await collectPublicContributions("new-name","token",fetcher,{contributorGithubId:"111"})).rows).toHaveLength(3);
+    changedAuthor=true;
+    await expect(collectPublicContributions("new-name","token",fetcher,{contributorGithubId:"111"})).rejects.toThrow("stable ID");
+  });
+
   it("retrieves more than GitHub's per-query 1000 cap by splitting date windows", async () => {
     const commits = Array.from({ length: 1200 }, (_, i) => {
       const day = i < 600 ? "2025-01-12" : "2026-02-02";

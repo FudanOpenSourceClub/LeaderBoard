@@ -4,6 +4,7 @@ import {
   createEmailVerificationServiceFromEnv,
   createGitHubLinkServiceFromEnv,
 } from "./auth/index.js";
+import { ProjectNotificationWorker, startProjectNotifications } from "./projects/notifications.js";
 import { loadConfig } from "./config/index.js";
 import { getDbPool } from "./db/index.js";
 import { createDefaultSyncCoordinator, startSyncScheduler } from "./sync/index.js";
@@ -13,7 +14,10 @@ try {
   const coordinator = createDefaultSyncCoordinator(config);
   const emailVerification = createEmailVerificationServiceFromEnv();
   const githubLink = createGitHubLinkServiceFromEnv();
+  const notifications=new ProjectNotificationWorker();
+  const notificationScheduler=startProjectNotifications(notifications);
   const apiRouter = createApiRouter({
+    notifyProjects:()=>notifications.runOnce(),
     getSyncStatus: () => coordinator.getSyncStatus(),
     emailVerification,
     githubLink,
@@ -35,7 +39,7 @@ try {
     const timer = setTimeout(() => process.exit(1), 10_000);
     timer.unref();
     server.close(() => {
-      void scheduler.stop()
+      void Promise.all([scheduler.stop(),notificationScheduler.stop()])
         .then(() => getDbPool().end())
         .finally(() => {
           clearTimeout(timer);

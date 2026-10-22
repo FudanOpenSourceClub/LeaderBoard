@@ -152,6 +152,7 @@ describe("GitHub linking HTTP API", () => {
         },
         emailVerification: deps.emailVerification,
         githubLink,
+        websiteAuth: {getSession:async()=>null,fromRegistration:async()=>null,startLogin:vi.fn(),completeLogin:vi.fn()},
         registrationStatus: vi.fn().mockResolvedValue({ registered: true, login: "octocat" }),
       }),
     });
@@ -196,6 +197,7 @@ describe("GitHub linking HTTP API", () => {
           };
         },
         githubLink,
+        websiteAuth: {getSession:async()=>null,fromRegistration:async()=>null,startLogin:vi.fn(),completeLogin:vi.fn()},
         registrationStatus: vi.fn().mockResolvedValue({ registered: true, login: "octocat" }),
       }),
     });

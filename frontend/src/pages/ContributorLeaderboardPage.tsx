@@ -7,7 +7,6 @@ import {
 import { Link } from "react-router";
 import type { LeadBoardApiClient } from "../api/client";
 import { EmptyState, ErrorState, LoadingState } from "../components/AsyncStates";
-import { downloadCsv } from "../lib/download";
 import { useLocalFavorites } from "../lib/favorites";
 import { useFilters } from "../state/filters";
 
@@ -50,26 +49,6 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
     });
   }, [state, query, favoritesOnly, favorites.items]);
 
-  function exportVisibleRows() {
-    if (state.status !== "ready") return;
-    downloadCsv(
-      `leaderboard-top10-${range}.csv`,
-      [
-        ["排名", "GitHub", "积分", "Commit", "Pull Request", "Issue", "总活动", "时间范围", "分组"],
-        ...visibleItems.map((item) => [
-          item.rank,
-          item.login,
-          item.score ?? 0,
-          item.commits,
-          item.prs,
-          item.issues,
-          item.total,
-          range,
-          group ?? "全部分组",
-        ]),
-      ],
-    );
-  }
 
   return (
     <div className="page-canvas">
@@ -126,14 +105,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
         >
           {favoritesOnly ? "★ 只看收藏" : "☆ 只看收藏"}
         </button>
-        <button
-          className="toolbar-button"
-          type="button"
-          onClick={exportVisibleRows}
-          disabled={state.status !== "ready" || visibleItems.length === 0}
-        >
-          导出 CSV
-        </button>
+
       </section>
 
       <section className="dashboard-content">
@@ -159,7 +131,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
                 <div>
                   <p className="section-kicker">TOP 10</p>
                   <h2>积分前十</h2>
-                  <p>搜索、收藏和导出都只影响你的当前视图，不改变榜单原始数据。</p>
+                  <p>搜索和收藏都只影响你的当前视图，不改变榜单原始数据。</p>
                 </div>
               </div>
               <div className="ranking-list">

@@ -64,12 +64,7 @@ export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
               >
                 GitHub ↗
               </a>
-              <a
-                className="profile-action-button"
-                href={`/api/v1/contributors/${encodeURIComponent(username)}/export.csv`}
-              >
-                导出公开贡献 CSV ↓
-              </a>
+
               <button
                 className="profile-action-button"
                 type="button"

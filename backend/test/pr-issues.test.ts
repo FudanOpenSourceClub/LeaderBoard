@@ -67,7 +67,7 @@ describe("PullRequestIssueCollector", () => {
     expect(result.every((item) => PullRequestActivitySchema.safeParse(item).success)).toBe(true);
   });
 
-  it("filters PRs by created_at with inclusive from and exclusive to, regardless of updated_at", async () => {
+  it("refreshes PRs created or updated in range without admitting future creations", async () => {
     const { collector } = mockCollector([
       pull({ id: 1, created_at: "2026-09-18T11:59:59Z" }),
       pull({ id: 2, created_at: range.from, updated_at: "2026-10-01T00:00:00Z" }),
@@ -102,14 +102,20 @@ describe("PullRequestIssueCollector", () => {
     expect(result.every((item) => IssueActivitySchema.safeParse(item).success)).toBe(true);
   });
 
-  it("filters issues by created_at with inclusive from and exclusive to, regardless of updated_at", async () => {
+  it("refreshes old issues updated in range without changing their creation time", async () => {
     const { collector, paginateRest } = mockCollector([
       issue({ id: 1, created_at: "2026-09-18T11:59:59Z", updated_at: range.from }),
       issue({ id: 2, created_at: range.from, updated_at: "2026-10-01T00:00:00Z" }),
       issue({ id: 3, created_at: range.to, updated_at: range.from }),
     ]);
-    expect((await collector.collectIssues(repo, range)).map((item) => item.externalId)).toEqual(["2"]);
+    expect((await collector.collectIssues(repo, range)).map((item) => item.externalId)).toEqual(["1", "2"]);
     expect(paginateRest.mock.calls[0]?.[1]).not.toHaveProperty("since");
+  });
+
+  it("refreshes an old PR merged now so its merge award can be calculated",async()=>{
+    const {collector}=mockCollector([pull({created_at:"2026-01-01T00:00:00Z",updated_at:range.from,merged_at:range.from,state:"closed"})]);
+    const result=await collector.collectPullRequests(repo,range);
+    expect(result).toHaveLength(1);expect(result[0]).toMatchObject({occurredAt:"2026-01-01T00:00:00Z",state:"merged",mergedAt:range.from});
   });
 
   it("propagates GitHubClient failures without returning partial results", async () => {

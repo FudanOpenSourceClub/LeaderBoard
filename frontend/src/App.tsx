@@ -3,6 +3,8 @@ import type { LeadBoardApiClient } from "./api/client";
 import { ContributorDetailPage } from "./pages/ContributorDetailPage";
 import { ContributorLeaderboardPage } from "./pages/ContributorLeaderboardPage";
 import { ProjectBoardPage } from "./pages/ProjectBoardPage";
+import { WebsiteSessionProvider,useWebsiteSession } from "./auth/session";
+import { ProjectReviewPage } from "./pages/ProjectReviewPage";
 import { IdentityVerificationPage } from "./pages/IdentityVerificationPage";
 import "./enhancements.css";
 
@@ -11,6 +13,10 @@ function navClass({ isActive }: { isActive: boolean }) {
 }
 
 export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient; isMock?: boolean }) {
+  return <WebsiteSessionProvider><AppContent api={api}/></WebsiteSessionProvider>;
+}
+function AppContent({api}:{api:LeadBoardApiClient}){
+  const {session}=useWebsiteSession();
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -26,6 +32,8 @@ export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient;
           <NavLink className={navClass} to="/projects">复旦开源项目</NavLink>
           <NavLink className={navClass} to="/contributors">复旦开源达人</NavLink>
           <NavLink className={navClass} to="/join">加入贡献榜</NavLink>
+          {session.authenticated?<span>{session.login}</span>:<a href="/api/v1/auth/github/login?returnTo=/projects">GitHub 登录</a>}
+          {session.authenticated&&session.isAdmin&&<NavLink className={navClass} to="/admin">管理后台</NavLink>}
         </nav>
 
       </header>
@@ -85,6 +93,7 @@ export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient;
             <Route path="/projects" element={<ProjectBoardPage />} />
             <Route path="/contributors" element={<ContributorLeaderboardPage api={api} />} />
             <Route path="/contributors/:username" element={<ContributorDetailPage api={api} />} />
+            <Route path="/admin" element={<ProjectReviewPage />} />
             <Route path="/join" element={<IdentityVerificationPage />} />
             <Route path="*" element={<section className="not-found"><h1>页面不存在</h1><Link to="/projects">返回复旦开源项目</Link></section>} />
           </Routes>

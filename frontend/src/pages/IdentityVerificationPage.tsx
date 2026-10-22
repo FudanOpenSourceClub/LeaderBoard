@@ -198,6 +198,7 @@ export function IdentityVerificationPage() {
       <section className="join-hero">
         <div className="join-copy">
           <span className="hero-badge">FUDAN IDENTITY</span>
+          {callbackParams.get("login")&&<p role="alert" className="verify-notice verify-notice-error">{callbackParams.get("login")==="registration_required"?"请先注册网站，再使用 GitHub 登录。":"GitHub 登录未完成，请重新尝试。"}</p>}
           <h1>把你的开源贡献<br />带回校园。</h1>
           <p>填写学号和 GitHub 账号，验证复旦邮箱后通过 GitHub 官方授权完成绑定。LeaderBoard 不保存 GitHub OAuth access token。</p>
           <div className="join-steps" aria-label="加入贡献榜步骤">

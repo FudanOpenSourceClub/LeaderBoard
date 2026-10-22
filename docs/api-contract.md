@@ -730,8 +730,10 @@ EMAIL_AUTH_NOT_CONFIGURED
 
 - 默认 `range=all&metric=score`；`score` 是新增排序指标，接口最多返回 10 人，同分按 GitHub 用户名稳定排序，超额活动次数不参与破同分。
 - Contributor rank/detail/repository 增加 `score`、`commitIssueScore`、`prOpenedScore`、`prMergedScore`、`mergedPrs`。
-- 仅 `scoring_repositories.enabled=true` 的稳定 Repository ID 计分，名称和 URL 不能代替 ID。根目录 `scoring-whitelist.json` 管理候选及启用状态。
-- Commit/Issue 共用每用户自然月 10 次、每用户每仓库每自然月 3 次额度，每次 1 分。北京时间划分月份，按贡献时间和稳定身份确定次序。先检查仓库额度，未超仓库额度的记录再检查个人月度额度。
+- PR 仅在 `scoring_repositories.enabled=true` 的稳定 Repository ID 中计分，名称和 URL 不能代替 ID。根目录 `scoring-whitelist.json` 管理 PR 白名单候选及启用状态。PR 不受 Star 门槛限制。
+- Commit/Issue 不要求白名单，只要求公开仓库的 GitHub Star 数至少10颗；自己的仓库适用相同门槛。未核实 Star 数、仓库不可用或低于10颗的记录保留在贡献历史中，计0分且不占用任何额度。
+- 符合 Star 门槛的 Commit/Issue 共用每用户自然月 10 次、每用户每仓库每自然月 3 次额度，每次 1 分。北京时间划分月份，按贡献时间和稳定身份确定次序。先检查仓库额度，未超仓库额度的记录再检查个人月度额度。
+- `repository_star_counts` 按 GitHub 仓库 ID 缓存已核实的 Star 数，每日刷新所有已有 Commit/Issue 的仓库，即使没有新贡献也刷新；使用最近成功同步的数量对已有历史重新计分。临时网络/限流错误保留上次核实值并报告同步失败，后续同步继续重试。首次未核实的仓库不计 Commit/Issue 分。
 - 每次计算先检查完整历史，再筛选展示范围；时间筛选和分组不重置额度。PR 在创建时得 20 分、在 `merged_at` 时另得 30 分，不使用 closed 状态冒充 merged。
 - CSV 增加仓库 ID、对象 ID、合并时间、白名单命中、自然月、两个额度的计数/超限标记、得分及 PR 分项。
 - `POST /auth/email/send-code` 现需 `{ email, studentId, githubLogin }`。先解析 GitHub 稳定 ID，再查邮箱、学号指纹、注册/绑定的 GitHub ID；重复返回 409 `ALREADY_REGISTERED`，不发邮件。

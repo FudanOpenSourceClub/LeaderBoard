@@ -165,6 +165,7 @@ describe("Analytics pipeline fixture", () => {
     await pool.query(`INSERT INTO scoring_repositories(github_id,full_name,html_url,enabled)
       VALUES (1001,'leadboard-fixture/repo-a','https://github.com/leadboard-fixture/repo-a',TRUE),
              (9999,'other/community','https://github.com/other/community',TRUE)`);
+    await pool.query("INSERT INTO repository_star_counts(github_id,stars) VALUES (1001,10),(9999,100)");
     expect((await analytics.getContributorDetail("alice","all"))?.score).toBe(74);
     await saveContributorActivity(identity,{...data,rows:[{
       ...data.rows[2]!,repository:"other/renamed",mergedAt:"2026-09-24T11:00:00Z",

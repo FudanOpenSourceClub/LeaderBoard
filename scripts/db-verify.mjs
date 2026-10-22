@@ -38,6 +38,7 @@ const tables = {
     reason: required("text"), awarded_at: required(timestamp,"now()"),
   },
   scoring_repositories: {github_id:required("bigint"),full_name:required("text"),html_url:required("text"),enabled:required("boolean","false"),updated_at:required(timestamp,"now()")},
+  repository_star_counts: {github_id:required("bigint"),stars:optional("integer"),checked_at:required(timestamp,"now()")},
   contributor_public_activities: {
     id:id(),repository_github_id:optional("bigint"),object_github_id:optional("bigint"),merged_at:optional(timestamp),
     first_seen_at:required(timestamp,"now()"),last_seen_at:required(timestamp,"now()"),
@@ -167,6 +168,7 @@ const primaryKeys = {
   contributors: ["id"],
   contributor_score_awards: ["contributor_id", "award_key"],
   scoring_repositories:["github_id"],
+  repository_star_counts:["github_id"],
   contributor_public_activities: ["id"],
   commits: ["id"],
   pull_requests: ["id"],
@@ -239,7 +241,7 @@ try {
   if (problems.length) {
     for (const problem of problems) console.error(problem);
     process.exitCode = 1;
-  } else console.info("Database schema verified: 20 tables, columns, foreign keys, unique constraints, and indexes.");
+  } else console.info("Database schema verified: 21 tables, columns, foreign keys, unique constraints, and indexes.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;

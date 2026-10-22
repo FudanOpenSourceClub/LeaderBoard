@@ -64,7 +64,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
       <section className="filter-card leaderboard-filters" aria-label="积分规则">
         <div>
           <span className="filter-title">按积分展示前 10 名</span>
-          <p className="filter-caption">仅白名单仓库计分。Commit 与 Issue 合计每月最多 10 次、同一仓库每月最多 3 次，每次 1 分；提交 PR 得 20 分，合并再加 30 分。LeaderBoard 开发者另有一次性 50 分开发贡献奖励。</p>
+          <p className="filter-caption">Commit 与 Issue 仅在仓库 Star ≥ 10 时计分，不受白名单限制，自己的仓库也适用；两者合计每月最多 10 次、同一仓库每月最多 3 次，每次 1 分。PR 仅在白名单仓库计分：提交得 20 分，合并再加 30 分。Star 数按每日同步结果判断。LeaderBoard 开发者另有一次性 50 分开发贡献奖励。</p>
         </div>
       </section>
 

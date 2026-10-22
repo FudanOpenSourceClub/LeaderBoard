@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import { getContributionScores } from "../analytics/scoring.js";
 import { getDbPool } from "../db/index.js";
 import { collectPublicContributions, type PublicContributionExport } from "./export.js";
+import { refreshRepositoryStars } from "./repository-stars.js";
 
 export interface ContributorIdentity {
   githubId: string;
@@ -130,6 +131,7 @@ export async function enrollContributor(
     row.repositoryGithubId = repositoryIds.get(row.repository.toLowerCase())!;
   }
   await saveContributorActivity({ githubId: String(user.id), login: user.login, avatarUrl: user.avatar_url }, data, pool);
+  await refreshRepositoryStars(githubToken, pool, fetcher, String(user.id));
   return { login: user.login, events: data.rows.length };
 }
 

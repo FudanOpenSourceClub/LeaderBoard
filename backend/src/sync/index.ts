@@ -19,6 +19,7 @@ import { GitHubApiClient } from "../github/client.js";
 import { applyRepositoryScope, ingestActivities } from "../ingestion/index.js";
 import { RepositorySync } from "../repositories/sync.js";
 import { refreshEnrolledContributors } from "../public-contributions/enrollment.js";
+import { refreshRepositoryStars } from "../public-contributions/repository-stars.js";
 
 const SYNC_LOCK_KEY = 1279411268;
 
@@ -53,6 +54,7 @@ export interface SyncDependencies {
   applyScope: typeof applyRepositoryScope;
   ingest: typeof ingestActivities;
   refreshContributors?(): Promise<void>;
+  refreshStars?(): Promise<void>;
 }
 
 function initialFrom(to: string, days: number): string {
@@ -150,6 +152,10 @@ export class SyncCoordinator {
         let contributorSyncFailed = false;
         try { await this.dependencies.refreshContributors?.(); }
         catch { contributorSyncFailed = true; }
+        // Personal repository snapshots must refresh even if organization discovery fails.
+        let starSyncFailed = false;
+        try { await this.dependencies.refreshStars?.(); }
+        catch { starSyncFailed = true; }
         const oldTracked = await this.pool.query<{ github_id: string }>(
           "SELECT github_id::text AS github_id FROM repositories WHERE tracked = TRUE",
         );
@@ -186,11 +192,14 @@ export class SyncCoordinator {
           }
         }
 
-        const status: SyncRunStatus = repositoriesFailed === 0 && !contributorSyncFailed
+        // Newly ingested repositories may not have existed in the first snapshot pass.
+        try { await this.dependencies.refreshStars?.(); }
+        catch { starSyncFailed = true; }
+        const status: SyncRunStatus = repositoriesFailed === 0 && !contributorSyncFailed && !starSyncFailed
           ? "success"
           : repositoriesOk === 0 ? "failed" : "partial";
         return await finish(status, repositoriesOk, repositoriesFailed,
-          contributorSyncFailed ? "ContributorSynchronizationError" : null);
+          contributorSyncFailed ? "ContributorSynchronizationError" : starSyncFailed ? "RepositoryStarSynchronizationError" : null);
       } catch (error) {
         return await finish("failed", 0, 0, safeErrorName(error));
       }
@@ -241,6 +250,7 @@ export function createDefaultSyncCoordinator(config: SyncConfig): SyncCoordinato
     applyScope: applyRepositoryScope,
     ingest: ingestActivities,
     refreshContributors: () => refreshEnrolledContributors(loadConfig().githubToken),
+    refreshStars: async () => { await refreshRepositoryStars(loadConfig().githubToken); },
   });
 }
 

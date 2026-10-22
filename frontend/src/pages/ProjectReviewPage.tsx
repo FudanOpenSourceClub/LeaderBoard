@@ -2,6 +2,7 @@ import {useEffect,useState} from "react";
 import {Link} from "react-router";
 import {ApiErrorResponseSchema,ProjectProposalAdminResponseSchema,type ProjectProposalAdmin} from "@leadboard/contracts";
 import {useWebsiteSession} from "../auth/session";
+import { Button, Card, Textarea } from "../components/ui/primitives";
 
 function ReviewCard({item,csrfToken,onReviewed}:{item:ProjectProposalAdmin;csrfToken:string;onReviewed:()=>void}){
   const [description,setDescription]=useState("");const [reviewNotes,setReviewNotes]=useState("");
@@ -14,19 +15,19 @@ function ReviewCard({item,csrfToken,onReviewed}:{item:ProjectProposalAdmin;csrfT
       onReviewed();
     }catch(e){setError(e instanceof Error?e.message:"审核失败")}finally{setBusy(false)}
   }
-  return <article className="panel" style={{padding:24,marginBottom:18}}>
+  return <Card className="panel" style={{padding:24,marginBottom:18}}>
     <div className="panel-heading"><div><p>申请 #{item.id} · {new Date(item.createdAt).toLocaleString("zh-CN")}</p><h2>{item.labName}</h2></div><span className="tag">{{pending:"待审核",approved:"已通过",rejected:"已拒绝"}[item.status]}</span></div>
     <p>申请人 GitHub：{item.submitterLogin??"历史申请"}</p>
     <p><a href={item.projectUrl} target="_blank" rel="noreferrer">{item.projectUrl} ↗</a></p>
     <p style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{item.notes}</p>
     <p className="filter-caption">邮件通知：{item.notificationSent?"已发送":`尚未确认发送（${item.notificationAttempts} 次尝试）`}</p>
     {item.status==="pending"?<>
-      <label className="form-field"><span>公开简介（通过后展示在项目列表）</span><textarea value={description} onChange={e=>setDescription(e.target.value)} minLength={10} maxLength={500} placeholder="填写项目用途和特点；申请中的原始说明不会自动公开。" /></label>
-      <label className="form-field"><span>审核备注</span><textarea value={reviewNotes} onChange={e=>setReviewNotes(e.target.value)} maxLength={1000} /></label>
+      <label className="form-field"><span>公开简介（通过后展示在项目列表）</span><Textarea value={description} onChange={e=>setDescription(e.target.value)} minLength={10} maxLength={500} placeholder="填写项目用途和特点；申请中的原始说明不会自动公开。" /></label>
+      <label className="form-field"><span>审核备注</span><Textarea value={reviewNotes} onChange={e=>setReviewNotes(e.target.value)} maxLength={1000} /></label>
       <div className="profile-actions"><button className="primary-button" type="button" disabled={busy} onClick={()=>void review("approve")}>通过并加入项目列表</button><button className="toolbar-button" type="button" disabled={busy} onClick={()=>void review("reject")}>拒绝申请</button></div>
     </>:<p>审核备注：{item.reviewNotes||"无"} · {item.reviewedAt?new Date(item.reviewedAt).toLocaleString("zh-CN"):""}</p>}
     {error&&<p role="alert" className="verify-notice verify-notice-error">{error}</p>}
-  </article>;
+  </Card>;
 }
 export function ProjectReviewPage(){
   const {session,loading}=useWebsiteSession();const [items,setItems]=useState<ProjectProposalAdmin[]>([]);const [error,setError]=useState("");const [version,setVersion]=useState(0);

@@ -85,7 +85,7 @@ function messageFor(code: string): string {
     case "VERIFICATION_ATTEMPTS_EXCEEDED":
       return "验证码尝试次数过多，请重新获取。";
     case "EMAIL_AUTH_NOT_CONFIGURED":
-      return "邮件服务尚未配置。验证系统已经就绪，配置发信邮箱后即可使用。";
+      return "邮件服务暂不可用，请稍后再试。";
     case "EMAIL_DELIVERY_FAILED":
       return "验证码邮件暂时无法发送，请稍后再试。";
     case "NETWORK_ERROR":

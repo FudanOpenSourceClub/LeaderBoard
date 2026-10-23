@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, LoadingState } from "../components/AsyncStates"
 import { useLocalFavorites } from "../lib/favorites";
 import { useFilters } from "../state/filters";
 import { Badge, Button, Card, Input } from "../components/ui/primitives";
+import { AppIcon } from "../components/AppIcon";
 
 type State =
   | { status: "loading" }
@@ -84,7 +85,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
         <div>
           <h1>开源达人榜</h1>
         </div>
- 
+        <Link to="/join" className="button primary-button"><AppIcon name="plus" size={16}/>加入达人榜</Link>
       </section>
 
       <section className="filter-card leaderboard-filters" aria-label="积分规则">
@@ -129,7 +130,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
           aria-pressed={favoritesOnly}
           onClick={() => setFavoritesOnly((value) => !value)}
         >
-          {favoritesOnly ? "★ 只看收藏" : "☆ 只看收藏"}
+          <AppIcon name="star" size={16}/>{favoritesOnly ? "已收藏" : "收藏"}
         </button>
 
       </section>
@@ -139,7 +140,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
         {state.status === "error" && <ErrorState message={state.message} onRetry={() => setRetry((value) => value + 1)} />}
         {state.status === "ready" && state.leaderboard.items.length === 0 && <EmptyState label="当前筛选下没有贡献者活动" />}
         {state.status === "ready" && state.leaderboard.items.length > 0 && visibleItems.length === 0 && (
-          <div className="empty-filter-state">没有匹配的贡献者。换个用户名，或者关闭“只看收藏”。</div>
+          <div className="empty-filter-state">没有匹配的达人。<button className="text-button" type="button" onClick={() => { setQuery(""); setFavoritesOnly(false); }}>清除筛选</button></div>
         )}
         {state.status === "ready" && state.leaderboard.items.length > 0 && (
           <>
@@ -155,9 +156,9 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
                     <Link className="ranking-person" to={`/contributors/${encodeURIComponent(item.login)}`}>
                       <strong>{item.login}</strong>
                       <span className="tag-row">
-                        <Badge className="tag tag-purple">{item.commits} Commit</Badge>
-                        <Badge className="tag tag-blue">{item.prs} PR</Badge>
-                        <Badge className="tag tag-gold">{item.issues} Issue</Badge>
+                        {item.commits > 0 && <Badge className="tag tag-purple">{item.commits} Commit</Badge>}
+                        {item.prs > 0 && <Badge className="tag tag-blue">{item.prs} PR</Badge>}
+                        {item.issues > 0 && <Badge className="tag tag-gold">{item.issues} Issue</Badge>}
                       </span>
                     </Link>
                     <span className="ranking-metrics">
@@ -174,7 +175,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
                       onClick={() => favorites.toggle(item.login)}
                       title="收藏只保存在当前浏览器"
                     >
-                      {favorites.isFavorite(item.login) ? "★" : "☆"}
+                      <AppIcon name="star" size={18}/>
                     </button>
                     <Link className="row-arrow" to={`/contributors/${encodeURIComponent(item.login)}`} aria-label={`查看 ${item.login} 详情`}>→</Link>
                   </div>
@@ -182,7 +183,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
               </div>
               <div className="ranking-more">
                 {moreError && <p role="alert">{moreError}</p>}
-                <Button className="toolbar-button" variant="outline" type="button" disabled={loadingMore || !hasMore} onClick={() => void showMore()}>{loadingMore ? "正在加载…" : hasMore ? "显示更多" : "已显示全部达人"}<span aria-hidden="true">{hasMore ? "↓" : "✓"}</span></Button>
+                {hasMore && <Button className="toolbar-button" variant="outline" type="button" disabled={loadingMore} onClick={() => void showMore()}>{loadingMore ? "正在加载…" : "显示更多"}<span aria-hidden="true">↓</span></Button>}
               </div>
             </Card>
           </>

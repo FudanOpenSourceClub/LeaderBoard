@@ -1,7 +1,7 @@
 import type {
   ButtonHTMLAttributes,
   HTMLAttributes,
-  InputHTMLAttributes,
+  ComponentProps,
   TextareaHTMLAttributes,
 } from "react";
 
@@ -39,7 +39,7 @@ export function Badge({ className = "", variant = "secondary", ...props }: HTMLA
   return <span data-slot="badge" data-variant={variant} className={`ui-badge ${className}`.trim()} {...props} />;
 }
 
-export function Input({ className = "", type = "text", ...props }: InputHTMLAttributes<HTMLInputElement>) {
+export function Input({ className = "", type = "text", ...props }: ComponentProps<"input">) {
   return <input data-slot="input" className={`ui-input ${className}`.trim()} type={type} {...props} />;
 }
 

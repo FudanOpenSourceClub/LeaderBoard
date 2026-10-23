@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ApiErrorResponseSchema,
   CampusProjectsResponseSchema,
   type CampusProject,
   ProjectProposalResponseSchema,
 } from "@leadboard/contracts";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { useWebsiteSession } from "../auth/session";
 import { useLocalFavorites } from "../lib/favorites";
-import { Badge, Button, Card, Input, Textarea } from "../components/ui/primitives";
+import { Button, Card, Input, Textarea } from "../components/ui/primitives";
+import { AppIcon } from "../components/AppIcon";
 
 type SubmitState =
   | { status: "idle" }
@@ -17,6 +18,8 @@ type SubmitState =
   | { status: "error"; message: string };
 
 export function ProjectBoardPage() {
+  const [searchParams] = useSearchParams();
+  const searchInput = useRef<HTMLInputElement>(null);
   const {session,loading:sessionLoading}=useWebsiteSession();
   const [campusProjects,setProjects]=useState<CampusProject[]>([]);
   const [catalogLoading,setCatalogLoading]=useState(true);
@@ -33,6 +36,10 @@ export function ProjectBoardPage() {
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [submit, setSubmit] = useState<SubmitState>({ status: "idle" });
   const favorites = useLocalFavorites("projects");
+
+  useEffect(() => {
+    if (searchParams.get("search") === "1") searchInput.current?.focus();
+  }, [searchParams]);
 
   const availableTags = useMemo(
     () => [...new Set(campusProjects.flatMap((project) => [...project.tags]))].sort(),
@@ -97,10 +104,11 @@ export function ProjectBoardPage() {
       <section className="toolbar-card" aria-label="项目筛选">
         <label className="search-box" aria-label="搜索项目">
           <Input
+            ref={searchInput}
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索项目、实验室或技术方向"
+            placeholder="搜索项目"
           />
         </label>
         <select className="toolbar-select" value={tag} onChange={(event) => setTag(event.target.value)} aria-label="按标签筛选">
@@ -113,12 +121,12 @@ export function ProjectBoardPage() {
           aria-pressed={favoritesOnly}
           onClick={() => setFavoritesOnly((value) => !value)}
         >
-          {favoritesOnly ? "★ 只看收藏" : "☆ 只看收藏"}
+          <AppIcon name="star" size={16}/>{favoritesOnly ? "已收藏" : "收藏"}
         </button>
       </section>
 
       <section className="dashboard-content">
-        <div className="project-list-count"><Badge className="count-pill">{campusProjects.length} 个项目</Badge></div>
+        <div className="project-list-count"><span>{visibleProjects.length} 个项目</span></div>
 
         {catalogError&&<p role="alert" className="verify-notice verify-notice-error">{catalogError}</p>}
         {(query || tag || favoritesOnly) && (
@@ -128,14 +136,15 @@ export function ProjectBoardPage() {
         )}
 
         {catalogLoading ? <p role="status">正在加载项目…</p> : visibleProjects.length === 0 ? (
-          <div className="empty-filter-state">没有匹配的项目。换个关键词，或者清除筛选再看看。</div>
+          <div className="empty-filter-state">没有匹配的项目。</div>
         ) : (
           <div className="project-grid">
             {visibleProjects.map((project) => (
               <Card className="project-card" key={project.repo}>
                 <div className="project-card-head">
                   <div>
-                    <h2><a href={project.url} target="_blank" rel="noreferrer">{project.name} ↗</a></h2>
+                    <span className="project-repo-icon"><AppIcon name="repo" size={19}/></span>
+                    <h2><a href={project.url} target="_blank" rel="noreferrer">{project.name}<AppIcon name="external" size={13}/></a></h2>
                   </div>
                   <div className="project-card-actions">
                     <button
@@ -146,7 +155,7 @@ export function ProjectBoardPage() {
                       onClick={() => favorites.toggle(project.repo)}
                       title="收藏只保存在当前浏览器"
                     >
-                      {favorites.isFavorite(project.repo) ? "★" : "☆"}
+                      <AppIcon name="star" size={18}/>
                     </button>
  
                   </div>
@@ -163,16 +172,13 @@ export function ProjectBoardPage() {
         )}
 
         <section className="project-invite-card">
-          <div className="project-invite-copy">
-            <h2>提交复旦开源项目</h2>
-          </div>
           <Button className="button button-primary" type="button" disabled={sessionLoading} onClick={() => {
             if(!session.authenticated||!session.registered){setRegisterNotice(true);setShowForm(false);return;}
             setRegisterNotice(false);
             setShowForm((value) => !value);
             if (submit.status === "success") setSubmit({ status: "idle" });
           }}>
-            {showForm ? "先收起来" : "加上我的项目"}
+            <AppIcon name="plus" size={16}/>{showForm ? "收起表单" : "加上我的项目"}
           </Button>
         </section>
 

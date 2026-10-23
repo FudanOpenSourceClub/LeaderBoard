@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, NavLink, Route, Routes, useLocation } from "react-router";
 import type { LeadBoardApiClient } from "./api/client";
 import { ContributorDetailPage } from "./pages/ContributorDetailPage";
@@ -8,7 +9,6 @@ import { ProjectReviewPage } from "./pages/ProjectReviewPage";
 import { IdentityVerificationPage } from "./pages/IdentityVerificationPage";
 import { HomePage } from "./pages/HomePage";
 import { AppIcon } from "./components/AppIcon";
-import "./enhancements.css";
 
 
 function navClass({ isActive }: { isActive: boolean }) {
@@ -22,23 +22,25 @@ export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient;
 function AppContent({ api }: { api: LeadBoardApiClient }) {
   const { session } = useWebsiteSession();
   const location = useLocation();
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, [location.pathname]);
   const accountUrl = session.authenticated && session.login
     ? `/contributors/${encodeURIComponent(session.login)}`
     : "/join";
   const loginUrl = "/api/v1/auth/github/login?returnTo=/projects";
+  const isHome = location.pathname === "/" || location.pathname === "/dashboard";
 
   return (
-    <div className="app-shell dark-shell">
+    <div className={`app-shell dark-shell${isHome ? " home-shell" : ""}`}>
+      <a className="skip-link" href="#main-content">跳至内容</a>
       <header className="topbar">
         <a className="brand" href="https://github.com/swiftgorge5-eng/LeaderBoard" target="_blank" rel="noreferrer" aria-label="LeaderBoard GitHub 仓库">
-          <span className="brand-mark" aria-hidden="true">L</span>
+          <span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 5v14h14M11 5v8h8" stroke="currentColor" strokeWidth="3" strokeLinecap="square"/></svg></span>
           <span className="brand-copy"><strong>LeaderBoard</strong></span>
         </a>
         <nav className="topnav" aria-label="主导航">
           <NavLink className={navClass} to="/" end>首页</NavLink>
           <NavLink className={navClass} to="/projects">项目</NavLink>
           <NavLink className={navClass} to="/contributors">达人榜</NavLink>
-          <NavLink className={navClass} to="/join">加入</NavLink>
           {session.authenticated ? <Link className="header-account" to={accountUrl}><AppIcon name="user" size={16}/>{session.login || "我的"}</Link> : <a className="header-login" href={loginUrl}><AppIcon name="github" size={17}/> GitHub 登录</a>}
           {session.authenticated && session.isAdmin && <NavLink className={navClass} to="/admin">管理</NavLink>}
         </nav>
@@ -48,14 +50,14 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
               ? <img src={`https://github.com/${encodeURIComponent(session.login)}.png?size=80`} alt="" />
               : <AppIcon name="user" size={20}/>}
           </Link>
-          <Link className="mobile-round-link" to="/projects" aria-label="搜索项目"><AppIcon name="search" size={21}/></Link>
+          <Link className="mobile-home-brand" to="/">LeaderBoard</Link>
           <Link className="mobile-round-link" to="/join" aria-label="加入达人榜"><AppIcon name="plus" size={21}/></Link>
+          <Link className="mobile-round-link" to="/projects?search=1" aria-label="搜索项目"><AppIcon name="search" size={21}/></Link>
         </div>
       </header>
 
       <div className="workspace">
         <aside className="sidebar" aria-label="侧边导航">
-          <div className="sidebar-intro"><strong>探索</strong></div>
           <nav className="side-section" aria-label="功能导航">
             <NavLink className={navClass} to="/" end><span className="side-nav-icon"><AppIcon name="home"/></span><span className="side-nav-copy"><strong>首页</strong></span></NavLink>
             <NavLink className={navClass} to="/projects"><span className="side-nav-icon"><AppIcon name="grid"/></span><span className="side-nav-copy"><strong>复旦开源项目</strong></span></NavLink>
@@ -66,10 +68,10 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
           </nav>
         </aside>
 
-        <main className="content-shell" id="main-content">
+        <main className="content-shell" id="main-content" tabIndex={-1}>
           <Routes>
-            <Route path="/" element={<HomePage accountUrl={accountUrl} authenticated={session.authenticated} />} />
-            <Route path="/dashboard" element={<HomePage accountUrl={accountUrl} authenticated={session.authenticated} />} />
+            <Route path="/" element={<HomePage api={api} accountUrl={accountUrl} authenticated={session.authenticated} />} />
+            <Route path="/dashboard" element={<HomePage api={api} accountUrl={accountUrl} authenticated={session.authenticated} />} />
             <Route path="/projects" element={<ProjectBoardPage />} />
             <Route path="/contributors" element={<ContributorLeaderboardPage api={api} />} />
             <Route path="/contributors/:username" element={<ContributorDetailPage api={api} />} />

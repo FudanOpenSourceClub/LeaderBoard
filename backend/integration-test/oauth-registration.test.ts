@@ -25,7 +25,7 @@ async function authorize(auth:WebsiteAuthService) {
 describe("OAuth-first campus registration and expandable ranking", () => {
   it("authenticates a stable ID before campus registration, binds the browser nonce, and rejects replay", async () => {
     oauthIdentity();
-    const auth = new WebsiteAuthService(config,"");
+    const auth = new WebsiteAuthService(config);
     const started = await auth.startLogin("/join","register");
     const state = new URL(started.authorizeUrl).searchParams.get("state")!;
     expect(state).toMatch(/^register\./);
@@ -40,7 +40,7 @@ describe("OAuth-first campus registration and expandable ranking", () => {
 
   it("uses the OAuth ID, rejects account switching, completes enrollment, and blocks duplicate registration after a rename", async () => {
     oauthIdentity();
-    const website = new WebsiteAuthService(config,"");
+    const website = new WebsiteAuthService(config);
     const proof = await authorize(website);
     const identity = (await website.getRegistrationIdentity(proof.sessionToken))!;
     const sender = {sendVerificationCode:vi.fn().mockResolvedValue(undefined)};

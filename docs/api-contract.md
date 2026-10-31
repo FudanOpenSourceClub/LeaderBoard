@@ -784,3 +784,15 @@ Contributor rank/detail 新增可选 `bonusScore`：独立开发奖励，包含�
 - 回调从 GitHub `/user` 获取稳定账号 ID 与当前 login，签发 30 分钟的注册用会话；尚未完成校园绑定的账号不能调用需要注册身份的接口。
 - `GET /auth/github/registration`：不缓存，仅返回 `{verified:false}` 或 `{verified:true,githubId,login}`。不返回学号、姓名、邮箱、指纹或 OAuth token。
 - 邮箱验证码成功后，使用该服务器已验证身份写入成员绑定和贡献者记录，确认提交成功，签发正式 30 天网站会话。旧的邮箱先行 OAuth 回调与继续认证接口保持可用。
+
+
+## Website administration (database roles)
+OAuth sessions resolve `role: owner | admin | null` on every request. `isAdmin` is derived from that role; the browser cannot assign it. All admin responses are `Cache-Control: no-store`; all writes require the session's `X-CSRF-Token`.
+- GET /api/v1/admin/roles → AdminRolesResponse (owner only).
+- POST /api/v1/admin/roles {githubLogin,role: owner|admin|null,reason} → AdminRolesResponse (owner only). GitHub resolves the login to a stable ID. null revokes. Last owner cannot be removed; authorization changes are serialized and audited.
+- GET /api/v1/admin/contributors?query=<login> → AdminContributorsResponse (admin or owner, bounded to 20).
+- GET /api/v1/admin/score-adjustments?githubId=<optional ID> → ScoreAdjustmentsResponse (latest 200).
+- POST /api/v1/admin/score-adjustments {githubId,delta,reason,requestId:UUID} → ScoreAdjustment (admin or owner). Signed nonzero integer ±100000. Retries with the same key return the original; changed payload conflicts. Target is an existing human contributor, never a supplied member ID.
+- POST /api/v1/admin/score-adjustments/:id/reverse {reason,requestId} → ScoreAdjustment. Adds one compensating entry; never erases history.
+- GET /api/v1/admin/audit → AdminAuditResponse (latest 200).
+`adjustmentScore` is signed. Overall score = contribution score + existing awards + manual adjustments. Manual changes apply to overall rankings and contributor detail, within [from,to) by server commit time; group/repository statistics and GitHub facts are unchanged. Negative overall scores are supported. /admin now exposes project review, score ledger and owner-only role management.

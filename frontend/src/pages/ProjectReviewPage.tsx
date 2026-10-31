@@ -1,3 +1,4 @@
+import {WebsiteAdminPanels} from "./WebsiteAdminPanels";
 import {useEffect,useState} from "react";
 import {Link} from "react-router";
 import {ApiErrorResponseSchema,ProjectProposalAdminResponseSchema,type ProjectProposalAdmin} from "@leadboard/contracts";
@@ -34,8 +35,9 @@ export function ProjectReviewPage(){
   useEffect(()=>{if(!session.authenticated||!session.isAdmin)return;let active=true;
     void fetch("/api/v1/admin/project-proposals",{cache:"no-store"}).then(async r=>{const p=await r.json();if(!r.ok)throw new Error("无法读取申请，请重新登录管理员账号");return ProjectProposalAdminResponseSchema.parse(p)})
       .then(p=>{if(active){setItems(p.items);setError("")}}).catch(e=>{if(active)setError(e.message)});return()=>{active=false};},[session,version]);
-  return <div className="page-canvas"><section className="page-hero compact-hero"><div><h1>仓库申请审核</h1></div></section>
+  return <div className="page-canvas"><section className="page-hero compact-hero"><div><h1>管理后台</h1></div></section>
     {loading?<p role="status">正在确认管理权限…</p>:!session.authenticated?<section className="panel" style={{padding:24}}><h2>请使用管理员 GitHub 账号登录</h2><a className="primary-button" href="/api/v1/auth/github/login?returnTo=/admin">使用 GitHub 登录后台</a></section>:!session.isAdmin?<p role="alert">当前账号没有管理权限。</p>:<section className="dashboard-content">
+      <WebsiteAdminPanels csrfToken={session.csrfToken} isOwner={session.role==="owner"}/><h2>仓库申请审核</h2>
       <p>当前管理员：{session.login} · {items.length} 条申请 · <Link to="/projects">查看项目列表</Link></p>
       <Button className="toolbar-button" variant="outline" onClick={()=>setVersion(v=>v+1)} type="button">刷新申请</Button>
       {error&&<p role="alert">{error}</p>}{!error&&items.length===0&&<p>暂无申请。</p>}

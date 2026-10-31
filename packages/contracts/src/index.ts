@@ -126,7 +126,7 @@ export type GroupSummary = z.infer<typeof GroupSummarySchema>;
 
 const activityCounts = { commits: count, prs: count, issues: count, total: count };
 const scoringCounts = {
-  score: count.optional(), commitIssueScore: count.optional(), prOpenedScore: count.optional(),
+  score: z.number().int().safe().optional(), adjustmentScore: z.number().int().safe().optional(), commitIssueScore: count.optional(), prOpenedScore: count.optional(),
   prMergedScore: count.optional(), mergedPrs: count.optional(),
 };
 
@@ -234,7 +234,7 @@ export type EmailCodeVerifyResponse = z.infer<typeof EmailCodeVerifyResponseSche
 
 export const WebsiteSessionSchema = z.discriminatedUnion("authenticated", [
   z.object({authenticated:z.literal(false)}),
-  z.object({authenticated:z.literal(true),login:text,registered:z.boolean(),isAdmin:z.boolean(),csrfToken:text}),
+  z.object({authenticated:z.literal(true),login:text,registered:z.boolean(),isAdmin:z.boolean(),role:z.enum(["owner","admin"]).nullable().default(null),csrfToken:text}),
 ]);
 export type WebsiteSession = z.infer<typeof WebsiteSessionSchema>;
 export const CampusProjectSchema = z.object({
@@ -273,3 +273,37 @@ export const SyncConfigSchema = AppConfigSchema.pick({
   initialSyncDays: true, syncOverlapMinutes: true, dataStaleAfterHours: true,
 });
 export type SyncConfig = z.infer<typeof SyncConfigSchema>;
+
+
+// Website permissions are persisted against stable OAuth-verified GitHub IDs.
+export const WebsiteRoleSchema = z.enum(["owner", "admin"]);
+export type WebsiteRole = z.infer<typeof WebsiteRoleSchema>;
+const adminReason = z.string().trim().min(5).max(1000);
+export const AdminRoleRequestSchema = z.object({
+  githubLogin: z.string().trim().regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/),
+  role: WebsiteRoleSchema.nullable(), reason: adminReason,
+}).strict();
+export type AdminRoleRequest = z.infer<typeof AdminRoleRequestSchema>;
+export const AdminRoleEntrySchema = z.object({
+  githubId, login:text, role:WebsiteRoleSchema, grantedBy:githubId, grantedAt:utc,
+  revokedAt:utc.nullable(), reason:text,
+});
+export const AdminRolesResponseSchema=z.object({items:z.array(AdminRoleEntrySchema)});
+export type AdminRoleEntry=z.infer<typeof AdminRoleEntrySchema>;
+export const ScoreAdjustmentRequestSchema=z.object({
+  githubId, delta:z.number().int().min(-100000).max(100000).refine(v=>v!==0),
+  reason:adminReason, requestId:z.uuid(),
+}).strict();
+export type ScoreAdjustmentRequest=z.infer<typeof ScoreAdjustmentRequestSchema>;
+export const ScoreAdjustmentSchema=z.object({
+  id:githubId, githubId, login:text, delta:z.number().int().safe(), reason:text,
+  actorLogin:text, createdAt:utc, requestId:z.uuid(), reversesId:githubId.nullable(),
+  reversed:z.boolean(),
+});
+export type ScoreAdjustment=z.infer<typeof ScoreAdjustmentSchema>;
+export const ScoreAdjustmentsResponseSchema=z.object({items:z.array(ScoreAdjustmentSchema)});
+export const ReverseAdjustmentRequestSchema=z.object({reason:adminReason,requestId:z.uuid()}).strict();
+export const AdminContributorsResponseSchema=z.object({items:z.array(z.object({githubId,login:text}))});
+export const AdminAuditResponseSchema=z.object({items:z.array(z.object({
+  id:githubId,actorLogin:text,targetLogin:text,action:text,reason:text,createdAt:utc,
+}))});

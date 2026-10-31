@@ -98,7 +98,7 @@ export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
               <article className="metric-card metric-mint"><span>积分</span><strong>{state.detail.score ?? 0}</strong></article>
             </div>
 
-            <details className="score-breakdown"><summary>积分明细</summary><p className="filter-caption">Commit / Issue：{state.detail.commitIssueScore ?? 0} · PR：{state.detail.prOpenedScore ?? 0} · 合并 PR：{state.detail.prMergedScore ?? 0} · 开发奖励：{state.detail.bonusScore ?? 0}</p></details>
+            <details className="score-breakdown"><summary>积分明细</summary><p className="filter-caption">Commit / Issue：{state.detail.commitIssueScore ?? 0} · PR：{state.detail.prOpenedScore ?? 0} · 合并 PR：{state.detail.prMergedScore ?? 0} · 开发奖励：{state.detail.bonusScore ?? 0} · 人工调整：{state.detail.adjustmentScore ?? 0}</p></details>
             <section className="panel repository-panel">
               <div className="panel-heading">
                 <div><h2>仓库贡献</h2></div>

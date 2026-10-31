@@ -45,6 +45,9 @@ import { getContributorActivityExport } from "../public-contributions/enrollment
 import { ProjectError, ProjectProposalService, type ProjectProposalApi } from "../projects/proposals.js";
 import { getSyncStatus as defaultGetSyncStatus, SyncAlreadyRunningError } from "../sync/index.js";
 
+import { AdminError } from "../auth/roles.js";
+import { createWebsiteAdminRouter, type WebsiteAdminDependencies } from "./admin.js";
+
 interface AnalyticsApi {
   getGroups(): Promise<GroupSummary[]>;
   getOrganizationActivitySummary(range: TimeRange): Promise<OrganizationActivitySummary>;
@@ -54,6 +57,7 @@ interface AnalyticsApi {
 }
 
 export interface ApiDependencies {
+  websiteAdmin: Partial<WebsiteAdminDependencies>;
   analytics: AnalyticsApi;
   getSyncStatus(): Promise<SyncStatus>;
   emailVerification: EmailVerificationApi;
@@ -134,7 +138,7 @@ function parseGroup(value: unknown, res: Response): string | undefined | null {
 }
 
 function handleServiceError(error: unknown, res: Response): boolean {
-  if (error instanceof EmailAuthError || error instanceof GitHubLinkError || error instanceof WebsiteAuthError || error instanceof ProjectError) {
+  if (error instanceof AdminError || error instanceof EmailAuthError || error instanceof GitHubLinkError || error instanceof WebsiteAuthError || error instanceof ProjectError) {
     sendError(res, error.status, error.code, error.message);
     return true;
   }
@@ -184,7 +188,7 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
       let token=cookie(req,"leaderboard_session");
       if(!token){const issued=await websiteAuth.fromRegistration(registrationCookie(req.headers.cookie));if(issued){token=issued;sessionCookie(res,token)}}
       const user=await websiteAuth.getSession(token);
-      res.json(WebsiteSessionSchema.parse(user?{authenticated:true,login:user.login,registered:!!user.memberId,isAdmin:user.isAdmin,csrfToken:user.csrfToken}:{authenticated:false}));
+      res.json(WebsiteSessionSchema.parse(user?{authenticated:true,login:user.login,registered:!!user.memberId,isAdmin:user.isAdmin,role:user.role??null,csrfToken:user.csrfToken}:{authenticated:false}));
     }catch(error){if(!handleServiceError(error,res))next(error)}
   });
   router.get("/auth/github/login",async(req,res,next)=>{
@@ -352,6 +356,9 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
       await projectReview.review(id,parsed.data,user.githubId);res.json({reviewed:true});
     }catch(error){if(!handleServiceError(error,res))next(error)}
   });
+
+  router.use("/admin",createWebsiteAdminRouter(req=>requireUser(req,true),dependencies.websiteAdmin));
+  router.use(((error, _req, res, next)=>{if(!handleServiceError(error,res))next(error)}) as import("express").ErrorRequestHandler);
 
   router.get("/organization/summary", async (req, res, next) => {
     const range = parseRange(req.query.range, res);

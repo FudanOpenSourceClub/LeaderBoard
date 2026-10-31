@@ -1,11 +1,13 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { getWebsiteRole } from "./roles.js";
+import type { WebsiteRole } from "@leadboard/contracts";
 import { getDbPool, withTransaction } from "../db/index.js";
 import { exchangeCode, fetchGitHubIdentity, type GitHubOAuthConfig, type GitHubIdentity } from "./github-link.js";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const random = () => randomBytes(32).toString("base64url");
 const validToken = (value: string) => /^[A-Za-z0-9_-]{43}$/.test(value);
-export interface WebsiteUser { githubId: string; login: string; memberId: string | null; isAdmin: boolean; csrfToken: string }
+export interface WebsiteUser { githubId: string; login: string; memberId: string | null; isAdmin: boolean; role?: WebsiteRole | null; csrfToken: string }
 export interface WebsiteAuthApi {
   getSession(token: string): Promise<WebsiteUser | null>;
   startLogin(returnPath: string, intent?: "register"): Promise<{authorizeUrl: string; browserToken: string}>;
@@ -22,10 +24,7 @@ export function csrfMatches(user: WebsiteUser, value: string | undefined): boole
   return a.length===b.length && timingSafeEqual(a,b);
 }
 export class WebsiteAuthService implements WebsiteAuthApi {
-  private readonly admins: Set<string>;
-  constructor(private readonly config?: GitHubOAuthConfig, adminIds = process.env.ADMIN_GITHUB_IDS ?? "333234233") {
-    this.admins = new Set(adminIds.split(",").map(v=>v.trim()).filter(v=>/^[1-9]\d*$/.test(v)));
-  }
+  constructor(private readonly config?: GitHubOAuthConfig) {}
   private async memberFor(githubId: string): Promise<string | null> {
     const result = await getDbPool().query<{id:string}>(
       `SELECT m.id::text FROM members m JOIN member_github_accounts a ON a.member_id=m.id
@@ -44,9 +43,9 @@ export class WebsiteAuthService implements WebsiteAuthApi {
     const result=await getDbPool().query<{github_id:string;login:string;csrf_token:string}>(
       `SELECT github_id::text,login,csrf_token FROM website_sessions WHERE token_hash=$1 AND expires_at>now()`,[hash(token)]);
     const row=result.rows[0]; if(!row)return null;
-    const memberId=await this.memberFor(row.github_id); const isAdmin=this.admins.has(row.github_id);
+    const memberId=await this.memberFor(row.github_id); const role=await getWebsiteRole(row.github_id); const isAdmin=role!==null;
     if (!memberId && !isAdmin) return null;
-    return {githubId:row.github_id,login:row.login,memberId,isAdmin,csrfToken:row.csrf_token};
+    return {githubId:row.github_id,login:row.login,memberId,isAdmin,role,csrfToken:row.csrf_token};
   }
   async getRegistrationIdentity(token: string): Promise<GitHubIdentity | null> {
     if (!validToken(token)) return null;
@@ -78,7 +77,7 @@ export class WebsiteAuthService implements WebsiteAuthApi {
     const identity=await fetchGitHubIdentity(await exchangeCode(this.config,code));
     const memberId=await this.memberFor(identity.githubId);
     const registering = state.startsWith("register.");
-    if(!registering && !memberId && !this.admins.has(identity.githubId))throw new WebsiteAuthError("REGISTRATION_REQUIRED",401,"请先注册 LeaderBoard");
+    if(!registering && !memberId && !(await getWebsiteRole(identity.githubId)))throw new WebsiteAuthError("REGISTRATION_REQUIRED",401,"请先注册 LeaderBoard");
     return {sessionToken:await this.issue(identity.githubId,identity.login,registering ? 30 : undefined),returnPath};
   }
   async fromRegistration(token: string): Promise<string | null> {

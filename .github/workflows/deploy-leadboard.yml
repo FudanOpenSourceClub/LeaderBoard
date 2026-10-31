@@ -9,6 +9,10 @@ on:
         type: choice
         options: [deploy, configure]
         default: deploy
+      sync_contributors:
+        description: "Refresh contributor enrollment and external Star snapshots during deployment"
+        type: boolean
+        default: true
   push:
     branches:
       - main
@@ -34,6 +38,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Build, migrate, and deploy LeadBoard
+        env:
+          SYNC_CONTRIBUTORS: ${{ github.event_name != 'workflow_dispatch' || inputs.sync_contributors }}
         shell: bash
         run: |
           set -euo pipefail
@@ -50,7 +56,7 @@ jobs:
           sha="${GITHUB_SHA:0:8}"
           release="/opt/leadboard/releases/${stamp}-${sha}"
           work="$(mktemp -d)"
-          trap 'rm -rf "$work"' EXIT
+          trap 'sudo rm -f "$release/.env"; rm -rf "$work"' EXIT
 
           echo "=== Download exact commit ==="
           archive="$work/source.tar.gz"
@@ -92,7 +98,12 @@ jobs:
           echo "=== Database migration ==="
           sudo install -o leadboard -g leadboard -m 600 /etc/leadboard/leadboard.env "$release/.env"
           sudo -u leadboard bash -c "cd '$release' && /usr/local/bin/leadboard-node --env-file=.env scripts/db-migrate.mjs"
-          sudo -u leadboard bash -c "cd '$release' && /usr/local/bin/leadboard-node --env-file=.env scripts/sync-contributors.mjs"
+          sudo -u leadboard bash -c "cd '$release' && /usr/local/bin/leadboard-node --env-file=.env scripts/db-verify.mjs"
+          if [ "$SYNC_CONTRIBUTORS" = "true" ]; then
+            sudo -u leadboard bash -c "cd '$release' && /usr/local/bin/leadboard-node --env-file=.env scripts/sync-contributors.mjs"
+          else
+            echo "Contributor refresh skipped by manual deployment input; existing snapshots retained."
+          fi
           sudo rm -f "$release/.env"
 
           echo "=== Switch systemd release ==="

@@ -1,0 +1,2 @@
+# Public GitHub OAuth client ID, not a client secret; historical false positive only.
+07b96c6f30a65dd6704fb64ee885e7f2527dcc4f:.github/workflows/deploy-leadboard.yml:generic-api-key:166

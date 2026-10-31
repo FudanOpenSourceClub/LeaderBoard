@@ -1,0 +1,984 @@
+diff --git a/.env.example b/.env.example
+index 29a410c..7f7ed9b 100644
+--- a/.env.example
++++ b/.env.example
+@@ -51,6 +51,6 @@ GITHUB_OAUTH_CLIENT_SECRET=
+ GITHUB_OAUTH_CALLBACK_URL=http://localhost:3000/api/v1/auth/github/callback
+ 
+ # Repository review: private administrator identity and notification destination.
+-ADMIN_GITHUB_IDS=333234233
++# Website roles are stored in PostgreSQL; initialize the first owner using scripts/website-roles.mjs.
+ PROJECT_REVIEW_EMAIL=swiftgorge5@gmail.com
+ SITE_URL=https://47.116.20.196
+diff --git a/.github/workflows/deploy-leadboard.yml b/.github/workflows/deploy-leadboard.yml
+index 1048b26..05e289f 100644
+--- a/.github/workflows/deploy-leadboard.yml
++++ b/.github/workflows/deploy-leadboard.yml
+@@ -54,7 +54,7 @@ jobs:
+ 
+           echo "=== Download exact commit ==="
+           archive="$work/source.tar.gz"
+-          curl -fL --retry 8 --retry-delay 3 --retry-all-errors --connect-timeout 15 --max-time 300             "https://codeload.github.com/swiftgorge5-eng/LeaderBoard/tar.gz/${GITHUB_SHA}"             -o "$archive"
++          curl -fL --retry 8 --retry-delay 3 --retry-all-errors --connect-timeout 15 --max-time 300             "https://codeload.github.com/${GITHUB_REPOSITORY}/tar.gz/${GITHUB_SHA}"             -o "$archive"
+           mkdir -p "$work/src"
+           tar -xzf "$archive" -C "$work/src" --strip-components=1
+           cd "$work/src"
+diff --git a/.github/workflows/website-roles.yml b/.github/workflows/website-roles.yml
+new file mode 100644
+index 0000000..908cc1d
+--- /dev/null
++++ b/.github/workflows/website-roles.yml
+@@ -0,0 +1,48 @@
++name: Website administrator roles
++on:
++  workflow_dispatch:
++    inputs:
++      users:
++        description: Comma-separated GitHub usernames
++        required: true
++        type: string
++      role:
++        description: Website role (not GitHub repository permission)
++        type: choice
++        options: [admin, owner, revoke]
++        default: admin
++      reason:
++        description: Audit reason (at least 5 characters)
++        required: true
++        type: string
++      bootstrap:
++        description: Initialize the acting account as first owner (empty database only)
++        type: boolean
++        default: false
++permissions:
++  contents: read
++concurrency:
++  group: website-admin-role-management
++  cancel-in-progress: false
++jobs:
++  roles:
++    if: github.ref == 'refs/heads/main'
++    runs-on: [self-hosted, linux, x64]
++    timeout-minutes: 5
++    steps:
++      - name: Update database roles in the active release
++        env:
++          ROLE_USERS: ${{ inputs.users }}
++          ROLE_VALUE: ${{ inputs.role }}
++          ROLE_REASON: ${{ inputs.reason }}
++          ROLE_BOOTSTRAP: ${{ inputs.bootstrap }}
++          ROLE_ACTOR_ID: ${{ github.actor_id }}
++          ROLE_ACTOR_LOGIN: ${{ github.actor }}
++        shell: bash
++        run: |
++          set -euo pipefail
++          release="$(systemctl show -p WorkingDirectory --value leadboard.service)"
++          test -f "$release/scripts/website-roles.mjs"
++          args=(--actor "$ROLE_ACTOR_ID" --actor-login "$ROLE_ACTOR_LOGIN" --users "$ROLE_USERS" --role "$ROLE_VALUE" --reason "$ROLE_REASON")
++          if [ "$ROLE_BOOTSTRAP" = "true" ]; then args+=(--bootstrap); fi
++          sudo /usr/local/bin/leadboard-node --env-file=/etc/leadboard/leadboard.env "$release/scripts/website-roles.mjs" "${args[@]}"
+diff --git a/backend/integration-test/oauth-registration.test.ts b/backend/integration-test/oauth-registration.test.ts
+index 8e88e63..420bf17 100644
+--- a/backend/integration-test/oauth-registration.test.ts
++++ b/backend/integration-test/oauth-registration.test.ts
+@@ -25,7 +25,7 @@ async function authorize(auth:WebsiteAuthService) {
+ describe("OAuth-first campus registration and expandable ranking", () => {
+   it("authenticates a stable ID before campus registration, binds the browser nonce, and rejects replay", async () => {
+     oauthIdentity();
+-    const auth = new WebsiteAuthService(config,"");
++    const auth = new WebsiteAuthService(config);
+     const started = await auth.startLogin("/join","register");
+     const state = new URL(started.authorizeUrl).searchParams.get("state")!;
+     expect(state).toMatch(/^register\./);
+@@ -40,7 +40,7 @@ describe("OAuth-first campus registration and expandable ranking", () => {
+ 
+   it("uses the OAuth ID, rejects account switching, completes enrollment, and blocks duplicate registration after a rename", async () => {
+     oauthIdentity();
+-    const website = new WebsiteAuthService(config,"");
++    const website = new WebsiteAuthService(config);
+     const proof = await authorize(website);
+     const identity = (await website.getRegistrationIdentity(proof.sessionToken))!;
+     const sender = {sendVerificationCode:vi.fn().mockResolvedValue(undefined)};
+diff --git a/backend/integration-test/project-review.test.ts b/backend/integration-test/project-review.test.ts
+index 9d39b7e..a80b10c 100644
+--- a/backend/integration-test/project-review.test.ts
++++ b/backend/integration-test/project-review.test.ts
+@@ -16,7 +16,8 @@ afterEach(()=>vi.unstubAllGlobals());afterAll(async()=>{await pool.end()});
+ function mockOAuth(){vi.stubGlobal('fetch',vi.fn(async(url:unknown)=>new Response(JSON.stringify(String(url).includes('access_token')?{access_token:'fixture'}:{id:identityId,login:identityId===333234233?'owner':'registered-user',avatar_url:null}),{status:200})))}
+ describe("website sessions and repository review",()=>{
+   it("requires the original browser nonce, denies unregistered identities, and recognizes admin by ID",async()=>{
+-    mockOAuth();const auth=new WebsiteAuthService(config,'333234233');
++    mockOAuth();const auth=new WebsiteAuthService(config);
++    await pool.query("INSERT INTO website_roles(github_id,login,role,granted_by,reason) VALUES (333234233,'owner','owner',333234233,'integration fixture') ON CONFLICT(github_id) DO UPDATE SET role='owner',revoked_at=NULL");
+     const started=await auth.startLogin('/projects');const state=new URL(started.authorizeUrl).searchParams.get('state')!;
+     await expect(auth.completeLogin('code',state,'x'.repeat(43))).rejects.toMatchObject({code:'INVALID_LOGIN'});
+     identityId=777001;const loggedIn=await auth.completeLogin('code',state,started.browserToken);
+diff --git a/backend/integration-test/website-admin.test.ts b/backend/integration-test/website-admin.test.ts
+new file mode 100644
+index 0000000..f5fc722
+--- /dev/null
++++ b/backend/integration-test/website-admin.test.ts
+@@ -0,0 +1,54 @@
++import {randomUUID,createHash} from "node:crypto";
++import {afterAll,beforeAll,describe,expect,it} from "vitest";
++import {getDbPool} from "../src/db/index.js";
++import {getWebsiteRole,setWebsiteRole} from "../src/auth/roles.js";
++import {WebsiteAuthService} from "../src/auth/website-session.js";
++import {ScoreAdjustmentService,getScoreAdjustments} from "../src/analytics/adjustments.js";
++import {AnalyticsService} from "../src/analytics/index.js";
++const pool=getDbPool();const owner='881001',admin='881002',target='881003',secondOwner='881004';const service=new ScoreAdjustmentService();
++const reason='测试管理员授权及调分记录';
++beforeAll(async()=>{
++  await pool.query("TRUNCATE website_roles,website_admin_audit,contributor_score_adjustments,contributors RESTART IDENTITY CASCADE");
++  await pool.query("INSERT INTO website_roles(github_id,login,role,granted_by,reason) VALUES ($1,'owner','owner',$1,$2)",[owner,reason]);
++  await pool.query("INSERT INTO contributors(github_id,login,is_bot,enrolled_at) VALUES ($1,'ledger-target',FALSE,now()),(881005,'bot',TRUE,now())",[target]);
++});
++afterAll(async()=>{await pool.end()});
++describe("persistent website roles and score ledger",()=>{
++  it("has no implicit default admin, reads database roles and revokes existing sessions",async()=>{
++    expect(await getWebsiteRole('333234233')).toBeNull();
++    await setWebsiteRole(owner,{githubId:admin,login:'reviewer'},'admin',reason);
++    const token='x'.repeat(43);await pool.query("INSERT INTO website_sessions(token_hash,github_id,login,csrf_token,expires_at) VALUES ($1,$2,'reviewer','csrf',now()+interval '1 hour')",[createHash('sha256').update(token).digest('hex'),admin]);
++    const auth=new WebsiteAuthService();expect(await auth.getSession(token)).toMatchObject({isAdmin:true,role:'admin',memberId:null});
++    await expect(setWebsiteRole(admin,{githubId:admin,login:'reviewer'},'owner',reason)).rejects.toMatchObject({status:403});
++    await setWebsiteRole(owner,{githubId:admin,login:'reviewer'},null,reason);expect(await auth.getSession(token)).toBeNull();
++    await expect(service.adjust(admin,{githubId:target,delta:1,reason,requestId:randomUUID()})).rejects.toMatchObject({status:403});
++    await setWebsiteRole(owner,{githubId:admin,login:'reviewer'},'admin',reason);
++  });
++  it("protects the last owner including concurrent demotions",async()=>{
++    await expect(setWebsiteRole(owner,{githubId:owner,login:'owner'},'admin',reason)).rejects.toMatchObject({code:'LAST_OWNER'});
++    await setWebsiteRole(owner,{githubId:secondOwner,login:'other-owner'},'owner',reason);
++    const results=await Promise.allSettled([setWebsiteRole(owner,{githubId:owner,login:'owner'},'admin',reason),setWebsiteRole(secondOwner,{githubId:secondOwner,login:'other-owner'},'admin',reason)]);
++    expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
++    expect(Number((await pool.query("SELECT count(*)::text FROM website_roles WHERE role='owner' AND revoked_at IS NULL")).rows[0].count)).toBe(1);
++  });
++  it("applies concurrent retries once, audits, ranks zero-activity contributors and preserves signed totals",async()=>{
++    const input={githubId:target,delta:-10,reason,requestId:randomUUID()};
++    const [a,b]=await Promise.all([service.adjust(admin,input),service.adjust(admin,input)]);expect(a.id).toBe(b.id);
++    await expect(service.adjust(admin,{...input,delta:20})).rejects.toMatchObject({code:'IDEMPOTENCY_CONFLICT'});
++    await expect(service.adjust(admin,{...input,githubId:'881005',requestId:randomUUID()})).rejects.toMatchObject({code:'CONTRIBUTOR_NOT_FOUND'});
++    const current=new AnalyticsService(pool,()=>new Date(Date.now()+2000));
++    const board=await current.getContributorLeaderboard({range:'all',metric:'score',limit:50});expect(board.find(r=>r.login==='ledger-target')).toMatchObject({score:-10,adjustmentScore:-10,commits:0,prs:0,issues:0});
++    expect(await current.getContributorDetail('ledger-target','all')).toMatchObject({score:-10,adjustmentScore:-10});
++    const audit=(await pool.query("SELECT * FROM website_admin_audit WHERE action='score.adjust'")).rows;expect(audit).toHaveLength(1);expect(audit[0].actor_github_id).toBe(admin);expect(audit[0].reason).toBe(reason);
++    const reverseKey=randomUUID();const undone=await service.reverse(admin,a.id,'撤销测试中错误扣除的积分',reverseKey);expect(undone.delta).toBe(10);expect(undone.reversesId).toBe(a.id);
++    expect((await service.reverse(admin,a.id,'撤销测试中错误扣除的积分',reverseKey)).id).toBe(undone.id);
++    await expect(service.reverse(admin,a.id,reason,randomUUID())).rejects.toMatchObject({code:'ALREADY_REVERSED'});
++    expect(await current.getContributorDetail('ledger-target','all')).toMatchObject({score:0,adjustmentScore:0});
++    expect((await service.list(target))).toHaveLength(2);
++    const id=(await pool.query('SELECT id::text FROM contributors WHERE github_id=$1',[target])).rows[0].id;
++    const at=(await pool.query('SELECT created_at FROM contributor_score_adjustments WHERE id=$1',[a.id])).rows[0].created_at as Date;
++    const until=await getScoreAdjustments(pool,null,at.toISOString());expect(until.has(id)).toBe(false);
++    const after=await getScoreAdjustments(pool,at.toISOString(),new Date(Date.now()+2000).toISOString());expect(after.get(id)).toBe(0);
++    expect((await pool.query('SELECT count(*)::text FROM commits')).rows[0].count).toBe('0');
++  });
++});
+diff --git a/backend/src/analytics/adjustments.ts b/backend/src/analytics/adjustments.ts
+new file mode 100644
+index 0000000..edff833
+--- /dev/null
++++ b/backend/src/analytics/adjustments.ts
+@@ -0,0 +1,72 @@
++import type { Pool, PoolClient } from "pg";
++import type { ScoreAdjustment, ScoreAdjustmentRequest } from "@leadboard/contracts";
++import { getDbPool, withTransaction } from "../db/index.js";
++import { AdminError, auditAdmin, lockAdmin } from "../auth/roles.js";
++
++const ledgerSql=`SELECT a.id::text,c.github_id::text,c.login,a.delta,a.reason,a.actor_login,a.created_at,
++  a.request_id::text,a.reverses_id::text,EXISTS(SELECT 1 FROM contributor_score_adjustments undo WHERE undo.reverses_id=a.id) AS reversed
++  FROM contributor_score_adjustments a JOIN contributors c ON c.id=a.contributor_id`;
++interface LedgerRow {id:string;github_id:string;login:string;delta:number;reason:string;actor_login:string;created_at:Date;request_id:string;reverses_id:string|null;reversed:boolean}
++function entry(r:LedgerRow):ScoreAdjustment {
++  return {id:r.id,githubId:r.github_id,login:r.login,delta:r.delta,reason:r.reason,actorLogin:r.actor_login,
++    createdAt:r.created_at.toISOString(),requestId:r.request_id,reversesId:r.reverses_id,reversed:r.reversed};
++}
++async function getEntry(client:PoolClient,requestId:string) {
++  const result=await client.query<LedgerRow>(ledgerSql+" WHERE a.request_id=$1",[requestId]);
++  return result.rows[0]?entry(result.rows[0]):null;
++}
++export async function getScoreAdjustments(pool:Pool,from:string|null,to:string):Promise<Map<string,number>> {
++  const result=await pool.query<{contributor_id:string;points:string}>(`SELECT a.contributor_id::text,sum(a.delta)::text AS points
++    FROM contributor_score_adjustments a JOIN contributors c ON c.id=a.contributor_id
++    WHERE c.is_bot=FALSE AND ($1::timestamptz IS NULL OR a.created_at >= $1) AND a.created_at < $2
++    GROUP BY a.contributor_id`,[from,to]);
++  return new Map(result.rows.map(r=>{const n=Number(r.points);if(!Number.isSafeInteger(n))throw new Error("Invalid adjustment total");return [r.contributor_id,n]}));
++}
++export class ScoreAdjustmentService {
++  async contributors(query:string) {
++    const result=await getDbPool().query<{github_id:string;login:string}>(`SELECT github_id::text,login FROM contributors
++      WHERE is_bot=FALSE AND github_id IS NOT NULL AND login IS NOT NULL AND strpos(lower(login),lower($1))>0
++      ORDER BY lower(login) LIMIT 20`,[query]);
++    return result.rows.map(r=>({githubId:r.github_id,login:r.login}));
++  }
++  async list(githubId?:string) {
++    const result=await getDbPool().query<LedgerRow>(ledgerSql+" WHERE ($1::bigint IS NULL OR c.github_id=$1) ORDER BY a.id DESC LIMIT 200",[githubId??null]);
++    return result.rows.map(entry);
++  }
++  async adjust(actorId:string,input:ScoreAdjustmentRequest) {
++    return withTransaction(async client=>{
++      const actor=await lockAdmin(client,actorId);
++      const existing=await getEntry(client,input.requestId);
++      if(existing) {
++        const actorResult=await client.query<{actor_github_id:string}>("SELECT actor_github_id::text FROM contributor_score_adjustments WHERE request_id=$1",[input.requestId]);
++        if(existing.githubId!==input.githubId || existing.delta!==input.delta || existing.reason!==input.reason || existing.reversesId!==null || actorResult.rows[0]!.actor_github_id!==actorId)
++          throw new AdminError("IDEMPOTENCY_CONFLICT",409,"重复请求与原记录不一致，请刷新后重试");
++        return existing;
++      }
++      const target=(await client.query<{id:string;login:string}>("SELECT id::text,login FROM contributors WHERE github_id=$1 AND is_bot=FALSE AND login IS NOT NULL",[input.githubId])).rows[0];
++      if(!target)throw new AdminError("CONTRIBUTOR_NOT_FOUND",404,"请先选择已有的贡献者");
++      await client.query(`INSERT INTO contributor_score_adjustments(contributor_id,delta,reason,actor_github_id,actor_login,request_id)
++        VALUES ($1,$2,$3,$4,$5,$6)`,[target.id,input.delta,input.reason,actorId,actor.login,input.requestId]);
++      await auditAdmin(client,{githubId:actorId,login:actor.login},{githubId:input.githubId,login:target.login},"score.adjust",input.reason,{delta:input.delta,requestId:input.requestId});
++      return (await getEntry(client,input.requestId))!;
++    });
++  }
++  async reverse(actorId:string,id:string,reason:string,requestId:string) {
++    return withTransaction(async client=>{
++      const actor=await lockAdmin(client,actorId);
++      const existing=await getEntry(client,requestId);
++      if(existing) {
++        const owner=(await client.query<{actor_github_id:string}>("SELECT actor_github_id::text FROM contributor_score_adjustments WHERE request_id=$1",[requestId])).rows[0]!;
++        if(existing.reversesId!==id || existing.reason!==reason || owner.actor_github_id!==actorId)throw new AdminError("IDEMPOTENCY_CONFLICT",409,"重复请求与原记录不一致");
++        return existing;
++      }
++      const original=(await client.query<LedgerRow>(ledgerSql+" WHERE a.id=$1",[id])).rows[0];
++      if(!original)throw new AdminError("ADJUSTMENT_NOT_FOUND",404,"调分记录不存在");
++      if(original.reversed || original.reverses_id)throw new AdminError("ALREADY_REVERSED",409,"该记录已撤销或本身为撤销记录");
++      await client.query(`INSERT INTO contributor_score_adjustments(contributor_id,delta,reason,actor_github_id,actor_login,request_id,reverses_id)
++        SELECT contributor_id,-delta,$2,$3,$4,$5,id FROM contributor_score_adjustments WHERE id=$1`,[id,reason,actorId,actor.login,requestId]);
++      await auditAdmin(client,{githubId:actorId,login:actor.login},{githubId:original.github_id,login:original.login},"score.reverse",reason,{reversesId:id,delta:-original.delta,requestId});
++      return (await getEntry(client,requestId))!;
++    });
++  }
++}
+diff --git a/backend/src/analytics/index.ts b/backend/src/analytics/index.ts
+index 5a369dc..bb026c2 100644
+--- a/backend/src/analytics/index.ts
++++ b/backend/src/analytics/index.ts
+@@ -14,6 +14,7 @@ import {
+ } from "@leadboard/contracts";
+ import type { Pool } from "pg";
+ import { getDbPool } from "../db/index.js";
++import { getScoreAdjustments } from "./adjustments.js";
+ import { getContributorAwards } from "./awards.js";
+ import { emptyScore, getContributionScores, type ScoreDecision } from "./scoring.js";
+ 
+@@ -184,8 +185,9 @@ export class AnalyticsService {
+     const bounds = rangeBounds(input.range, this.clock());
+     const scoring = await getContributionScores(this.pool, bounds.from, bounds.to);
+     const awards = input.group === undefined ? await getContributorAwards(this.pool, bounds.from, bounds.to) : new Map<string, number>();
++    const adjustments = input.group === undefined ? await getScoreAdjustments(this.pool,bounds.from,bounds.to) : new Map<string,number>();
+     const decisions = scoring.decisions.filter(d => input.group === undefined || d.group===input.group);
+-    const activeIds = [...new Set(decisions.filter(d=>d.points>0).map(d=>d.contributorId))];
++    const activeIds = [...new Set([...decisions.filter(d=>d.points>0).map(d=>d.contributorId),...adjustments.keys(),...awards.keys()])];
+     const result = await this.pool.query<{
+       id: string; login: string; avatar_url: string | null; commits: string; prs: string; issues: string; total: string;
+     }>(
+@@ -216,7 +218,8 @@ export class AnalyticsService {
+       total: safeNumber(row.total),
+       ...contributionScore,
+       bonusScore,
+-      score: contributionScore.score + bonusScore,
++      adjustmentScore:adjustments.get(row.id)??0,
++      score: contributionScore.score + bonusScore + (adjustments.get(row.id)??0),
+     };
+     });
+     rows.sort((a, b) => b[input.metric] - a[input.metric] || a.login.localeCompare(b.login));
+@@ -239,6 +242,7 @@ export class AnalyticsService {
+     const scoring = await getContributionScores(this.pool, bounds.from, bounds.to);
+     const personalScores = scoring.users.get(actor.id) ?? emptyScore();
+     const bonusScore = (await getContributorAwards(this.pool, bounds.from, bounds.to)).get(actor.id) ?? 0;
++    const adjustmentScore=(await getScoreAdjustments(this.pool,bounds.from,bounds.to)).get(actor.id)??0;
+     const result = await this.pool.query<{
+       github_id: string | null; full_name: string; group_name: string;
+       commits: string; prs: string; issues: string; total: string;
+@@ -272,7 +276,7 @@ export class AnalyticsService {
+           commits:0,prs:0,issues:0,total:0,...score});
+       }
+     }
+-    if (repositories.length === 0 && actor.enrolled_at === null && personalScores.score===0) return null;
++    if (repositories.length === 0 && actor.enrolled_at === null && personalScores.score===0 && bonusScore===0 && adjustmentScore===0) return null;
+     const commits = repositories.reduce((sum, row) => sum + row.commits, 0);
+     const prs = repositories.reduce((sum, row) => sum + row.prs, 0);
+     const issues = repositories.reduce((sum, row) => sum + row.issues, 0);
+@@ -288,7 +292,8 @@ export class AnalyticsService {
+       repositories,
+       ...personalScores,
+       bonusScore,
+-      score: personalScores.score + bonusScore,
++      adjustmentScore,
++      score: personalScores.score + bonusScore + adjustmentScore,
+     });
+   }
+ }
+diff --git a/backend/src/api/admin.ts b/backend/src/api/admin.ts
+new file mode 100644
+index 0000000..c5af3e7
+--- /dev/null
++++ b/backend/src/api/admin.ts
+@@ -0,0 +1,58 @@
++import { Router, type Request } from "express";
++import {
++  AdminRolesResponseSchema,AdminRoleRequestSchema,AdminAuditResponseSchema,AdminContributorsResponseSchema,
++  ScoreAdjustmentRequestSchema,ScoreAdjustmentSchema,ScoreAdjustmentsResponseSchema,ReverseAdjustmentRequestSchema,
++} from "@leadboard/contracts";
++import type { WebsiteUser } from "../auth/website-session.js";
++import { AdminError,listWebsiteRoles,setWebsiteRole,listAdminAudit } from "../auth/roles.js";
++import { ScoreAdjustmentService } from "../analytics/adjustments.js";
++
++export async function resolveGitHubLogin(login:string) {
++  const response=await fetch(`https://api.github.com/users/${encodeURIComponent(login)}`,{
++    headers:{Accept:"application/vnd.github+json",...(process.env.GITHUB_TOKEN?{Authorization:`Bearer ${process.env.GITHUB_TOKEN}`}:{})},signal:AbortSignal.timeout(15000),
++  });
++  if(!response.ok)throw new AdminError("GITHUB_LOOKUP_FAILED",response.status===404?404:503,response.status===404?"GitHub 用户不存在":"GitHub 暂时不可用，请稍后重试");
++  const body=await response.json() as {id?:unknown;login?:unknown;type?:unknown};
++  if(body.type!=="User"||typeof body.id!=="number"||!Number.isSafeInteger(body.id)||body.id<=0||typeof body.login!=="string")throw new AdminError("INVALID_GITHUB_USER",400,"只能向真实 GitHub 用户授权");
++  return {githubId:String(body.id),login:body.login};
++}
++export interface WebsiteAdminDependencies {
++  roles:typeof listWebsiteRoles;setRole:typeof setWebsiteRole;audit:typeof listAdminAudit;resolve:typeof resolveGitHubLogin;
++  scores:Pick<ScoreAdjustmentService,"list"|"contributors"|"adjust"|"reverse">;
++}
++export function createWebsiteAdminRouter(authorize:(req:Request)=>Promise<WebsiteUser>,deps:Partial<WebsiteAdminDependencies>={}) {
++  const router=Router();
++  const roles=deps.roles??listWebsiteRoles,setRole=deps.setRole??setWebsiteRole,audit=deps.audit??listAdminAudit,resolve=deps.resolve??resolveGitHubLogin;
++  const scores=deps.scores??new ScoreAdjustmentService();
++  router.use((_req,res,next)=>{res.setHeader("Cache-Control","no-store");next()});
++  const owner=async(req:Request)=>{const user=await authorize(req);if(user.role!=="owner")throw new AdminError("OWNER_REQUIRED",403,"仅站长可以管理授权");return user};
++  router.get("/roles",async(req,res,next)=>{try{await owner(req);res.json(AdminRolesResponseSchema.parse({items:await roles()}))}catch(e){next(e)}});
++  router.post("/roles",async(req,res,next)=>{try{
++    const user=await owner(req);const parsed=AdminRoleRequestSchema.safeParse(req.body);
++    if(!parsed.success)throw new AdminError("INVALID_ROLE_REQUEST",400,"请填写 GitHub 用户名、角色和至少5字的授权原因");
++    await setRole(user.githubId,await resolve(parsed.data.githubLogin),parsed.data.role,parsed.data.reason);
++    res.json(AdminRolesResponseSchema.parse({items:await roles()}));
++  }catch(e){next(e)}});
++  router.get("/contributors",async(req,res,next)=>{try{
++    await authorize(req);const query=typeof req.query.query==="string"?req.query.query.trim():"";
++    if(!query||query.length>39)throw new AdminError("INVALID_QUERY",400,"请输入 GitHub 用户名");
++    res.json(AdminContributorsResponseSchema.parse({items:await scores.contributors(query)}));
++  }catch(e){next(e)}});
++  router.get("/score-adjustments",async(req,res,next)=>{try{
++    await authorize(req);const githubId=req.query.githubId;
++    if(githubId!==undefined&&(typeof githubId!=="string"||!/^[1-9]\d{0,17}$/.test(githubId)))throw new AdminError("INVALID_ID",400,"用户 ID 无效");
++    res.json(ScoreAdjustmentsResponseSchema.parse({items:await scores.list(githubId as string|undefined)}));
++  }catch(e){next(e)}});
++  router.post("/score-adjustments",async(req,res,next)=>{try{
++    const user=await authorize(req);const parsed=ScoreAdjustmentRequestSchema.safeParse(req.body);
++    if(!parsed.success)throw new AdminError("INVALID_ADJUSTMENT",400,"请选择贡献者、填写非零整数分值和至少5字的原因");
++    res.status(201).json(ScoreAdjustmentSchema.parse(await scores.adjust(user.githubId,parsed.data)));
++  }catch(e){next(e)}});
++  router.post("/score-adjustments/:id/reverse",async(req,res,next)=>{try{
++    const user=await authorize(req);const id=req.params.id;const parsed=ReverseAdjustmentRequestSchema.safeParse(req.body);
++    if(typeof id!=="string"||!/^[1-9]\d{0,17}$/.test(id)||!parsed.success)throw new AdminError("INVALID_REVERSAL",400,"请填写至少5字的撤销原因");
++    res.status(201).json(ScoreAdjustmentSchema.parse(await scores.reverse(user.githubId,id,parsed.data.reason,parsed.data.requestId)));
++  }catch(e){next(e)}});
++  router.get("/audit",async(req,res,next)=>{try{await authorize(req);res.json(AdminAuditResponseSchema.parse({items:await audit()}))}catch(e){next(e)}});
++  return router;
++}
+diff --git a/backend/src/api/router.ts b/backend/src/api/router.ts
+index d936f14..9072e60 100644
+--- a/backend/src/api/router.ts
++++ b/backend/src/api/router.ts
+@@ -45,6 +45,9 @@ import { getContributorActivityExport } from "../public-contributions/enrollment
+ import { ProjectError, ProjectProposalService, type ProjectProposalApi } from "../projects/proposals.js";
+ import { getSyncStatus as defaultGetSyncStatus, SyncAlreadyRunningError } from "../sync/index.js";
+ 
++import { AdminError } from "../auth/roles.js";
++import { createWebsiteAdminRouter, type WebsiteAdminDependencies } from "./admin.js";
++
+ interface AnalyticsApi {
+   getGroups(): Promise<GroupSummary[]>;
+   getOrganizationActivitySummary(range: TimeRange): Promise<OrganizationActivitySummary>;
+@@ -54,6 +57,7 @@ interface AnalyticsApi {
+ }
+ 
+ export interface ApiDependencies {
++  websiteAdmin: Partial<WebsiteAdminDependencies>;
+   analytics: AnalyticsApi;
+   getSyncStatus(): Promise<SyncStatus>;
+   emailVerification: EmailVerificationApi;
+@@ -134,7 +138,7 @@ function parseGroup(value: unknown, res: Response): string | undefined | null {
+ }
+ 
+ function handleServiceError(error: unknown, res: Response): boolean {
+-  if (error instanceof EmailAuthError || error instanceof GitHubLinkError || error instanceof WebsiteAuthError || error instanceof ProjectError) {
++  if (error instanceof AdminError || error instanceof EmailAuthError || error instanceof GitHubLinkError || error instanceof WebsiteAuthError || error instanceof ProjectError) {
+     sendError(res, error.status, error.code, error.message);
+     return true;
+   }
+@@ -184,7 +188,7 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
+       let token=cookie(req,"leaderboard_session");
+       if(!token){const issued=await websiteAuth.fromRegistration(registrationCookie(req.headers.cookie));if(issued){token=issued;sessionCookie(res,token)}}
+       const user=await websiteAuth.getSession(token);
+-      res.json(WebsiteSessionSchema.parse(user?{authenticated:true,login:user.login,registered:!!user.memberId,isAdmin:user.isAdmin,csrfToken:user.csrfToken}:{authenticated:false}));
++      res.json(WebsiteSessionSchema.parse(user?{authenticated:true,login:user.login,registered:!!user.memberId,isAdmin:user.isAdmin,role:user.role??null,csrfToken:user.csrfToken}:{authenticated:false}));
+     }catch(error){if(!handleServiceError(error,res))next(error)}
+   });
+   router.get("/auth/github/login",async(req,res,next)=>{
+@@ -353,6 +357,9 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
+     }catch(error){if(!handleServiceError(error,res))next(error)}
+   });
+ 
++  router.use("/admin",createWebsiteAdminRouter(req=>requireUser(req,true),dependencies.websiteAdmin));
++  router.use(((error, _req, res, next)=>{if(!handleServiceError(error,res))next(error)}) as import("express").ErrorRequestHandler);
++
+   router.get("/organization/summary", async (req, res, next) => {
+     const range = parseRange(req.query.range, res);
+     if (range === null) return;
+diff --git a/backend/src/auth/roles.ts b/backend/src/auth/roles.ts
+new file mode 100644
+index 0000000..078758b
+--- /dev/null
++++ b/backend/src/auth/roles.ts
+@@ -0,0 +1,50 @@
++import type { PoolClient } from "pg";
++import type { WebsiteRole } from "@leadboard/contracts";
++import { getDbPool, withTransaction } from "../db/index.js";
++
++export class AdminError extends Error {
++  constructor(readonly code:string, readonly status:number, message:string) { super(message); }
++}
++export async function getWebsiteRole(githubId:string):Promise<WebsiteRole|null> {
++  const result=await getDbPool().query<{role:WebsiteRole}>(
++    "SELECT role FROM website_roles WHERE github_id=$1 AND revoked_at IS NULL",[githubId]);
++  return result.rows[0]?.role??null;
++}
++// Serialize permission changes and privileged writes, including revocation races.
++export async function lockAdmin(client:PoolClient,actorId:string,ownerOnly=false) {
++  await client.query("SELECT pg_advisory_xact_lock(7983161)");
++  const result=await client.query<{role:WebsiteRole;login:string}>(
++    "SELECT role,login FROM website_roles WHERE github_id=$1 AND revoked_at IS NULL",[actorId]);
++  const actor=result.rows[0];
++  if(!actor || (ownerOnly&&actor.role!=="owner")) throw new AdminError("ADMIN_REQUIRED",403,ownerOnly?"仅站长可以管理授权":"当前账号没有管理权限");
++  return actor;
++}
++export async function auditAdmin(client:PoolClient,actor:{githubId:string;login:string},target:{githubId:string;login:string},action:string,reason:string,details:unknown={}) {
++  await client.query(`INSERT INTO website_admin_audit(actor_github_id,actor_login,target_github_id,target_login,action,reason,details)
++    VALUES ($1,$2,$3,$4,$5,$6,$7)`,[actor.githubId,actor.login,target.githubId,target.login,action,reason,JSON.stringify(details)]);
++}
++export async function setWebsiteRole(actorId:string,target:{githubId:string;login:string},role:WebsiteRole|null,reason:string) {
++  return withTransaction(async client=>{
++    const actor=await lockAdmin(client,actorId,true);
++    const previous=(await client.query<{role:WebsiteRole}>("SELECT role FROM website_roles WHERE github_id=$1 AND revoked_at IS NULL",[target.githubId])).rows[0];
++    if(previous?.role==="owner"&&role!=="owner") {
++      const count=await client.query<{count:string}>("SELECT count(*)::text FROM website_roles WHERE role='owner' AND revoked_at IS NULL");
++      if(Number(count.rows[0]!.count)<=1) throw new AdminError("LAST_OWNER",409,"不能撤销或降级最后一位站长");
++    }
++    if(role) await client.query(`INSERT INTO website_roles(github_id,login,role,granted_by,reason) VALUES ($1,$2,$3,$4,$5)
++      ON CONFLICT(github_id) DO UPDATE SET login=EXCLUDED.login,role=EXCLUDED.role,granted_by=EXCLUDED.granted_by,
++      granted_at=clock_timestamp(),revoked_at=NULL,revoked_by=NULL,reason=EXCLUDED.reason`,[target.githubId,target.login,role,actorId,reason]);
++    else await client.query("UPDATE website_roles SET revoked_at=clock_timestamp(),revoked_by=$2,reason=$3 WHERE github_id=$1 AND revoked_at IS NULL",[target.githubId,actorId,reason]);
++    await auditAdmin(client,{githubId:actorId,login:actor.login},target,role?"role.set":"role.revoke",reason,{before:previous?.role??null,after:role});
++  });
++}
++export async function listWebsiteRoles() {
++  const result=await getDbPool().query<{github_id:string;login:string;role:WebsiteRole;granted_by:string;granted_at:Date;revoked_at:Date|null;reason:string}>(
++    "SELECT github_id::text,login,role,granted_by::text,granted_at,revoked_at,reason FROM website_roles ORDER BY granted_at DESC");
++  return result.rows.map(r=>({githubId:r.github_id,login:r.login,role:r.role,grantedBy:r.granted_by,grantedAt:r.granted_at.toISOString(),revokedAt:r.revoked_at?.toISOString()??null,reason:r.reason}));
++}
++export async function listAdminAudit() {
++  const result=await getDbPool().query<{id:string;actor_login:string;target_login:string;action:string;reason:string;created_at:Date}>(
++    "SELECT id::text,actor_login,target_login,action,reason,created_at FROM website_admin_audit ORDER BY id DESC LIMIT 200");
++  return result.rows.map(r=>({id:r.id,actorLogin:r.actor_login,targetLogin:r.target_login,action:r.action,reason:r.reason,createdAt:r.created_at.toISOString()}));
++}
+diff --git a/backend/src/auth/website-session.ts b/backend/src/auth/website-session.ts
+index b457108..03289ef 100644
+--- a/backend/src/auth/website-session.ts
++++ b/backend/src/auth/website-session.ts
+@@ -1,11 +1,13 @@
+ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
++import { getWebsiteRole } from "./roles.js";
++import type { WebsiteRole } from "@leadboard/contracts";
+ import { getDbPool, withTransaction } from "../db/index.js";
+ import { exchangeCode, fetchGitHubIdentity, type GitHubOAuthConfig, type GitHubIdentity } from "./github-link.js";
+ 
+ const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+ const random = () => randomBytes(32).toString("base64url");
+ const validToken = (value: string) => /^[A-Za-z0-9_-]{43}$/.test(value);
+-export interface WebsiteUser { githubId: string; login: string; memberId: string | null; isAdmin: boolean; csrfToken: string }
++export interface WebsiteUser { githubId: string; login: string; memberId: string | null; isAdmin: boolean; role?: WebsiteRole | null; csrfToken: string }
+ export interface WebsiteAuthApi {
+   getSession(token: string): Promise<WebsiteUser | null>;
+   startLogin(returnPath: string, intent?: "register"): Promise<{authorizeUrl: string; browserToken: string}>;
+@@ -22,10 +24,7 @@ export function csrfMatches(user: WebsiteUser, value: string | undefined): boole
+   return a.length===b.length && timingSafeEqual(a,b);
+ }
+ export class WebsiteAuthService implements WebsiteAuthApi {
+-  private readonly admins: Set<string>;
+-  constructor(private readonly config?: GitHubOAuthConfig, adminIds = process.env.ADMIN_GITHUB_IDS ?? "333234233") {
+-    this.admins = new Set(adminIds.split(",").map(v=>v.trim()).filter(v=>/^[1-9]\d*$/.test(v)));
+-  }
++  constructor(private readonly config?: GitHubOAuthConfig) {}
+   private async memberFor(githubId: string): Promise<string | null> {
+     const result = await getDbPool().query<{id:string}>(
+       `SELECT m.id::text FROM members m JOIN member_github_accounts a ON a.member_id=m.id
+@@ -44,9 +43,9 @@ export class WebsiteAuthService implements WebsiteAuthApi {
+     const result=await getDbPool().query<{github_id:string;login:string;csrf_token:string}>(
+       `SELECT github_id::text,login,csrf_token FROM website_sessions WHERE token_hash=$1 AND expires_at>now()`,[hash(token)]);
+     const row=result.rows[0]; if(!row)return null;
+-    const memberId=await this.memberFor(row.github_id); const isAdmin=this.admins.has(row.github_id);
++    const memberId=await this.memberFor(row.github_id); const role=await getWebsiteRole(row.github_id); const isAdmin=role!==null;
+     if (!memberId && !isAdmin) return null;
+-    return {githubId:row.github_id,login:row.login,memberId,isAdmin,csrfToken:row.csrf_token};
++    return {githubId:row.github_id,login:row.login,memberId,isAdmin,role,csrfToken:row.csrf_token};
+   }
+   async getRegistrationIdentity(token: string): Promise<GitHubIdentity | null> {
+     if (!validToken(token)) return null;
+@@ -78,7 +77,7 @@ export class WebsiteAuthService implements WebsiteAuthApi {
+     const identity=await fetchGitHubIdentity(await exchangeCode(this.config,code));
+     const memberId=await this.memberFor(identity.githubId);
+     const registering = state.startsWith("register.");
+-    if(!registering && !memberId && !this.admins.has(identity.githubId))throw new WebsiteAuthError("REGISTRATION_REQUIRED",401,"请先注册 LeaderBoard");
++    if(!registering && !memberId && !(await getWebsiteRole(identity.githubId)))throw new WebsiteAuthError("REGISTRATION_REQUIRED",401,"请先注册 LeaderBoard");
+     return {sessionToken:await this.issue(identity.githubId,identity.login,registering ? 30 : undefined),returnPath};
+   }
+   async fromRegistration(token: string): Promise<string | null> {
+diff --git a/backend/test/website-admin-api.test.ts b/backend/test/website-admin-api.test.ts
+new file mode 100644
+index 0000000..ef00367
+--- /dev/null
++++ b/backend/test/website-admin-api.test.ts
+@@ -0,0 +1,54 @@
++import {describe,expect,it,vi} from "vitest";
++import request from "supertest";
++import {createApp} from "../src/app.js";
++import {createApiRouter} from "../src/api/router.js";
++import type {WebsiteUser} from "../src/auth/website-session.js";
++const requestId="12345678-1234-4234-8234-123456789abc";
++const admin:WebsiteUser={githubId:"7001",login:"reviewer",memberId:null,isAdmin:true,role:"admin",csrfToken:"fixture-csrf"};
++function setup(user:WebsiteUser|null=admin) {
++  const result={id:"1",githubId:"8001",login:"contributor",delta:-10,reason:"确认贡献重复计分",actorLogin:"reviewer",createdAt:"2026-10-31T12:00:00.000Z",requestId,reversesId:null,reversed:false};
++  const scores={contributors:vi.fn().mockResolvedValue([{githubId:"8001",login:"contributor"}]),list:vi.fn().mockResolvedValue([]),adjust:vi.fn().mockResolvedValue(result),reverse:vi.fn().mockResolvedValue({...result,id:"2",delta:10,reversesId:"1"})};
++  const roles=vi.fn().mockResolvedValue([]),setRole=vi.fn(),resolve=vi.fn().mockResolvedValue({githubId:"8002",login:"new-admin"});
++  const app=createApp({apiRouter:createApiRouter({
++    analytics:{getGroups:vi.fn(),getOrganizationActivitySummary:vi.fn(),getRepositoryStats:vi.fn(),getContributorLeaderboard:vi.fn(),getContributorDetail:vi.fn()},
++    websiteAuth:{getSession:async()=>user,fromRegistration:async()=>null,getRegistrationIdentity:async()=>null,startLogin:vi.fn(),completeLogin:vi.fn()},
++    websiteAdmin:{scores,roles,setRole,resolve,audit:vi.fn().mockResolvedValue([])},
++  })});
++  return {app,scores,roles,setRole,resolve};
++}
++const payload={githubId:"8001",delta:-10,reason:"确认贡献重复计分",requestId};
++describe("website admin access matrix",()=>{
++  it.each([null,{...admin,isAdmin:false,role:null,memberId:"12"}])("denies unauthenticated/ordinary users before calling services",async user=>{
++    const {app,scores,setRole}=setup(user as WebsiteUser|null);
++    for(const path of ["roles","score-adjustments","audit","contributors?query=reviewer"]){await request(app).get('/api/v1/admin/'+path).expect(user?403:401)}
++    await request(app).post('/api/v1/admin/score-adjustments').send({...payload,isAdmin:true}).expect(user?403:401);
++    expect(scores.adjust).not.toHaveBeenCalled();expect(setRole).not.toHaveBeenCalled();
++  });
++  it("requires CSRF on adjustments, reversals and role changes",async()=>{
++    const {app,scores,setRole}=setup({...admin,role:"owner"});
++    for(const path of ["score-adjustments","score-adjustments/1/reverse","roles"]){await request(app).post('/api/v1/admin/'+path).send(payload).expect(403)}
++    expect(scores.adjust).not.toHaveBeenCalled();expect(scores.reverse).not.toHaveBeenCalled();expect(setRole).not.toHaveBeenCalled();
++  });
++  it("allows admin score changes, rejects forged actor and zero/fractional values",async()=>{
++    const {app,scores}=setup();
++    for(const body of [{...payload,actorId:"spoofed"},{...payload,delta:0},{...payload,delta:0.5},{...payload,reason:"短"},{...payload,delta:100001}]) {
++      await request(app).post('/api/v1/admin/score-adjustments').set('X-CSRF-Token',admin.csrfToken).send(body).expect(400);
++    }
++    await request(app).post('/api/v1/admin/score-adjustments').set('X-CSRF-Token',admin.csrfToken).send(payload).expect(201);
++    expect(scores.adjust).toHaveBeenCalledExactlyOnceWith("7001",payload);
++    const r=await request(app).get('/api/v1/admin/score-adjustments').expect(200);expect(r.headers['cache-control']).toBe('no-store');
++  });
++  it("denies admin privilege escalation; owner resolves target identity on the server",async()=>{
++    const ordinary=setup();await request(ordinary.app).post('/api/v1/admin/roles').set('X-CSRF-Token',admin.csrfToken).send({githubLogin:'new-admin',role:'owner',reason:'新增站长授权说明'}).expect(403);
++    expect(ordinary.setRole).not.toHaveBeenCalled();expect(ordinary.resolve).not.toHaveBeenCalled();
++    const owner=setup({...admin,role:'owner'});
++    await request(owner.app).post('/api/v1/admin/roles').set('X-CSRF-Token',admin.csrfToken).send({githubLogin:'new-admin',role:'admin',reason:'新增管理员审核授权'}).expect(200);
++    expect(owner.setRole).toHaveBeenCalledWith('7001',{githubId:'8002',login:'new-admin'},'admin','新增管理员审核授权');
++  });
++  it("validates reversal paths and requires an audit reason",async()=>{
++    const {app,scores}=setup();
++    await request(app).post('/api/v1/admin/score-adjustments/1/reverse').set('X-CSRF-Token',admin.csrfToken).send({reason:'撤销误操作的扣分',requestId}).expect(201);
++    expect(scores.reverse).toHaveBeenCalledWith('7001','1','撤销误操作的扣分',requestId);
++    await request(app).post('/api/v1/admin/score-adjustments/no/reverse').set('X-CSRF-Token',admin.csrfToken).send({reason:'撤销误操作的扣分',requestId}).expect(400);
++  });
++});
+diff --git a/db/migrations/1793455200000_website_roles_and_score_adjustments.js b/db/migrations/1793455200000_website_roles_and_score_adjustments.js
+new file mode 100644
+index 0000000..01f4392
+--- /dev/null
++++ b/db/migrations/1793455200000_website_roles_and_score_adjustments.js
+@@ -0,0 +1,26 @@
++export const up = (pgm) => {
++  pgm.sql(`
++    CREATE TABLE website_roles (
++      github_id BIGINT PRIMARY KEY CHECK (github_id > 0), login TEXT NOT NULL,
++      role TEXT NOT NULL CHECK (role IN ('owner','admin')),
++      granted_by BIGINT NOT NULL, granted_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++      revoked_at TIMESTAMPTZ, revoked_by BIGINT, reason TEXT NOT NULL CHECK (length(trim(reason)) >= 5)
++    );
++    CREATE TABLE website_admin_audit (
++      id BIGSERIAL PRIMARY KEY, actor_github_id BIGINT NOT NULL, actor_login TEXT NOT NULL,
++      target_github_id BIGINT NOT NULL, target_login TEXT NOT NULL,
++      action TEXT NOT NULL, reason TEXT NOT NULL, details JSONB NOT NULL DEFAULT '{}',
++      created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++    );
++    CREATE TABLE contributor_score_adjustments (
++      id BIGSERIAL PRIMARY KEY, contributor_id BIGINT NOT NULL REFERENCES contributors(id),
++      delta INTEGER NOT NULL CHECK (delta <> 0 AND delta BETWEEN -100000 AND 100000),
++      reason TEXT NOT NULL CHECK (length(trim(reason)) >= 5),
++      actor_github_id BIGINT NOT NULL, actor_login TEXT NOT NULL,
++      request_id UUID NOT NULL UNIQUE, reverses_id BIGINT UNIQUE REFERENCES contributor_score_adjustments(id),
++      created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++    );
++    CREATE INDEX score_adjustment_contributor_time_idx ON contributor_score_adjustments(contributor_id,created_at);
++    CREATE INDEX website_admin_audit_time_idx ON website_admin_audit(created_at DESC);
++  `);
++};
+diff --git a/docs/api-contract.md b/docs/api-contract.md
+index 0bdbe2b..f2ee4f5 100644
+--- a/docs/api-contract.md
++++ b/docs/api-contract.md
+@@ -784,3 +784,15 @@ Contributor rank/detail 新增可选 `bonusScore`：独立开发奖励，包含
+ - 回调从 GitHub `/user` 获取稳定账号 ID 与当前 login，签发 30 分钟的注册用会话；尚未完成校园绑定的账号不能调用需要注册身份的接口。
+ - `GET /auth/github/registration`：不缓存，仅返回 `{verified:false}` 或 `{verified:true,githubId,login}`。不返回学号、姓名、邮箱、指纹或 OAuth token。
+ - 邮箱验证码成功后，使用该服务器已验证身份写入成员绑定和贡献者记录，确认提交成功，签发正式 30 天网站会话。旧的邮箱先行 OAuth 回调与继续认证接口保持可用。
++
++
++## Website administration (database roles)
++OAuth sessions resolve `role: owner | admin | null` on every request. `isAdmin` is derived from that role; the browser cannot assign it. All admin responses are `Cache-Control: no-store`; all writes require the session's `X-CSRF-Token`.
++- GET /api/v1/admin/roles → AdminRolesResponse (owner only).
++- POST /api/v1/admin/roles {githubLogin,role: owner|admin|null,reason} → AdminRolesResponse (owner only). GitHub resolves the login to a stable ID. null revokes. Last owner cannot be removed; authorization changes are serialized and audited.
++- GET /api/v1/admin/contributors?query=<login> → AdminContributorsResponse (admin or owner, bounded to 20).
++- GET /api/v1/admin/score-adjustments?githubId=<optional ID> → ScoreAdjustmentsResponse (latest 200).
++- POST /api/v1/admin/score-adjustments {githubId,delta,reason,requestId:UUID} → ScoreAdjustment (admin or owner). Signed nonzero integer ±100000. Retries with the same key return the original; changed payload conflicts. Target is an existing human contributor, never a supplied member ID.
++- POST /api/v1/admin/score-adjustments/:id/reverse {reason,requestId} → ScoreAdjustment. Adds one compensating entry; never erases history.
++- GET /api/v1/admin/audit → AdminAuditResponse (latest 200).
++`adjustmentScore` is signed. Overall score = contribution score + existing awards + manual adjustments. Manual changes apply to overall rankings and contributor detail, within [from,to) by server commit time; group/repository statistics and GitHub facts are unchanged. Negative overall scores are supported. /admin now exposes project review, score ledger and owner-only role management.
+diff --git a/docs/data-model.md b/docs/data-model.md
+index 19352c1..895e010 100644
+--- a/docs/data-model.md
++++ b/docs/data-model.md
+@@ -445,3 +445,7 @@ award_key TEXT, points INTEGER CHECK(points>0), reason TEXT, awarded_at TIMESTAM
+ `repository_star_counts` 保存 `github_id BIGINT PRIMARY KEY`、`stars INTEGER NULL CHECK(stars>=0)`、`checked_at TIMESTAMPTZ NOT NULL DEFAULT now()`。GitHub API 按稳定仓库 ID 查询并核对返回 ID；相同仓库供所有用户共享缓存。`stars=NULL` 表示仓库无法公开访问，不满足门槛。临时请求失败不覆盖最近一次核实结果，也不会为未核实仓库补造 Star 数。
+ 
+ Commit/Issue 只对 Star≥10 的仓库应用原有3次/仓库/月及10次/人/月限制；PR继续仅使用 `scoring_repositories` 白名单判断，提交20分、合并另加30分。两个条件独立，仓库所有者身份不影响 Star 门槛。每次计分根据当前缓存重新处理完整历史，低 Star 记录保留原始来源并计0分，不占额度。
++
++
++## Website administration
++`website_roles` stores stable github_id (PK), display login, owner/admin role, grant actor/time/reason and revocation actor/time. Empty on migration: no personal accounts in source. `website_admin_audit` is an append-only application ledger of role and score operations, actor/target IDs and display names, action, reason, JSON details, server time. `contributor_score_adjustments` references contributor_id, signed nonzero integer delta (±100000), actor ID/name, reason, unique UUID request_id, optional unique reverses_id (self FK), server time. Original contributions are never edited. Role changes and privileged score writes share a transaction advisory lock. Initial owner is established only through a trusted server CLI, never HTTP. Subsequent grants use the owner-protected /admin UI.
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index 1f3beb8..b2481a6 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -53,6 +53,7 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
+           <Link className="mobile-home-brand" to="/">LeaderBoard</Link>
+           <Link className="mobile-round-link" to="/join" aria-label="加入达人榜"><AppIcon name="plus" size={21}/></Link>
+           <Link className="mobile-round-link" to="/projects?search=1" aria-label="搜索项目"><AppIcon name="search" size={21}/></Link>
++          {session.authenticated&&session.isAdmin&&<Link className="mobile-round-link" to="/admin" aria-label="管理后台"><AppIcon name="settings" size={21}/></Link>}
+         </div>
+       </header>
+ 
+diff --git a/frontend/src/enhancements.css b/frontend/src/enhancements.css
+index 9ba8e64..4cdafe9 100644
+--- a/frontend/src/enhancements.css
++++ b/frontend/src/enhancements.css
+@@ -213,3 +213,6 @@
+   .ranking-panel .ranking-person > strong { font-size: 12px; }
+   .ranking-panel .tag-row { flex-wrap: wrap; }
+ }
++
++
++.admin-panel {padding:24px;margin-bottom:28px;min-width:0}.admin-tabs,.admin-matches{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.admin-form{display:grid;gap:14px;max-width:640px;margin:20px 0}.admin-form select{padding:12px;border-radius:8px;background:var(--bg-panel,#161b22);color:inherit;border:1px solid #363b44}.admin-table-wrap{overflow-x:auto;max-width:100%}.admin-table{width:100%;border-collapse:collapse;font-size:14px;text-align:left}.admin-table th,.admin-table td{padding:12px;border-bottom:1px solid #30363d;vertical-align:top}.admin-table td{overflow-wrap:anywhere;min-width:90px}.admin-table td:nth-child(3){min-width:170px}.admin-panel [role=alert]{color:#ff9999}.admin-panel [role=status]{color:#83e0a0}
+diff --git a/frontend/src/pages/ContributorDetailPage.tsx b/frontend/src/pages/ContributorDetailPage.tsx
+index f5b90d5..2f5d107 100644
+--- a/frontend/src/pages/ContributorDetailPage.tsx
++++ b/frontend/src/pages/ContributorDetailPage.tsx
+@@ -98,7 +98,7 @@ export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
+               <article className="metric-card metric-mint"><span>积分</span><strong>{state.detail.score ?? 0}</strong></article>
+             </div>
+ 
+-            <details className="score-breakdown"><summary>积分明细</summary><p className="filter-caption">Commit / Issue：{state.detail.commitIssueScore ?? 0} · PR：{state.detail.prOpenedScore ?? 0} · 合并 PR：{state.detail.prMergedScore ?? 0} · 开发奖励：{state.detail.bonusScore ?? 0}</p></details>
++            <details className="score-breakdown"><summary>积分明细</summary><p className="filter-caption">Commit / Issue：{state.detail.commitIssueScore ?? 0} · PR：{state.detail.prOpenedScore ?? 0} · 合并 PR：{state.detail.prMergedScore ?? 0} · 开发奖励：{state.detail.bonusScore ?? 0} · 人工调整：{state.detail.adjustmentScore ?? 0}</p></details>
+             <section className="panel repository-panel">
+               <div className="panel-heading">
+                 <div><h2>仓库贡献</h2></div>
+diff --git a/frontend/src/pages/ProjectReviewPage.tsx b/frontend/src/pages/ProjectReviewPage.tsx
+index d551abe..d071b7b 100644
+--- a/frontend/src/pages/ProjectReviewPage.tsx
++++ b/frontend/src/pages/ProjectReviewPage.tsx
+@@ -1,3 +1,4 @@
++import {WebsiteAdminPanels} from "./WebsiteAdminPanels";
+ import {useEffect,useState} from "react";
+ import {Link} from "react-router";
+ import {ApiErrorResponseSchema,ProjectProposalAdminResponseSchema,type ProjectProposalAdmin} from "@leadboard/contracts";
+@@ -34,8 +35,9 @@ export function ProjectReviewPage(){
+   useEffect(()=>{if(!session.authenticated||!session.isAdmin)return;let active=true;
+     void fetch("/api/v1/admin/project-proposals",{cache:"no-store"}).then(async r=>{const p=await r.json();if(!r.ok)throw new Error("无法读取申请，请重新登录管理员账号");return ProjectProposalAdminResponseSchema.parse(p)})
+       .then(p=>{if(active){setItems(p.items);setError("")}}).catch(e=>{if(active)setError(e.message)});return()=>{active=false};},[session,version]);
+-  return <div className="page-canvas"><section className="page-hero compact-hero"><div><h1>仓库申请审核</h1></div></section>
++  return <div className="page-canvas"><section className="page-hero compact-hero"><div><h1>管理后台</h1></div></section>
+     {loading?<p role="status">正在确认管理权限…</p>:!session.authenticated?<section className="panel" style={{padding:24}}><h2>请使用管理员 GitHub 账号登录</h2><a className="primary-button" href="/api/v1/auth/github/login?returnTo=/admin">使用 GitHub 登录后台</a></section>:!session.isAdmin?<p role="alert">当前账号没有管理权限。</p>:<section className="dashboard-content">
++      <WebsiteAdminPanels csrfToken={session.csrfToken} isOwner={session.role==="owner"}/><h2>仓库申请审核</h2>
+       <p>当前管理员：{session.login} · {items.length} 条申请 · <Link to="/projects">查看项目列表</Link></p>
+       <Button className="toolbar-button" variant="outline" onClick={()=>setVersion(v=>v+1)} type="button">刷新申请</Button>
+       {error&&<p role="alert">{error}</p>}{!error&&items.length===0&&<p>暂无申请。</p>}
+diff --git a/frontend/src/pages/WebsiteAdminPanels.tsx b/frontend/src/pages/WebsiteAdminPanels.tsx
+new file mode 100644
+index 0000000..38346f9
+--- /dev/null
++++ b/frontend/src/pages/WebsiteAdminPanels.tsx
+@@ -0,0 +1,76 @@
++import {useEffect,useState,type FormEvent} from "react";
++import {z} from "zod";
++import {
++  AdminRolesResponseSchema,AdminContributorsResponseSchema,AdminAuditResponseSchema,
++  ScoreAdjustmentsResponseSchema,ScoreAdjustmentSchema,ApiErrorResponseSchema,
++  type AdminRoleEntry,type ScoreAdjustment,
++} from "@leadboard/contracts";
++import {Button,Card,Input,Textarea} from "../components/ui/primitives";
++
++async function call<T>(path:string,schema:z.ZodType<T>,csrfToken?:string,body?:unknown):Promise<T> {
++  const response=await fetch(`/api/v1/admin/${path}`,{cache:"no-store",...(body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-Token":csrfToken??""},body:JSON.stringify(body)})});
++  const data=await response.json();
++  if(!response.ok){const error=ApiErrorResponseSchema.safeParse(data);throw new Error(error.success?error.data.error.message:"操作失败，请刷新后重试")}
++  return schema.parse(data);
++}
++const time=(v:string)=>new Date(v).toLocaleString("zh-CN");
++export function WebsiteAdminPanels({csrfToken,isOwner}:{csrfToken:string;isOwner:boolean}) {
++  const [tab,setTab]=useState<"scores"|"roles"|"audit">("scores");
++  return <Card className="panel admin-panel">
++    <h2>网站管理</h2>
++    <div className="admin-tabs" role="group" aria-label="管理功能">
++      <Button variant={tab==="scores"?"default":"outline"} onClick={()=>setTab("scores")}>积分调整</Button>
++      {isOwner&&<Button variant={tab==="roles"?"default":"outline"} onClick={()=>setTab("roles")}>管理员授权</Button>}
++      <Button variant={tab==="audit"?"default":"outline"} onClick={()=>setTab("audit")}>操作记录</Button>
++    </div>
++    {tab==="scores"?<Scores csrfToken={csrfToken}/>:tab==="roles"&&isOwner?<Roles csrfToken={csrfToken}/>:<Audit/>}
++  </Card>;
++}
++function Scores({csrfToken}:{csrfToken:string}) {
++  const [query,setQuery]=useState("");const [matches,setMatches]=useState<{githubId:string;login:string}[]>([]);
++  const [target,setTarget]=useState<{githubId:string;login:string}|null>(null);
++  const [delta,setDelta]=useState("");const [reason,setReason]=useState("");const [reverseReason,setReverseReason]=useState("");
++  const [items,setItems]=useState<ScoreAdjustment[]>([]);const [error,setError]=useState("");const [message,setMessage]=useState("");const [busy,setBusy]=useState(false);const [version,setVersion]=useState(0);
++  // The key stays stable on an uncertain retry; editing any field starts a new operation.
++  const [requestId,setRequestId]=useState(()=>crypto.randomUUID());
++  const [reverseRequest,setReverseRequest]=useState<{id:string;reason:string;key:string}|null>(null);
++  useEffect(()=>{let active=true;void call("score-adjustments",ScoreAdjustmentsResponseSchema).then(r=>{if(active)setItems(r.items)}).catch(e=>{if(active)setError(String(e.message))});return()=>{active=false}},[version]);
++  async function search(e:FormEvent){e.preventDefault();setError("");setBusy(true);setMatches([]);setTarget(null);try{const r=await call(`contributors?query=${encodeURIComponent(query.trim())}`,AdminContributorsResponseSchema);setMatches(r.items);if(r.items.length===0)setMessage("没有找到贡献者，请核对 GitHub 用户名。")}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
++  async function adjust(e:FormEvent){e.preventDefault();if(!target)return;setBusy(true);setError("");setMessage("");try{
++    const result=await call("score-adjustments",ScoreAdjustmentSchema,csrfToken,{githubId:target.githubId,delta:Number(delta),reason:reason.trim(),requestId});
++    setMessage(`已为 ${result.login} 调整 ${result.delta>0?"+":""}${result.delta} 分，记录 #${result.id}。`);setDelta("");setReason("");setRequestId(crypto.randomUUID());setVersion(v=>v+1);
++  }catch(e){setError((e as Error).message)}finally{setBusy(false)}}
++  async function reverse(item:ScoreAdjustment){setBusy(true);setError("");setMessage("");const operation=reverseRequest?.id===item.id&&reverseRequest.reason===reverseReason.trim()?reverseRequest:{id:item.id,reason:reverseReason.trim(),key:crypto.randomUUID()};setReverseRequest(operation);try{
++    await call(`score-adjustments/${item.id}/reverse`,ScoreAdjustmentSchema,csrfToken,{reason:operation.reason,requestId:operation.key});setMessage(`已撤销记录 #${item.id}，原记录和撤销记录均已保留。`);setReverseRequest(null);setVersion(v=>v+1);
++  }catch(e){setError((e as Error).message)}finally{setBusy(false)}}
++  return <section aria-label="积分调整">
++    <p className="filter-caption">填写加减分值：例如 10 为加 10 分，-10 为扣 10 分。每次操作必须填写原因。</p>
++    <form className="admin-form" onSubmit={e=>void search(e)}><label className="form-field"><span>查找贡献者</span><Input required maxLength={39} value={query} onChange={e=>{setQuery(e.target.value);setTarget(null);setMatches([]);setRequestId(crypto.randomUUID())}} placeholder="GitHub 用户名" /></label><Button variant="outline" type="submit" disabled={busy}>查找</Button></form>
++    <div className="admin-matches">{matches.map(m=><Button key={m.githubId} variant={target?.githubId===m.githubId?"default":"outline"} disabled={busy} onClick={()=>{setTarget(m);setRequestId(crypto.randomUUID())}}>{m.login}</Button>)}</div>
++    {target&&<form className="admin-form" onSubmit={e=>void adjust(e)}>
++      <p>调整对象：<strong>{target.login}</strong></p>
++      <label className="form-field"><span>加减分值</span><Input type="number" required min={-100000} max={100000} step={1} value={delta} onChange={e=>{setDelta(e.target.value);setRequestId(crypto.randomUUID())}} /></label>
++      <label className="form-field"><span>调整原因（至少 5 字）</span><Textarea required minLength={5} maxLength={1000} value={reason} onChange={e=>{setReason(e.target.value);setRequestId(crypto.randomUUID())}} /></label>
++      <Button type="submit" disabled={busy||Number(delta)===0||!Number.isInteger(Number(delta))||reason.trim().length<5}>确认调整 {Number(delta)>0?"+":""}{delta} 分</Button>
++    </form>}
++    {message&&<p role="status">{message}</p>}{error&&<p role="alert">{error}</p>}
++    <h3>最近调分记录</h3><p className="filter-caption">最近 200 条；撤销会新增一笔相反分值，原始记录保留。</p>
++    <label className="form-field"><span>撤销原因（撤销记录时必填）</span><Input value={reverseReason} onChange={e=>setReverseReason(e.target.value)} minLength={5} maxLength={1000}/></label>
++    <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>对象</th><th>分值</th><th>原因</th><th>操作人 / 时间</th><th>操作</th></tr></thead><tbody>{items.map(i=><tr key={i.id}><td>{i.login}</td><td>{i.delta>0?"+":""}{i.delta}</td><td>{i.reason}{i.reversesId&&`（撤销 #${i.reversesId}）`}</td><td>{i.actorLogin}<br/>{time(i.createdAt)}</td><td>{i.reversed?"已撤销":i.reversesId?"撤销记录":<Button variant="outline" disabled={busy||reverseReason.trim().length<5} onClick={()=>void reverse(i)}>撤销 #{i.id}</Button>}</td></tr>)}</tbody></table>{items.length===0&&<p>暂无调分记录。</p>}</div>
++  </section>;
++}
++function Roles({csrfToken}:{csrfToken:string}) {
++  const [items,setItems]=useState<AdminRoleEntry[]>([]);const [login,setLogin]=useState("");const [role,setRole]=useState<"admin"|"owner"|"revoke">("admin");const [reason,setReason]=useState("");const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [message,setMessage]=useState("");
++  useEffect(()=>{let active=true;void call("roles",AdminRolesResponseSchema).then(r=>{if(active)setItems(r.items)}).catch(e=>{if(active)setError((e as Error).message)});return()=>{active=false}},[]);
++  async function save(e:FormEvent){e.preventDefault();setBusy(true);setError("");setMessage("");try{const r=await call("roles",AdminRolesResponseSchema,csrfToken,{githubLogin:login.trim(),role:role==="revoke"?null:role,reason:reason.trim()});setItems(r.items);setMessage(`已更新 ${login} 的网站权限。`);setReason("")}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
++  return <section aria-label="管理员授权"><p className="filter-caption">管理员可审核项目、调整积分；站长还可管理授权。撤权后下次请求立即检查新权限。</p>
++    <form className="admin-form" onSubmit={e=>void save(e)}>
++      <label className="form-field"><span>GitHub 用户名</span><Input required maxLength={39} value={login} onChange={e=>setLogin(e.target.value)} /></label>
++      <label className="form-field"><span>网站角色</span><select value={role} onChange={e=>setRole(e.target.value as typeof role)}><option value="admin">管理员（审核、调分）</option><option value="owner">站长（含授权管理）</option><option value="revoke">撤销管理权限</option></select></label>
++      <label className="form-field"><span>操作原因（至少 5 字）</span><Textarea required minLength={5} maxLength={1000} value={reason} onChange={e=>setReason(e.target.value)}/></label>
++      <Button type="submit" disabled={busy||reason.trim().length<5}>确认{role==="revoke"?"撤销权限":"授权"}</Button>
++    </form>{message&&<p role="status">{message}</p>}{error&&<p role="alert">{error}</p>}
++    <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>账号</th><th>角色</th><th>状态</th><th>授权时间 / 原因</th></tr></thead><tbody>{items.map(i=><tr key={i.githubId}><td>{i.login}</td><td>{i.role==="owner"?"站长":"管理员"}</td><td>{i.revokedAt?"已撤销":"生效中"}</td><td>{time(i.grantedAt)}<br/>{i.reason}</td></tr>)}</tbody></table></div>
++  </section>;
++}
++function Audit(){const [items,setItems]=useState<z.infer<typeof AdminAuditResponseSchema>["items"]>([]);const [error,setError]=useState("");useEffect(()=>{let active=true;void call("audit",AdminAuditResponseSchema).then(r=>{if(active)setItems(r.items)}).catch(e=>{if(active)setError((e as Error).message)});return()=>{active=false}},[]);return <section aria-label="操作记录"><h3>最近操作记录</h3>{error&&<p role="alert">{error}</p>}<div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>操作人</th><th>对象</th><th>操作</th><th>原因</th><th>时间</th></tr></thead><tbody>{items.map(i=><tr key={i.id}><td>{i.actorLogin}</td><td>{i.targetLogin}</td><td>{({"role.set":"授权","role.revoke":"撤权","role.bootstrap":"初始化站长","score.adjust":"调整积分","score.reverse":"撤销调分"} as Record<string,string>)[i.action]??i.action}</td><td>{i.reason}</td><td>{time(i.createdAt)}</td></tr>)}</tbody></table>{!items.length&&!error&&<p>暂无操作记录。</p>}</div></section>}
+diff --git a/packages/contracts/src/index.ts b/packages/contracts/src/index.ts
+index 2455def..0d22c2b 100644
+--- a/packages/contracts/src/index.ts
++++ b/packages/contracts/src/index.ts
+@@ -126,7 +126,7 @@ export type GroupSummary = z.infer<typeof GroupSummarySchema>;
+ 
+ const activityCounts = { commits: count, prs: count, issues: count, total: count };
+ const scoringCounts = {
+-  score: count.optional(), commitIssueScore: count.optional(), prOpenedScore: count.optional(),
++  score: z.number().int().safe().optional(), adjustmentScore: z.number().int().safe().optional(), commitIssueScore: count.optional(), prOpenedScore: count.optional(),
+   prMergedScore: count.optional(), mergedPrs: count.optional(),
+ };
+ 
+@@ -234,7 +234,7 @@ export type EmailCodeVerifyResponse = z.infer<typeof EmailCodeVerifyResponseSche
+ 
+ export const WebsiteSessionSchema = z.discriminatedUnion("authenticated", [
+   z.object({authenticated:z.literal(false)}),
+-  z.object({authenticated:z.literal(true),login:text,registered:z.boolean(),isAdmin:z.boolean(),csrfToken:text}),
++  z.object({authenticated:z.literal(true),login:text,registered:z.boolean(),isAdmin:z.boolean(),role:z.enum(["owner","admin"]).nullable().default(null),csrfToken:text}),
+ ]);
+ export type WebsiteSession = z.infer<typeof WebsiteSessionSchema>;
+ export const CampusProjectSchema = z.object({
+@@ -273,3 +273,37 @@ export const SyncConfigSchema = AppConfigSchema.pick({
+   initialSyncDays: true, syncOverlapMinutes: true, dataStaleAfterHours: true,
+ });
+ export type SyncConfig = z.infer<typeof SyncConfigSchema>;
++
++
++// Website permissions are persisted against stable OAuth-verified GitHub IDs.
++export const WebsiteRoleSchema = z.enum(["owner", "admin"]);
++export type WebsiteRole = z.infer<typeof WebsiteRoleSchema>;
++const adminReason = z.string().trim().min(5).max(1000);
++export const AdminRoleRequestSchema = z.object({
++  githubLogin: z.string().trim().regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/),
++  role: WebsiteRoleSchema.nullable(), reason: adminReason,
++}).strict();
++export type AdminRoleRequest = z.infer<typeof AdminRoleRequestSchema>;
++export const AdminRoleEntrySchema = z.object({
++  githubId, login:text, role:WebsiteRoleSchema, grantedBy:githubId, grantedAt:utc,
++  revokedAt:utc.nullable(), reason:text,
++});
++export const AdminRolesResponseSchema=z.object({items:z.array(AdminRoleEntrySchema)});
++export type AdminRoleEntry=z.infer<typeof AdminRoleEntrySchema>;
++export const ScoreAdjustmentRequestSchema=z.object({
++  githubId, delta:z.number().int().min(-100000).max(100000).refine(v=>v!==0),
++  reason:adminReason, requestId:z.uuid(),
++}).strict();
++export type ScoreAdjustmentRequest=z.infer<typeof ScoreAdjustmentRequestSchema>;
++export const ScoreAdjustmentSchema=z.object({
++  id:githubId, githubId, login:text, delta:z.number().int().safe(), reason:text,
++  actorLogin:text, createdAt:utc, requestId:z.uuid(), reversesId:githubId.nullable(),
++  reversed:z.boolean(),
++});
++export type ScoreAdjustment=z.infer<typeof ScoreAdjustmentSchema>;
++export const ScoreAdjustmentsResponseSchema=z.object({items:z.array(ScoreAdjustmentSchema)});
++export const ReverseAdjustmentRequestSchema=z.object({reason:adminReason,requestId:z.uuid()}).strict();
++export const AdminContributorsResponseSchema=z.object({items:z.array(z.object({githubId,login:text}))});
++export const AdminAuditResponseSchema=z.object({items:z.array(z.object({
++  id:githubId,actorLogin:text,targetLogin:text,action:text,reason:text,createdAt:utc,
++}))});
+diff --git a/packages/contracts/test/website-admin.test.ts b/packages/contracts/test/website-admin.test.ts
+new file mode 100644
+index 0000000..a044668
+--- /dev/null
++++ b/packages/contracts/test/website-admin.test.ts
+@@ -0,0 +1,14 @@
++import {describe,expect,it} from 'vitest';
++import {AdminRoleRequestSchema,ScoreAdjustmentRequestSchema,WebsiteSessionSchema,ContributorRankSchema} from '../src/index.js';
++const requestId='12345678-1234-4234-8234-123456789abc';
++describe('website administration contracts',()=>{
++ it('accepts signed score changes but rejects spoofed privileged fields',()=>{
++   expect(ScoreAdjustmentRequestSchema.safeParse({githubId:'123',delta:-10,reason:'重复计分调整记录',requestId}).success).toBe(true);
++   for(const delta of [0,0.1,-100001,100001])expect(ScoreAdjustmentRequestSchema.safeParse({githubId:'123',delta,reason:'重复计分调整记录',requestId}).success).toBe(false);
++   expect(AdminRoleRequestSchema.safeParse({githubLogin:'reviewer',role:'admin',reason:'新增审核人员授权',githubId:'123'}).success).toBe(false);
++ });
++ it('returns the database role and supports a negative overall score',()=>{
++   expect(WebsiteSessionSchema.parse({authenticated:true,login:'reviewer',registered:false,isAdmin:true,role:'admin',csrfToken:'csrf'})).toHaveProperty('role','admin');
++   expect(ContributorRankSchema.parse({rank:1,login:'student',avatarUrl:null,commits:0,prs:0,issues:0,total:0,score:-3,adjustmentScore:-3})).toHaveProperty('score',-3);
++ });
++});
+diff --git a/scripts/db-verify.mjs b/scripts/db-verify.mjs
+index 9e95735..4e1cafa 100644
+--- a/scripts/db-verify.mjs
++++ b/scripts/db-verify.mjs
+@@ -13,6 +13,9 @@ const id = () => required("bigint", "serial");
+ 
+ // Expected columns, nullability and defaults come from docs/data-model.md.
+ const tables = {
++  website_roles: {github_id:required("bigint"),login:required("text"),role:required("text"),granted_by:required("bigint"),granted_at:required(timestamp,"clock_timestamp()"),revoked_at:optional(timestamp),revoked_by:optional("bigint"),reason:required("text")},
++  website_admin_audit: {id:id(),actor_github_id:required("bigint"),actor_login:required("text"),target_github_id:required("bigint"),target_login:required("text"),action:required("text"),reason:required("text"),details:required("jsonb","'{}'::jsonb"),created_at:required(timestamp,"clock_timestamp()")},
++  contributor_score_adjustments: {id:id(),contributor_id:required("bigint"),delta:required("integer"),reason:required("text"),actor_github_id:required("bigint"),actor_login:required("text"),request_id:required("uuid"),reverses_id:optional("bigint"),created_at:required(timestamp,"clock_timestamp()")},
+   groups: {
+     id: id(), name: required("text"),
+     created_at: required(timestamp, "now()"), updated_at: required(timestamp, "now()"),
+@@ -112,6 +115,8 @@ const tables = {
+ };
+ 
+ const foreignKeys = [
++  ["contributor_score_adjustments","contributor_id","contributors","id"],
++  ["contributor_score_adjustments","reverses_id","contributor_score_adjustments","id"],
+   ["project_proposals","member_id","members","id"],
+   ["campus_projects","proposal_id","project_proposals","id"],
+   ["project_notification_outbox","proposal_id","project_proposals","id"],
+@@ -129,6 +134,7 @@ const foreignKeys = [
+   ["contributor_public_activities", "contributor_id", "contributors", "id"],
+ ];
+ const uniques = [
++  ["contributor_score_adjustments","request_id"],["contributor_score_adjustments","reverses_id"],
+   ["campus_projects","repository_github_id"],["campus_projects","html_url"],["campus_projects","proposal_id"],
+   ["project_notification_outbox","proposal_id"],
+   ["groups", "name"], ["repositories", "github_id"], ["repositories", "node_id"],
+@@ -139,6 +145,7 @@ const uniques = [
+   ["members", "email_fingerprint"], ["github_oauth_states", "state_hash"],
+ ];
+ const indexes = {
++  score_adjustment_contributor_time_idx:["contributor_score_adjustments","contributor_id","created_at"],
+   member_single_github_account_idx:["member_github_accounts","member_id"],
+   repositories_tracked_idx: ["repositories", "tracked"],
+   repositories_group_id_idx: ["repositories", "group_id"],
+@@ -162,6 +169,7 @@ const indexes = {
+ };
+ 
+ const primaryKeys = {
++  website_roles:["github_id"],website_admin_audit:["id"],contributor_score_adjustments:["id"],
+   website_sessions:["token_hash"],website_login_states:["state_hash"],campus_projects:["id"],project_notification_outbox:["id"],
+   groups: ["id"],
+   repositories: ["id"],
+@@ -241,7 +249,7 @@ try {
+   if (problems.length) {
+     for (const problem of problems) console.error(problem);
+     process.exitCode = 1;
+-  } else console.info("Database schema verified: 21 tables, columns, foreign keys, unique constraints, and indexes.");
++  } else console.info("Database schema verified: required tables, columns, foreign keys, unique constraints, and indexes.");
+ } catch (error) {
+   console.error(error instanceof Error ? error.message : String(error));
+   process.exitCode = 1;
+diff --git a/scripts/website-roles.mjs b/scripts/website-roles.mjs
+new file mode 100644
+index 0000000..684aeb1
+--- /dev/null
++++ b/scripts/website-roles.mjs
+@@ -0,0 +1,45 @@
++// Trusted server CLI. Initial owner bootstrap is deliberately absent from HTTP.
++import pg from 'pg';
++import {parseArgs} from 'node:util';
++const {values}=parseArgs({options:{actor:{type:'string'},'actor-login':{type:'string'},users:{type:'string'},role:{type:'string',default:'admin'},reason:{type:'string'},bootstrap:{type:'boolean',default:false}}});
++const actor=values.actor,actorLogin=values['actor-login'],role=values.role;
++const logins=(values.users??'').split(',').map(v=>v.trim()).filter(Boolean);
++if(!/^[1-9]\d{0,17}$/.test(actor??'')||!actorLogin||!logins.length||logins.length>20||!['owner','admin','revoke'].includes(role)||!values.reason||values.reason.trim().length<5||values.reason.length>1000)throw new Error('Invalid role command');
++if(values.bootstrap&&(role!=='owner'||logins.length!==1||logins[0].toLowerCase()!==actorLogin.toLowerCase()))throw new Error('Bootstrap must initialize the acting account as the first owner');
++if(!process.env.DATABASE_URL?.trim())throw new Error('DATABASE_URL is required');
++const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
++try{
++  // Resolve all accounts before writing anything; names are input, not a source-code allowlist.
++  const users=[];
++  for(const login of logins){
++    if(!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(login))throw new Error('Invalid GitHub login');
++    const response=await fetch(`https://api.github.com/users/${encodeURIComponent(login)}`,{headers:{Accept:'application/vnd.github+json',...(process.env.GITHUB_TOKEN?{Authorization:`Bearer ${process.env.GITHUB_TOKEN}`}:{})},signal:AbortSignal.timeout(15000)});
++    if(!response.ok)throw new Error(`Cannot resolve GitHub user ${login}`);
++    const identity=await response.json();
++    if(identity.type!=='User'||!Number.isSafeInteger(identity.id)||identity.id<=0||typeof identity.login!=='string')throw new Error('Expected a human GitHub identity');
++    users.push({id:String(identity.id),login:identity.login});
++  }
++  if(values.bootstrap&&users[0].id!==actor)throw new Error('Bootstrap identity does not match actor');
++  const client=await pool.connect();
++  try{
++    await client.query('BEGIN');await client.query('SELECT pg_advisory_xact_lock(7983161)');
++    const owners=(await client.query("SELECT github_id::text FROM website_roles WHERE role='owner' AND revoked_at IS NULL")).rows;
++    if(values.bootstrap){if(owners.length)throw new Error('An owner already exists; use authenticated role management');}
++    else if(!owners.some(r=>r.github_id===actor))throw new Error('Acting account is not a website owner');
++    for(const user of users){
++      const before=(await client.query('SELECT role FROM website_roles WHERE github_id=$1 AND revoked_at IS NULL',[user.id])).rows[0]?.role??null;
++      if(before==='owner'&&role!=='owner'){
++        const remaining=(await client.query("SELECT count(*)::int AS n FROM website_roles WHERE role='owner' AND revoked_at IS NULL")).rows[0].n;
++        if(remaining<=1)throw new Error('Cannot remove the last owner');
++      }
++      if(role==='revoke')await client.query('UPDATE website_roles SET revoked_at=clock_timestamp(),revoked_by=$2,reason=$3 WHERE github_id=$1 AND revoked_at IS NULL',[user.id,actor,values.reason.trim()]);
++      else await client.query(`INSERT INTO website_roles(github_id,login,role,granted_by,reason) VALUES ($1,$2,$3,$4,$5)
++        ON CONFLICT(github_id) DO UPDATE SET login=EXCLUDED.login,role=EXCLUDED.role,granted_by=EXCLUDED.granted_by,granted_at=clock_timestamp(),revoked_at=NULL,revoked_by=NULL,reason=EXCLUDED.reason`,[user.id,user.login,role,actor,values.reason.trim()]);
++      await client.query(`INSERT INTO website_admin_audit(actor_github_id,actor_login,target_github_id,target_login,action,reason,details)
++        VALUES ($1,$2,$3,$4,$5,$6,$7)`,[actor,actorLogin,user.id,user.login,values.bootstrap?'role.bootstrap':role==='revoke'?'role.revoke':'role.set',values.reason.trim(),JSON.stringify({before,after:role==='revoke'?null:role})]);
++    }
++    await client.query('COMMIT');
++    const result=await client.query('SELECT github_id::text,login,role,revoked_at IS NULL AS active FROM website_roles WHERE github_id=ANY($1::bigint[]) ORDER BY login',[users.map(u=>u.id)]);
++    console.log(JSON.stringify({roles:result.rows}));
++  }catch(error){await client.query('ROLLBACK');throw error}finally{client.release()}
++}finally{await pool.end()}

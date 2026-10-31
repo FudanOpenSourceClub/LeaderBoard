@@ -213,3 +213,6 @@
   .ranking-panel .ranking-person > strong { font-size: 12px; }
   .ranking-panel .tag-row { flex-wrap: wrap; }
 }
+
+
+.admin-panel {padding:24px;margin-bottom:28px;min-width:0}.admin-tabs,.admin-matches{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.admin-form{display:grid;gap:14px;max-width:640px;margin:20px 0}.admin-form select{padding:12px;border-radius:8px;background:var(--bg-panel,#161b22);color:inherit;border:1px solid #363b44}.admin-table-wrap{overflow-x:auto;max-width:100%}.admin-table{width:100%;border-collapse:collapse;font-size:14px;text-align:left}.admin-table th,.admin-table td{padding:12px;border-bottom:1px solid #30363d;vertical-align:top}.admin-table td{overflow-wrap:anywhere;min-width:90px}.admin-table td:nth-child(3){min-width:170px}.admin-panel [role=alert]{color:#ff9999}.admin-panel [role=status]{color:#83e0a0}

@@ -16,7 +16,8 @@ afterEach(()=>vi.unstubAllGlobals());afterAll(async()=>{await pool.end()});
 function mockOAuth(){vi.stubGlobal('fetch',vi.fn(async(url:unknown)=>new Response(JSON.stringify(String(url).includes('access_token')?{access_token:'fixture'}:{id:identityId,login:identityId===333234233?'owner':'registered-user',avatar_url:null}),{status:200})))}
 describe("website sessions and repository review",()=>{
   it("requires the original browser nonce, denies unregistered identities, and recognizes admin by ID",async()=>{
-    mockOAuth();const auth=new WebsiteAuthService(config,'333234233');
+    mockOAuth();const auth=new WebsiteAuthService(config);
+    await pool.query("INSERT INTO website_roles(github_id,login,role,granted_by,reason) VALUES (333234233,'owner','owner',333234233,'integration fixture') ON CONFLICT(github_id) DO UPDATE SET role='owner',revoked_at=NULL");
     const started=await auth.startLogin('/projects');const state=new URL(started.authorizeUrl).searchParams.get('state')!;
     await expect(auth.completeLogin('code',state,'x'.repeat(43))).rejects.toMatchObject({code:'INVALID_LOGIN'});
     identityId=777001;const loggedIn=await auth.completeLogin('code',state,started.browserToken);

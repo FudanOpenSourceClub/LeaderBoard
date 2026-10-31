@@ -53,6 +53,7 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
           <Link className="mobile-home-brand" to="/">LeaderBoard</Link>
           <Link className="mobile-round-link" to="/join" aria-label="加入达人榜"><AppIcon name="plus" size={21}/></Link>
           <Link className="mobile-round-link" to="/projects?search=1" aria-label="搜索项目"><AppIcon name="search" size={21}/></Link>
+          {session.authenticated&&session.isAdmin&&<Link className="mobile-round-link" to="/admin" aria-label="管理后台"><AppIcon name="settings" size={21}/></Link>}
         </div>
       </header>
 

@@ -445,3 +445,7 @@ award_key TEXT, points INTEGER CHECK(points>0), reason TEXT, awarded_at TIMESTAM
 `repository_star_counts` 保存 `github_id BIGINT PRIMARY KEY`、`stars INTEGER NULL CHECK(stars>=0)`、`checked_at TIMESTAMPTZ NOT NULL DEFAULT now()`。GitHub API 按稳定仓库 ID 查询并核对返回 ID；相同仓库供所有用户共享缓存。`stars=NULL` 表示仓库无法公开访问，不满足门槛。临时请求失败不覆盖最近一次核实结果，也不会为未核实仓库补造 Star 数。
 
 Commit/Issue 只对 Star≥10 的仓库应用原有3次/仓库/月及10次/人/月限制；PR继续仅使用 `scoring_repositories` 白名单判断，提交20分、合并另加30分。两个条件独立，仓库所有者身份不影响 Star 门槛。每次计分根据当前缓存重新处理完整历史，低 Star 记录保留原始来源并计0分，不占额度。
+
+
+## Website administration
+`website_roles` stores stable github_id (PK), display login, owner/admin role, grant actor/time/reason and revocation actor/time. Empty on migration: no personal accounts in source. `website_admin_audit` is an append-only application ledger of role and score operations, actor/target IDs and display names, action, reason, JSON details, server time. `contributor_score_adjustments` references contributor_id, signed nonzero integer delta (±100000), actor ID/name, reason, unique UUID request_id, optional unique reverses_id (self FK), server time. Original contributions are never edited. Role changes and privileged score writes share a transaction advisory lock. Initial owner is established only through a trusted server CLI, never HTTP. Subsequent grants use the owner-protected /admin UI.

@@ -1,0 +1,48 @@
+name: Website administrator roles
+on:
+  workflow_dispatch:
+    inputs:
+      users:
+        description: Comma-separated GitHub usernames
+        required: true
+        type: string
+      role:
+        description: Website role (not GitHub repository permission)
+        type: choice
+        options: [admin, owner, revoke]
+        default: admin
+      reason:
+        description: Audit reason (at least 5 characters)
+        required: true
+        type: string
+      bootstrap:
+        description: Initialize the acting account as first owner (empty database only)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: website-admin-role-management
+  cancel-in-progress: false
+jobs:
+  roles:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 5
+    steps:
+      - name: Update database roles in the active release
+        env:
+          ROLE_USERS: ${{ inputs.users }}
+          ROLE_VALUE: ${{ inputs.role }}
+          ROLE_REASON: ${{ inputs.reason }}
+          ROLE_BOOTSTRAP: ${{ inputs.bootstrap }}
+          ROLE_ACTOR_ID: ${{ github.actor_id }}
+          ROLE_ACTOR_LOGIN: ${{ github.actor }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release="$(systemctl show -p WorkingDirectory --value leadboard.service)"
+          test -f "$release/scripts/website-roles.mjs"
+          args=(--actor "$ROLE_ACTOR_ID" --actor-login "$ROLE_ACTOR_LOGIN" --users "$ROLE_USERS" --role "$ROLE_VALUE" --reason "$ROLE_REASON")
+          if [ "$ROLE_BOOTSTRAP" = "true" ]; then args+=(--bootstrap); fi
+          sudo /usr/local/bin/leadboard-node --env-file=/etc/leadboard/leadboard.env "$release/scripts/website-roles.mjs" "${args[@]}"

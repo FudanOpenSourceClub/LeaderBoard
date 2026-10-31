@@ -54,7 +54,7 @@ jobs:
 
           echo "=== Download exact commit ==="
           archive="$work/source.tar.gz"
-          curl -fL --retry 8 --retry-delay 3 --retry-all-errors --connect-timeout 15 --max-time 300             "https://codeload.github.com/swiftgorge5-eng/LeaderBoard/tar.gz/${GITHUB_SHA}"             -o "$archive"
+          curl -fL --retry 8 --retry-delay 3 --retry-all-errors --connect-timeout 15 --max-time 300             "https://codeload.github.com/${GITHUB_REPOSITORY}/tar.gz/${GITHUB_SHA}"             -o "$archive"
           mkdir -p "$work/src"
           tar -xzf "$archive" -C "$work/src" --strip-components=1
           cd "$work/src"

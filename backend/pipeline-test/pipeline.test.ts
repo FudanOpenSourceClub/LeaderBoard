@@ -178,8 +178,11 @@ describe("Analytics pipeline fixture", () => {
     expect(ledger?.rows.reduce((sum,row)=>sum+(row.scoring?.points??0),0)).toBe(104);
     await pool.query(`INSERT INTO contributors(github_id,login,enrolled_at)
       SELECT 3000+n,'member-'||n,now() FROM generate_series(1,12) n`);
-    const top=await analytics.getContributorLeaderboard({range:"all",metric:"score",limit:5000});
+    const top=await analytics.getContributorLeaderboard({range:"all",metric:"score",limit:10});
     expect(top).toHaveLength(10);
     expect(top[0]).toMatchObject({login:"alice",score:104});
+    const expanded=await analytics.getContributorLeaderboard({range:"all",metric:"score",limit:5000});
+    expect(expanded).toHaveLength(15);
+    expect(expanded.slice(0,10)).toEqual(top);
   });
 });

@@ -41,7 +41,7 @@ jobs:
           board=request('/api/v1/contributors/leaderboard?range=all&metric=score&limit=10'); assert len(board['items'])<=10
           index=request('/projects'); bundle=request(re.search(r'src="([^"]+\.js)"',index).group(1))
           assert '复旦开源仓库必吃榜' in bundle and '请先注册 LeaderBoard' in bundle
-          assert 'Commit 与 Issue 仅在仓库 Star ≥ 10 时计分' in bundle and 'PR 仅在白名单仓库计分' in bundle
+          assert '无 Star 门槛' in bundle and '仅白名单仓库' in bundle
           assert '/export.csv' not in bundle and '导出 CSV' not in bundle
           assert '<!doctype html>' in request('/admin')
           print('Public smoke passed: catalog, permissions, rewards, backend registration confirmation, disabled exports')

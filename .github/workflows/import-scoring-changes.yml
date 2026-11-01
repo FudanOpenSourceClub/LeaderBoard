@@ -28,7 +28,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - name: Import reviewed source and remove this temporary workflow
+      - name: Import reviewed application source
         shell: bash
         run: |
           set -euo pipefail
@@ -1117,11 +1117,10 @@ jobs:
              console.error(error instanceof Error ? error.message : "Contributor synchronization failed");
              process.exitCode = 1;
           REVIEWED_SOURCE_PATCH
-            git apply --check "$RUNNER_TEMP/source.patch"
-            git apply "$RUNNER_TEMP/source.patch"
+            git apply --check --exclude='.github/workflows/*' "$RUNNER_TEMP/source.patch"
+            git apply --exclude='.github/workflows/*' "$RUNNER_TEMP/source.patch"
           fi
-          if [ -f .github/workflows/import-scoring-changes.yml ]; then git rm .github/workflows/import-scoring-changes.yml; fi
-          git add backend frontend packages db scripts docs .github/workflows
+          git add backend frontend packages db scripts docs
           if ! git diff --cached --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'

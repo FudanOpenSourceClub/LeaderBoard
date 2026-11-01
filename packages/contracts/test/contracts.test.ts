@@ -17,6 +17,11 @@ const rank = { rank: 1, login: "alice", avatarUrl: null, commits: 2, prs: 2, iss
 const config = { githubToken: "test-only", githubOrg: "fixture", groupProperty: "leadboard_group", databaseUrl: "postgresql://localhost/fixture", port: 3000, ingestionCronSchedule: "0 */6 * * *", initialSyncDays: 30, syncOverlapMinutes: 10, dataStaleAfterHours: 12 };
 const status = { lastSuccessfulRunAt: null, lastRunStatus: null, nextScheduledRunAt: null, dataStatus: "missing" };
 const fixtures = [
+  [c.ContributionCategorySchema,"contributor"],
+  [c.ContributionTagSchema,{id:"1",githubId:"2001",login:"alice",category:"contributor",repository:"org/repo",evidenceUrls:["https://github.com/org/repo/pull/1"],reason:"真实贡献已被项目采用",actorLogin:"reviewer",createdAt:at,revokedAt:null}],
+  [c.ContributionTagsResponseSchema,{items:[]}],
+  [c.AddContributionTagRequestSchema,{githubId:"2001",category:"contributor",evidenceUrls:["https://github.com/org/repo/pull/1"],reason:"真实贡献已被项目采用",confirmed:true}],
+  [c.ContributionProfileSchema,{submittedPrs:0,submittedIssues:0,mergedPrs:0,mergedSubmittedPrs:0,prMergeRate:null,activeDays:0,activeWeeks:0,repositories:0,incomplete:false,lastSyncedAt:null}],
   [c.LeaderboardQuerySchema, { range: "30d", metric: "total", limit: 50 }],
   [c.SyncConfigSchema, config],
   [c.GitHubActorTypeSchema, "Unknown"], [c.GitHubActorRefSchema, actor],

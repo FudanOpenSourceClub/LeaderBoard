@@ -440,12 +440,17 @@ award_key TEXT, points INTEGER CHECK(points>0), reason TEXT, awarded_at TIMESTAM
 
 `project_notification_outbox` 每个申请一条持久化邮件任务，记录尝试次数、发送时间、下次尝试时间、租约和安全错误标记。任务通过数据库锁领取，发送失败退避重试，成功后不再领取；服务重启可继续。SMTP投递采用至少一次语义，极端断电场景可能重复通知，不能保证收件方邮箱的最终投递。
 
-## 19. Commit/Issue 的 Star 门槛
+## 19. 已停用的 Star 缓存
 
-`repository_star_counts` 保存 `github_id BIGINT PRIMARY KEY`、`stars INTEGER NULL CHECK(stars>=0)`、`checked_at TIMESTAMPTZ NOT NULL DEFAULT now()`。GitHub API 按稳定仓库 ID 查询并核对返回 ID；相同仓库供所有用户共享缓存。`stars=NULL` 表示仓库无法公开访问，不满足门槛。临时请求失败不覆盖最近一次核实结果，也不会为未核实仓库补造 Star 数。
+`repository_star_counts` 保存 `github_id BIGINT PRIMARY KEY`、`stars INTEGER NULL CHECK(stars>=0)`、`checked_at TIMESTAMPTZ NOT NULL DEFAULT now()`。GitHub API 按稳定仓库 ID 查询并核对返回 ID；相同仓库供所有用户共享缓存。`stars=NULL` 表示仓库无法公开访问；此缓存已退出计分和同步流程，仅保留历史数据。临时请求失败不覆盖最近一次核实结果，也不会为未核实仓库补造 Star 数。
 
-Commit/Issue 只对 Star≥10 的仓库应用原有3次/仓库/月及10次/人/月限制；PR继续仅使用 `scoring_repositories` 白名单判断，提交20分、合并另加30分。两个条件独立，仓库所有者身份不影响 Star 门槛。每次计分根据当前缓存重新处理完整历史，低 Star 记录保留原始来源并计0分，不占额度。
+Commit/Issue 无 Star 门槛，应用3次/仓库/月及10次/人/月限制；PR仅使用 `scoring_repositories` 白名单判断，提交20分、合并另加30分。Star缓存不参与计分，也不阻塞注册、增量同步或部署。已有历史按新规则重新计算。
 
 
 ## Website administration
 `website_roles` stores stable github_id (PK), display login, owner/admin role, grant actor/time/reason and revocation actor/time. Empty on migration: no personal accounts in source. `website_admin_audit` is an append-only application ledger of role and score operations, actor/target IDs and display names, action, reason, JSON details, server time. `contributor_score_adjustments` references contributor_id, signed nonzero integer delta (±100000), actor ID/name, reason, unique UUID request_id, optional unique reverses_id (self FK), server time. Original contributions are never edited. Role changes and privileged score writes share a transaction advisory lock. Initial owner is established only through a trusted server CLI, never HTTP. Subsequent grants use the owner-protected /admin UI.
+
+
+## Contribution classification and reduced permissions
+`contribution_tags`: id BIGSERIAL PK, contributor_id BIGINT FK to contributors(id), category TEXT (contributor/committer/maintainer), repository TEXT, evidence_urls JSONB, reason TEXT, actor_github_id BIGINT, actor_login TEXT, created_at TIMESTAMPTZ default clock_timestamp(), revoked_at TIMESTAMPTZ nullable, revoked_by BIGINT nullable. A partial unique index covers (contributor_id,category,lower(repository)) for active records. Revocation preserves records and writes website_admin_audit.
+The legacy website_roles value `admin` now means tag contributor only. It grants no project review, score adjustment, role management, audit-list access or tag revocation. Only `owner` retains those capabilities. Session isAdmin is true only for owners; canTag is true for active admin/owner roles. Tags never change points or GitHub permissions.

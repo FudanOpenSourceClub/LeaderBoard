@@ -139,15 +139,12 @@ describe("SyncCoordinator PostgreSQL integration", () => {
   it("does not apply repository scope after discovery failure and records a failed run", async () => {
     const now = new Date("2026-09-25T12:00:00.000Z");
     const fx = fixture({ trackedRepositories: [repoA], syncedAt: now.toISOString() });
-    let starRefreshes = 0;
-    fx.dependencies.refreshStars = async () => { starRefreshes++; };
     fx.failScope();
     const coordinator = new SyncCoordinator(config, fx.dependencies, pool, () => now);
 
     const result = await coordinator.runSync({ trigger: "manual" });
     expect(result).toMatchObject({ status: "failed", repositoriesOk: 0, repositoriesFailed: 0 });
     expect(fx.applyCalls).toBe(0);
-    expect(starRefreshes).toBe(1);
 
     const stored = await pool.query<{ status: string; finished_at: Date | null }>(
       "SELECT status, finished_at FROM sync_runs ORDER BY id DESC LIMIT 1",

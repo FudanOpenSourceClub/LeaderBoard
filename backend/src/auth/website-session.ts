@@ -43,8 +43,8 @@ export class WebsiteAuthService implements WebsiteAuthApi {
     const result=await getDbPool().query<{github_id:string;login:string;csrf_token:string}>(
       `SELECT github_id::text,login,csrf_token FROM website_sessions WHERE token_hash=$1 AND expires_at>now()`,[hash(token)]);
     const row=result.rows[0]; if(!row)return null;
-    const memberId=await this.memberFor(row.github_id); const role=await getWebsiteRole(row.github_id); const isAdmin=role!==null;
-    if (!memberId && !isAdmin) return null;
+    const memberId=await this.memberFor(row.github_id); const role=await getWebsiteRole(row.github_id); const isAdmin=role==="owner";
+    if (!memberId && !role) return null;
     return {githubId:row.github_id,login:row.login,memberId,isAdmin,role,csrfToken:row.csrf_token};
   }
   async getRegistrationIdentity(token: string): Promise<GitHubIdentity | null> {

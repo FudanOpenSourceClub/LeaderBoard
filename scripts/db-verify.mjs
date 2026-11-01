@@ -13,6 +13,7 @@ const id = () => required("bigint", "serial");
 
 // Expected columns, nullability and defaults come from docs/data-model.md.
 const tables = {
+  contribution_tags:{id:id(),contributor_id:required("bigint"),category:required("text"),repository:required("text"),evidence_urls:required("jsonb"),reason:required("text"),actor_github_id:required("bigint"),actor_login:required("text"),created_at:required(timestamp,"clock_timestamp()"),revoked_at:optional(timestamp),revoked_by:optional("bigint")},
   website_roles: {github_id:required("bigint"),login:required("text"),role:required("text"),granted_by:required("bigint"),granted_at:required(timestamp,"clock_timestamp()"),revoked_at:optional(timestamp),revoked_by:optional("bigint"),reason:required("text")},
   website_admin_audit: {id:id(),actor_github_id:required("bigint"),actor_login:required("text"),target_github_id:required("bigint"),target_login:required("text"),action:required("text"),reason:required("text"),details:required("jsonb","'{}'::jsonb"),created_at:required(timestamp,"clock_timestamp()")},
   contributor_score_adjustments: {id:id(),contributor_id:required("bigint"),delta:required("integer"),reason:required("text"),actor_github_id:required("bigint"),actor_login:required("text"),request_id:required("uuid"),reverses_id:optional("bigint"),created_at:required(timestamp,"clock_timestamp()")},
@@ -115,6 +116,7 @@ const tables = {
 };
 
 const foreignKeys = [
+  ["contribution_tags","contributor_id","contributors","id"],
   ["contributor_score_adjustments","contributor_id","contributors","id"],
   ["contributor_score_adjustments","reverses_id","contributor_score_adjustments","id"],
   ["project_proposals","member_id","members","id"],
@@ -169,6 +171,7 @@ const indexes = {
 };
 
 const primaryKeys = {
+  contribution_tags:["id"],
   website_roles:["github_id"],website_admin_audit:["id"],contributor_score_adjustments:["id"],
   website_sessions:["token_hash"],website_login_states:["state_hash"],campus_projects:["id"],project_notification_outbox:["id"],
   groups: ["id"],
@@ -246,6 +249,7 @@ try {
   }
   if (!actualIndexes.some(index => index.index_name === "sync_runs_status_finished_idx" && index.definition.includes("(status, finished_at DESC)"))) problems.push("sync_runs_status_finished_idx must sort finished_at DESC");
   if (!actualIndexes.some(index => index.index_name === "member_github_primary_idx" && /WHERE is_primary/.test(index.definition))) problems.push("member_github_primary_idx must be partial on is_primary");
+  if (!actualIndexes.some(index=>index.index_name==="contribution_tag_active_idx" && /WHERE \(revoked_at IS NULL\)/.test(index.definition) && /UNIQUE INDEX/.test(index.definition))) problems.push("missing active contribution tag uniqueness");
   if (problems.length) {
     for (const problem of problems) console.error(problem);
     process.exitCode = 1;

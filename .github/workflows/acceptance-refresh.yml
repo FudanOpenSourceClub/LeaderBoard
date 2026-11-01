@@ -1,0 +1,107 @@
+name: Refresh scores and verify acceptance
+on:
+  push:
+    branches: [audit/acceptance-20261101]
+    paths: [.github/workflows/acceptance-refresh.yml]
+permissions:
+  contents: read
+jobs:
+  refresh-and-verify:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 20
+    steps:
+      - name: Refresh scores using the current deployed release
+        shell: bash
+        run: |
+          set -euo pipefail
+          release="$(systemctl show -p WorkingDirectory --value leadboard.service)"
+          test "${release##*-}" = "b2ce9634"
+          cd "$release"
+          sudo /usr/local/bin/leadboard-node --env-file=/etc/leadboard/leadboard.env backend/dist/sync/once.js
+      - name: Production aggregates and score checks (read only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          systemctl is-active leadboard.service
+          release="$(systemctl show -p WorkingDirectory --value leadboard.service)"
+          cat > "$RUNNER_TEMP/acceptance-audit.mjs" <<'AUDIT'
+          import {pathToFileURL} from 'node:url';
+          const release=process.argv[2];
+          const mod=async p=>import(pathToFileURL(`${release}/backend/dist/${p}.js`).href);
+          const {getDbPool}=await mod('db/index');
+          const pool=getDbPool(); const client=await pool.connect();
+          const report={release};
+          const query=async(sql,args)=>(await client.query(sql,args)).rows;
+          try {
+           await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY');
+           await client.query("SET LOCAL statement_timeout='30s'");
+           await client.query("SET LOCAL lock_timeout='3s'");
+           report.readOnly=(await query('SHOW transaction_read_only'))[0];
+           const now=(await query('SELECT now() AS at'))[0].at; report.snapshotAt=now;
+           report.registration=(await query(`WITH complete AS (
+           SELECT m.id FROM members m JOIN member_github_accounts link ON link.member_id=m.id AND link.is_primary=TRUE
+           JOIN github_accounts a ON a.github_id=link.github_id AND a.github_id=m.registration_github_id
+           JOIN contributors c ON c.github_id=a.github_id AND c.enrolled_at IS NOT NULL AND c.is_bot=FALSE
+           WHERE m.verification_status='verified' AND m.student_fingerprint IS NOT NULL
+           AND (SELECT count(*) FROM member_github_accounts x WHERE x.member_id=m.id)=1
+           AND (SELECT count(*) FROM member_github_accounts x WHERE x.github_id=a.github_id)=1
+           AND NOT EXISTS(SELECT 1 FROM members other WHERE other.id<>m.id AND
+           (other.student_fingerprint=m.student_fingerprint OR other.registration_github_id=a.github_id)))
+           SELECT (SELECT count(*) FROM members) AS memberRecords,(SELECT count(*) FROM members WHERE verification_status='revoked') AS revokedMembers,count(*) AS fullyRegistered,
+           (SELECT count(*) FROM members)-count(*) AS incompleteOrRevoked FROM complete`))[0];
+           report.enrollment=(await query(`SELECT count(*) AS contributors,count(*) FILTER(WHERE enrolled_at IS NOT NULL AND is_bot=FALSE) AS enrolled,
+           count(*) FILTER(WHERE enrolled_at IS NOT NULL AND public_synced_at IS NULL) AS neverSynced,
+           count(*) FILTER(WHERE enrolled_at IS NOT NULL AND public_sync_incomplete) AS incomplete,
+           count(*) FILTER(WHERE enrolled_at IS NOT NULL AND public_sync_truncated) AS truncated,
+           min(public_synced_at) FILTER(WHERE enrolled_at IS NOT NULL) AS oldestSnapshot,
+           max(public_synced_at) FILTER(WHERE enrolled_at IS NOT NULL) AS newestSnapshot FROM contributors`))[0];
+           report.syncRuns=await query(`SELECT id,status,trigger,range_from,range_to,started_at,finished_at,repositories_ok,repositories_failed,
+           CASE WHEN error_message ~ '^[A-Za-z][A-Za-z0-9_]{0,80}$' THEN error_message WHEN error_message IS NOT NULL THEN 'redacted' END AS error_class
+           FROM sync_runs ORDER BY id DESC LIMIT 5`);
+           report.lastSuccess=await query("SELECT id,range_to,finished_at FROM sync_runs WHERE status='success' ORDER BY finished_at DESC LIMIT 1");
+           report.roles=await query('SELECT role,count(*) FROM website_roles WHERE revoked_at IS NULL GROUP BY role');
+           report.pendingNotifications=(await query('SELECT count(*) FROM project_notification_outbox WHERE sent_at IS NULL'))[0];
+           report.codeConfig=Object.fromEntries(['INGESTION_CRON_SCHEDULE','DATA_STALE_AFTER_HOURS','TZ'].map(k=>[k,process.env[k]??null]));
+           const {AnalyticsService}=await mod('analytics/index');
+           const {getContributionScores}=await mod('analytics/scoring');
+           const service=new AnalyticsService(client,()=>now);
+           const scores=await getContributionScores(client,null,now.toISOString());
+           const board=await service.getContributorLeaderboard({range:'all',metric:'score',limit:5000});
+           const perMonth=new Map(),perRepo=new Map();
+           for(const d of scores.decisions.filter(d=>d.commitIssuePoints>0)){
+            const m=`${d.contributorId}:${d.month}`,r=`${m}:${d.repositoryGithubId??d.repository.toLowerCase()}`;
+            perMonth.set(m,(perMonth.get(m)??0)+d.commitIssuePoints);perRepo.set(r,(perRepo.get(r)??0)+d.commitIssuePoints);
+           }
+           report.scoring={rowsChecked:board.length,events:scores.decisions.length,
+           componentMismatches:board.filter(r=>r.score!==r.commitIssueScore+r.prOpenedScore+r.prMergedScore+r.bonusScore+r.adjustmentScore).length,
+           duplicateLogins:board.length-new Set(board.map(r=>r.login.toLowerCase())).size,
+           outOfOrder:board.filter((r,i)=>i>0&&board[i-1].score<r.score).length,
+           monthlyCapViolations:[...perMonth.values()].filter(v=>v>10).length,repositoryCapViolations:[...perRepo.values()].filter(v=>v>3).length};
+           console.log('ACCEPTANCE_DATABASE '+JSON.stringify(report));
+          } catch(e) { console.log('ACCEPTANCE_ERROR '+JSON.stringify({name:e.name,code:e.code??null}));process.exitCode=1; }
+          finally {await client.query('ROLLBACK');client.release();await pool.end();}
+          for(const path of ['/health','/api/v1/auth/session','/api/v1/sync/status','/api/v1/admin/roles','/api/v1/admin/score-adjustments','/api/v1/admin/project-proposals','/api/v1/admin/contribution-tags']){
+           try{const r=await fetch('http://127.0.0.1:3000'+path,{signal:AbortSignal.timeout(10000)});const out={path,status:r.status};
+           if(path.endsWith('/sync/status'))out.sync=await r.json();
+           console.log('ACCEPTANCE_HTTP '+JSON.stringify(out));}catch(e){console.log('ACCEPTANCE_HTTP '+JSON.stringify({path,error:e.name}));process.exitCode=1;}
+          }
+          AUDIT
+          sudo /usr/local/bin/leadboard-node --env-file=/etc/leadboard/leadboard.env "$RUNNER_TEMP/acceptance-audit.mjs" "$release"
+          cd "$release"
+          sudo /usr/local/bin/leadboard-node --env-file=/etc/leadboard/leadboard.env scripts/db-verify.mjs
+  public-tls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify public HTTPS without bypassing certificates
+        shell: python
+        run: |
+          import urllib.request, ssl, json
+          for path in ['/health','/api/v1/sync/status','/api/v1/contributors/leaderboard?range=all&metric=score&limit=10','/join','/admin']:
+              try:
+                  with urllib.request.urlopen('https://47.116.20.196'+path,context=ssl.create_default_context(),timeout=20) as r:
+                      data=r.read()
+                      print(json.dumps({'path':path,'status':r.status,'tlsVerified':True,'bytes':len(data)}))
+              except Exception as e:
+                  print(json.dumps({'path':path,'tlsVerified':False,'error':str(e)}))
+                  raise

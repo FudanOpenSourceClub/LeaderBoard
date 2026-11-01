@@ -7,7 +7,7 @@ on:
         required: true
         type: string
       role:
-        description: Website role: admin adds tags only; owner manages site
+        description: "Website role: admin adds tags only; owner manages site"
         type: choice
         options: [admin, owner, revoke]
         default: admin

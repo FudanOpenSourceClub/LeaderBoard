@@ -29,7 +29,7 @@ describe("registered project applications and admin review",()=>{
     expect(review).not.toHaveBeenCalled();expect(list).not.toHaveBeenCalled();
   });
   it("allows only the server-confirmed admin to review, with CSRF protection",async()=>{
-    const {app,review}=setup({...user,isAdmin:true});await request(app).get("/api/v1/admin/project-proposals").expect(200,{items:[]});
+    const {app,review}=setup({...user,isAdmin:true,role:"owner"});await request(app).get("/api/v1/admin/project-proposals").expect(200,{items:[]});
     await request(app).post("/api/v1/admin/project-proposals/7/review").send({decision:"reject"}).expect(403);
     await request(app).post("/api/v1/admin/project-proposals/7/review").set("X-CSRF-Token",user.csrfToken).send({decision:"approve",description:"这是公开展示的项目简介，供其他用户了解项目。"}).expect(200,{reviewed:true});
     expect(review).toHaveBeenCalledWith(7,expect.objectContaining({decision:"approve"}),"123");

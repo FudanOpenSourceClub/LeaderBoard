@@ -125,6 +125,33 @@ export const GroupSummarySchema = z.object({ name: text });
 export type GroupSummary = z.infer<typeof GroupSummarySchema>;
 
 const activityCounts = { commits: count, prs: count, issues: count, total: count };
+export const ContributionCategorySchema=z.enum(["contributor","committer","maintainer"]);
+export const ContributionTagSchema=z.object({
+  id:githubId,githubId,login:text,category:ContributionCategorySchema,repository:text,
+  evidenceUrls:z.array(webUrl),reason:text,actorLogin:text,createdAt:utc,revokedAt:utc.nullable(),
+});
+export type ContributionTag=z.infer<typeof ContributionTagSchema>;
+export const ContributionTagsResponseSchema=z.object({items:z.array(ContributionTagSchema)});
+const evidenceLink=z.string().trim().max(1000).url().refine(v=>{
+  try{const u=new URL(v);return u.protocol==="https:"&&u.hostname==="github.com"&&!u.port&&!u.username&&!u.password
+    && /^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/(?:pull\/[1-9]\d*|issues\/[1-9]\d*|discussions\/[1-9]\d*|commit\/[a-fA-F0-9]{7,40}|blob\/.+)$/.test(u.pathname);}catch{return false}
+},"请提供公开 GitHub 贡献或维护者名单链接");
+export const AddContributionTagRequestSchema=z.object({
+  githubId,category:ContributionCategorySchema,evidenceUrls:z.array(evidenceLink).min(1).max(6),
+  reason:z.string().trim().min(5).max(1000),confirmed:z.literal(true),
+}).strict().superRefine((v,ctx)=>{
+  if(!v.evidenceUrls.every(url=>evidenceLink.safeParse(url).success))return;
+  const urls=v.evidenceUrls.map(u=>new URL(u));const repo=(u:URL)=>u.pathname.split('/').slice(1,3).join('/').toLowerCase();
+  if(new Set(urls.map(repo)).size!==1||new Set(urls.map(u=>u.origin+u.pathname)).size!==urls.length)ctx.addIssue({code:"custom",message:"证据必须属于同一项目且不能重复"});
+  if(v.category==='committer'&&urls.filter(u=>/\/pull\//.test(u.pathname)).length<3)ctx.addIssue({code:"custom",message:"Committer 需提供至少3个合并 PR 链接"});
+  if(v.category==='maintainer'&&(!urls.some(u=>/\/blob\//.test(u.pathname))||urls.filter(u=>/\/(pull|issues|discussions)\//.test(u.pathname)).length<2))ctx.addIssue({code:"custom",message:"Maintainer 需公开维护者名单及至少两次维护活动证据"});
+});
+export type AddContributionTagRequest=z.infer<typeof AddContributionTagRequestSchema>;
+export const ContributionProfileSchema=z.object({
+  submittedPrs:count,submittedIssues:count,mergedPrs:count,mergedSubmittedPrs:count,
+  prMergeRate:z.number().min(0).max(100).nullable(),activeDays:count,activeWeeks:count,repositories:count,
+  incomplete:z.boolean(),lastSyncedAt:utc.nullable(),
+});
 const scoringCounts = {
   score: z.number().int().safe().optional(), adjustmentScore: z.number().int().safe().optional(), commitIssueScore: count.optional(), prOpenedScore: count.optional(),
   prMergedScore: count.optional(), mergedPrs: count.optional(),
@@ -136,7 +163,7 @@ export type OrganizationActivitySummary = z.infer<typeof OrganizationActivitySum
 export const RepositoryStatSchema = z.object({ githubId, fullName: text, group: text, contributors: count, ...activityCounts });
 export type RepositoryStat = z.infer<typeof RepositoryStatSchema>;
 
-export const ContributorRankSchema = z.object({ rank: positive, login: text, avatarUrl: webUrl.nullable(), ...activityCounts, ...scoringCounts, bonusScore: count.optional() });
+export const ContributorRankSchema = z.object({ rank: positive, login: text, avatarUrl: webUrl.nullable(), ...activityCounts, ...scoringCounts, bonusScore: count.optional(),communityTags:z.array(ContributionTagSchema).optional() });
 export type ContributorRank = z.infer<typeof ContributorRankSchema>;
 
 export const ContributorRepositoryStatSchema = z.object({ githubId: githubId.nullable(), fullName: text, group: text, ...activityCounts, ...scoringCounts });
@@ -145,6 +172,7 @@ export type ContributorRepositoryStat = z.infer<typeof ContributorRepositoryStat
 export const ContributorDetailSchema = z.object({
   login: text, avatarUrl: webUrl.nullable(), range: TimeRangeSchema,
   ...activityCounts, ...scoringCounts, bonusScore: count.optional(), repositories: z.array(ContributorRepositoryStatSchema),
+  communityTags:z.array(ContributionTagSchema).optional(),contributionProfile:ContributionProfileSchema.optional(),
 });
 export type ContributorDetail = z.infer<typeof ContributorDetailSchema>;
 
@@ -234,7 +262,7 @@ export type EmailCodeVerifyResponse = z.infer<typeof EmailCodeVerifyResponseSche
 
 export const WebsiteSessionSchema = z.discriminatedUnion("authenticated", [
   z.object({authenticated:z.literal(false)}),
-  z.object({authenticated:z.literal(true),login:text,registered:z.boolean(),isAdmin:z.boolean(),role:z.enum(["owner","admin"]).nullable().default(null),csrfToken:text}),
+  z.object({authenticated:z.literal(true),login:text,registered:z.boolean(),isAdmin:z.boolean(),canTag:z.boolean().default(false),role:z.enum(["owner","admin"]).nullable().default(null),csrfToken:text}),
 ]);
 export type WebsiteSession = z.infer<typeof WebsiteSessionSchema>;
 export const CampusProjectSchema = z.object({

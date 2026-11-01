@@ -11,8 +11,8 @@ beforeAll(async()=>{
   await pool.query("TRUNCATE commits,pull_requests,issues,contributors,repositories,groups,scoring_repositories,repository_star_counts RESTART IDENTITY CASCADE");
 });
 afterAll(async()=>{await pool.end()});
-describe("Star-based Commit/Issue scoring with an independent PR whitelist",()=>{
-  it("recalculates existing history across profile, ranking and ledger when Star snapshots change",async()=>{
+describe("Star-independent Commit/Issue scoring with an independent PR whitelist",()=>{
+  it("keeps profile, ranking and ledger scores unchanged when Star snapshots change",async()=>{
     const row=(id:string,n:number,kind:PublicContribution['kind']):PublicContribution=>({
       kind,repository:id==='102'?'alice/my-project':`community/project-${id}`,repositoryGithubId:id,identifier:String(n),
       occurredAt:`2026-10-01T${String(n).padStart(2,'0')}:00:00Z`,
@@ -24,7 +24,7 @@ describe("Star-based Commit/Issue scoring with an independent PR whitelist",()=>
     await saveContributorActivity({githubId:'7001',login:'alice',avatarUrl:null},{rows,totals:{commit:6,issue:3,pull_request:2},truncated:false,incomplete:false},pool);
     await pool.query("INSERT INTO scoring_repositories(github_id,full_name,html_url,enabled) VALUES (101,'community/project-101','https://github.com/community/project-101',TRUE)");
     const analytics=new AnalyticsService(pool,()=>now);
-    expect((await analytics.getContributorDetail('alice','all'))?.score).toBe(50);
+    expect((await analytics.getContributorDetail('alice','all'))?.score).toBe(57);
     const starCounts:Record<string,number>={'101':9,'102':10,'103':100};
     const fetcher=vi.fn(async(url:URL|RequestInfo)=>{
       const id=String(url).split('/').at(-1)!;
@@ -32,19 +32,19 @@ describe("Star-based Commit/Issue scoring with an independent PR whitelist",()=>
     }) as typeof fetch;
     expect(await refreshRepositoryStars('fixture',pool,fetcher)).toEqual({refreshed:3});
     const detail=await analytics.getContributorDetail('alice','all');
-    expect(detail).toMatchObject({score:54,commitIssueScore:4,prOpenedScore:20,prMergedScore:30});
+    expect(detail).toMatchObject({score:57,commitIssueScore:7,prOpenedScore:20,prMergedScore:30});
     expect(detail?.repositories.find(r=>r.githubId==='102')?.score).toBe(3);
     expect(detail?.repositories.find(r=>r.githubId==='103')?.score).toBe(1);
-    expect((await analytics.getContributorLeaderboard({range:'all',metric:'score',limit:10}))[0]?.score).toBe(54);
+    expect((await analytics.getContributorLeaderboard({range:'all',metric:'score',limit:10}))[0]?.score).toBe(57);
     const ledger=await getContributorActivityExport('alice',pool);
-    expect(ledger?.rows.reduce((sum,r)=>sum+(r.scoring?.points??0),0)).toBe(54);
-    expect(ledger?.rows.filter(r=>r.repositoryGithubId==='101'&&r.kind==='commit').every(r=>r.scoring?.points===0)).toBe(true);
+    expect(ledger?.rows.reduce((sum,r)=>sum+(r.scoring?.points??0),0)).toBe(57);
+    expect(ledger?.rows.filter(r=>r.repositoryGithubId==='101'&&r.kind==='commit').reduce((n,r)=>n+(r.scoring?.points??0),0)).toBe(3);
     await refreshRepositoryStars('fixture',pool,fetcher);expect(fetcher).toHaveBeenCalledTimes(3);
     // Recheck old repositories even when no contributor has added any new events.
     await pool.query("UPDATE repository_star_counts SET checked_at=now()-interval '2 days'");
     starCounts['102']=9;
     expect(await refreshRepositoryStars('fixture',pool,fetcher)).toEqual({refreshed:3});
-    expect((await analytics.getContributorDetail('alice','all'))).toMatchObject({score:51,commitIssueScore:1,prOpenedScore:20,prMergedScore:30});
-    expect((await analytics.getContributorLeaderboard({range:'all',metric:'score',limit:10}))[0]?.score).toBe(51);
+    expect((await analytics.getContributorDetail('alice','all'))).toMatchObject({score:57,commitIssueScore:7,prOpenedScore:20,prMergedScore:30});
+    expect((await analytics.getContributorLeaderboard({range:'all',metric:'score',limit:10}))[0]?.score).toBe(57);
   });
 });

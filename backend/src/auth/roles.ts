@@ -11,12 +11,12 @@ export async function getWebsiteRole(githubId:string):Promise<WebsiteRole|null> 
   return result.rows[0]?.role??null;
 }
 // Serialize permission changes and privileged writes, including revocation races.
-export async function lockAdmin(client:PoolClient,actorId:string,ownerOnly=false) {
+export async function lockAdmin(client:PoolClient,actorId:string,ownerOnly=true) {
   await client.query("SELECT pg_advisory_xact_lock(7983161)");
   const result=await client.query<{role:WebsiteRole;login:string}>(
     "SELECT role,login FROM website_roles WHERE github_id=$1 AND revoked_at IS NULL",[actorId]);
   const actor=result.rows[0];
-  if(!actor || (ownerOnly&&actor.role!=="owner")) throw new AdminError("ADMIN_REQUIRED",403,ownerOnly?"仅站长可以管理授权":"当前账号没有管理权限");
+  if(!actor || actor.role!=="owner") throw new AdminError("ADMIN_REQUIRED",403,"仅站长可以审核项目、调分和管理授权");
   return actor;
 }
 export async function auditAdmin(client:PoolClient,actor:{githubId:string;login:string},target:{githubId:string;login:string},action:string,reason:string,details:unknown={}) {

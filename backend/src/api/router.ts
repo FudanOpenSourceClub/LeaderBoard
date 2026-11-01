@@ -45,6 +45,7 @@ import { getContributorActivityExport } from "../public-contributions/enrollment
 import { ProjectError, ProjectProposalService, type ProjectProposalApi } from "../projects/proposals.js";
 import { getSyncStatus as defaultGetSyncStatus, SyncAlreadyRunningError } from "../sync/index.js";
 
+import {createContributionTagRouter,type ContributionTagApi} from "./contribution-tags.js";
 import { AdminError } from "../auth/roles.js";
 import { createWebsiteAdminRouter, type WebsiteAdminDependencies } from "./admin.js";
 
@@ -58,6 +59,7 @@ interface AnalyticsApi {
 
 export interface ApiDependencies {
   websiteAdmin: Partial<WebsiteAdminDependencies>;
+  contributionTags: ContributionTagApi;
   analytics: AnalyticsApi;
   getSyncStatus(): Promise<SyncStatus>;
   emailVerification: EmailVerificationApi;
@@ -175,7 +177,7 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
   const requireUser=async(req:Request,admin=false)=>{
     const user=await websiteAuth.getSession(cookie(req,"leaderboard_session"));
     if(!user)throw new WebsiteAuthError("REGISTRATION_REQUIRED",401,"请先注册网站，已注册用户请先登录");
-    if(admin&&!user.isAdmin)throw new WebsiteAuthError("ADMIN_REQUIRED",403,"仅管理员可以处理申请");
+    if(admin&&user.role!=="owner")throw new WebsiteAuthError("ADMIN_REQUIRED",403,"仅站长可以处理申请");
     if(!admin&&!user.memberId)throw new WebsiteAuthError("REGISTRATION_REQUIRED",401,"请先完成网站注册");
     if(req.method!=="GET"&&!csrfMatches(user,req.get("X-CSRF-Token")))throw new WebsiteAuthError("INVALID_CSRF",403,"登录状态已变化，请刷新后重试");
     return user;
@@ -188,7 +190,7 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
       let token=cookie(req,"leaderboard_session");
       if(!token){const issued=await websiteAuth.fromRegistration(registrationCookie(req.headers.cookie));if(issued){token=issued;sessionCookie(res,token)}}
       const user=await websiteAuth.getSession(token);
-      res.json(WebsiteSessionSchema.parse(user?{authenticated:true,login:user.login,registered:!!user.memberId,isAdmin:user.isAdmin,role:user.role??null,csrfToken:user.csrfToken}:{authenticated:false}));
+      res.json(WebsiteSessionSchema.parse(user?{authenticated:true,login:user.login,registered:!!user.memberId,isAdmin:user.role==="owner",canTag:user.role==="owner"||user.role==="admin",role:user.role??null,csrfToken:user.csrfToken}:{authenticated:false}));
     }catch(error){if(!handleServiceError(error,res))next(error)}
   });
   router.get("/auth/github/login",async(req,res,next)=>{
@@ -357,6 +359,13 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
     }catch(error){if(!handleServiceError(error,res))next(error)}
   });
 
+  router.use("/admin",createContributionTagRouter(async req=>{
+    const user=await websiteAuth.getSession(cookie(req,"leaderboard_session"));
+    if(!user)throw new WebsiteAuthError("REGISTRATION_REQUIRED",401,"请先登录");
+    if(user.role!=="owner"&&user.role!=="admin")throw new WebsiteAuthError("TAGGER_REQUIRED",403,"当前账号没有标签添加权限");
+    if(req.method!=="GET"&&!csrfMatches(user,req.get("X-CSRF-Token")))throw new WebsiteAuthError("INVALID_CSRF",403,"请刷新后重试");
+    return user;
+  },dependencies.contributionTags));
   router.use("/admin",createWebsiteAdminRouter(req=>requireUser(req,true),dependencies.websiteAdmin));
   router.use(((error, _req, res, next)=>{if(!handleServiceError(error,res))next(error)}) as import("express").ErrorRequestHandler);
 

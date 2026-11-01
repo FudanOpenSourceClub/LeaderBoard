@@ -42,7 +42,7 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
           <NavLink className={navClass} to="/projects">项目</NavLink>
           <NavLink className={navClass} to="/contributors">达人榜</NavLink>
           {session.authenticated ? <Link className="header-account" to={accountUrl}><AppIcon name="user" size={16}/>{session.login || "我的"}</Link> : <a className="header-login" href={loginUrl}><AppIcon name="github" size={17}/> GitHub 登录</a>}
-          {session.authenticated && session.isAdmin && <NavLink className={navClass} to="/admin">管理</NavLink>}
+          {session.authenticated && (session.isAdmin||session.canTag) && <NavLink className={navClass} to="/admin">管理</NavLink>}
         </nav>
         <div className="mobile-header-actions">
           <Link className="mobile-round-link" to={accountUrl} aria-label="我的">
@@ -53,7 +53,7 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
           <Link className="mobile-home-brand" to="/">LeaderBoard</Link>
           <Link className="mobile-round-link" to="/join" aria-label="加入达人榜"><AppIcon name="plus" size={21}/></Link>
           <Link className="mobile-round-link" to="/projects?search=1" aria-label="搜索项目"><AppIcon name="search" size={21}/></Link>
-          {session.authenticated&&session.isAdmin&&<Link className="mobile-round-link" to="/admin" aria-label="管理后台"><AppIcon name="settings" size={21}/></Link>}
+          {session.authenticated&&(session.isAdmin||session.canTag)&&<Link className="mobile-round-link" to="/admin" aria-label="管理后台"><AppIcon name="settings" size={21}/></Link>}
         </div>
       </header>
 
@@ -65,7 +65,7 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
             <NavLink className={navClass} to="/contributors"><span className="side-nav-icon"><AppIcon name="users"/></span><span className="side-nav-copy"><strong>开源达人榜</strong></span></NavLink>
             <NavLink className={navClass} to="/join"><span className="side-nav-icon"><AppIcon name="plus"/></span><span className="side-nav-copy"><strong>加入达人榜</strong></span></NavLink>
             <NavLink className={navClass} to={accountUrl}><span className="side-nav-icon"><AppIcon name="user"/></span><span className="side-nav-copy"><strong>我的</strong></span></NavLink>
-            {session.authenticated && session.isAdmin && <NavLink className={navClass} to="/admin"><span className="side-nav-icon"><AppIcon name="settings"/></span><span className="side-nav-copy"><strong>管理后台</strong></span></NavLink>}
+            {session.authenticated && (session.isAdmin||session.canTag) && <NavLink className={navClass} to="/admin"><span className="side-nav-icon"><AppIcon name="settings"/></span><span className="side-nav-copy"><strong>管理后台</strong></span></NavLink>}
           </nav>
         </aside>
 

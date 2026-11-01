@@ -14,6 +14,7 @@ import {
 } from "@leadboard/contracts";
 import type { Pool } from "pg";
 import { getDbPool } from "../db/index.js";
+import {getTagMap} from "./contribution-tags.js";
 import { getScoreAdjustments } from "./adjustments.js";
 import { getContributorAwards } from "./awards.js";
 import { emptyScore, getContributionScores, type ScoreDecision } from "./scoring.js";
@@ -206,11 +207,13 @@ export class AnalyticsService {
       [bounds.from, bounds.to, input.group ?? null, activeIds],
     );
 
+    const communityTags=await getTagMap(this.pool,result.rows.map(r=>r.id));
     const rows = result.rows.map((row) => {
       const contributionScore = sumScores(decisions.filter(d=>d.contributorId===row.id));
       const bonusScore = awards.get(row.id) ?? 0;
       return {
       login: row.login,
+      communityTags:communityTags.get(row.id)??[],
       avatarUrl: row.avatar_url,
       commits: safeNumber(row.commits),
       prs: safeNumber(row.prs),
@@ -229,8 +232,8 @@ export class AnalyticsService {
   }
 
   async getContributorDetail(username: string, range: TimeRange): Promise<ContributorDetail | null> {
-    const contributor = await this.pool.query<{ id: string; login: string; avatar_url: string | null; enrolled_at: Date | null }>(
-      `SELECT id::text, login, avatar_url, enrolled_at FROM contributors
+    const contributor = await this.pool.query<{ id: string; login: string; avatar_url: string | null; enrolled_at: Date | null; public_synced_at:Date|null; public_sync_truncated:boolean; public_sync_incomplete:boolean }>(
+      `SELECT id::text, login, avatar_url, enrolled_at, public_synced_at, public_sync_truncated, public_sync_incomplete FROM contributors
        WHERE lower(login) = lower($1) AND is_bot = FALSE
        ORDER BY updated_at DESC, id ASC LIMIT 1`,
       [username],
@@ -276,12 +279,27 @@ export class AnalyticsService {
           commits:0,prs:0,issues:0,total:0,...score});
       }
     }
-    if (repositories.length === 0 && actor.enrolled_at === null && personalScores.score===0 && bonusScore===0 && adjustmentScore===0) return null;
+    const tags=(await getTagMap(this.pool,[actor.id])).get(actor.id)??[];
+    if (tags.length===0 && repositories.length === 0 && actor.enrolled_at === null && personalScores.score===0 && bonusScore===0 && adjustmentScore===0) return null;
     const commits = repositories.reduce((sum, row) => sum + row.commits, 0);
     const prs = repositories.reduce((sum, row) => sum + row.prs, 0);
     const issues = repositories.reduce((sum, row) => sum + row.issues, 0);
 
+    const source=scoring.decisions.filter(d=>d.contributorId===actor.id);
+    const period=source.filter(d=>(bounds.from===null||d.occurredAt>=bounds.from)&&d.occurredAt<bounds.to);
+    const cohortPrs=period.filter(d=>d.kind==='pull_request');
+    const merged=(d:typeof source[number])=>d.mergedAt!==null&&d.mergedAt<bounds.to;
+    const mergedSubmittedPrs=cohortPrs.filter(merged).length;
+    const days=new Set(period.map(d=>Math.floor((Date.parse(d.occurredAt)+8*3600000)/86400000)));
+    const contributionProfile={submittedPrs:cohortPrs.length,submittedIssues:period.filter(d=>d.kind==='issue').length,
+      mergedPrs:source.filter(d=>d.kind==='pull_request'&&merged(d)&&(bounds.from===null||d.mergedAt!>=bounds.from)).length,
+      mergedSubmittedPrs,prMergeRate:cohortPrs.length?Math.round(10000*mergedSubmittedPrs/cohortPrs.length)/100:null,
+      activeDays:days.size,activeWeeks:new Set([...days].map(d=>Math.floor((d+3)/7))).size,
+      repositories:new Set(period.map(d=>d.repositoryGithubId??d.repository.toLowerCase())).size,
+      incomplete:actor.public_sync_incomplete||actor.public_sync_truncated||actor.public_synced_at===null,
+      lastSyncedAt:actor.public_synced_at?.toISOString()??null};
     return ContributorDetailSchema.parse({
+      communityTags:tags,contributionProfile,
       login: actor.login,
       avatarUrl: actor.avatar_url,
       range,

@@ -4,7 +4,7 @@ import {createApp} from "../src/app.js";
 import {createApiRouter} from "../src/api/router.js";
 import type {WebsiteUser} from "../src/auth/website-session.js";
 const requestId="12345678-1234-4234-8234-123456789abc";
-const admin:WebsiteUser={githubId:"7001",login:"reviewer",memberId:null,isAdmin:true,role:"admin",csrfToken:"fixture-csrf"};
+const admin:WebsiteUser={githubId:"7001",login:"reviewer",memberId:null,isAdmin:true,role:"owner",csrfToken:"fixture-csrf"};
 function setup(user:WebsiteUser|null=admin) {
   const result={id:"1",githubId:"8001",login:"contributor",delta:-10,reason:"确认贡献重复计分",actorLogin:"reviewer",createdAt:"2026-10-31T12:00:00.000Z",requestId,reversesId:null,reversed:false};
   const scores={contributors:vi.fn().mockResolvedValue([{githubId:"8001",login:"contributor"}]),list:vi.fn().mockResolvedValue([]),adjust:vi.fn().mockResolvedValue(result),reverse:vi.fn().mockResolvedValue({...result,id:"2",delta:10,reversesId:"1"})};
@@ -39,7 +39,7 @@ describe("website admin access matrix",()=>{
     const r=await request(app).get('/api/v1/admin/score-adjustments').expect(200);expect(r.headers['cache-control']).toBe('no-store');
   });
   it("denies admin privilege escalation; owner resolves target identity on the server",async()=>{
-    const ordinary=setup();await request(ordinary.app).post('/api/v1/admin/roles').set('X-CSRF-Token',admin.csrfToken).send({githubLogin:'new-admin',role:'owner',reason:'新增站长授权说明'}).expect(403);
+    const ordinary=setup({...admin,isAdmin:false,role:"admin"});await request(ordinary.app).post('/api/v1/admin/roles').set('X-CSRF-Token',admin.csrfToken).send({githubLogin:'new-admin',role:'owner',reason:'新增站长授权说明'}).expect(403);
     expect(ordinary.setRole).not.toHaveBeenCalled();expect(ordinary.resolve).not.toHaveBeenCalled();
     const owner=setup({...admin,role:'owner'});
     await request(owner.app).post('/api/v1/admin/roles').set('X-CSRF-Token',admin.csrfToken).send({githubLogin:'new-admin',role:'admin',reason:'新增管理员审核授权'}).expect(200);

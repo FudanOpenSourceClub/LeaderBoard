@@ -18,7 +18,7 @@ describe("persistent website roles and score ledger",()=>{
     expect(await getWebsiteRole('333234233')).toBeNull();
     await setWebsiteRole(owner,{githubId:admin,login:'reviewer'},'admin',reason);
     const token='x'.repeat(43);await pool.query("INSERT INTO website_sessions(token_hash,github_id,login,csrf_token,expires_at) VALUES ($1,$2,'reviewer','csrf',now()+interval '1 hour')",[createHash('sha256').update(token).digest('hex'),admin]);
-    const auth=new WebsiteAuthService();expect(await auth.getSession(token)).toMatchObject({isAdmin:true,role:'admin',memberId:null});
+    const auth=new WebsiteAuthService();expect(await auth.getSession(token)).toMatchObject({isAdmin:false,role:'admin',memberId:null});
     await expect(setWebsiteRole(admin,{githubId:admin,login:'reviewer'},'owner',reason)).rejects.toMatchObject({status:403});
     await setWebsiteRole(owner,{githubId:admin,login:'reviewer'},null,reason);expect(await auth.getSession(token)).toBeNull();
     await expect(service.adjust(admin,{githubId:target,delta:1,reason,requestId:randomUUID()})).rejects.toMatchObject({status:403});
@@ -32,6 +32,7 @@ describe("persistent website roles and score ledger",()=>{
     expect(Number((await pool.query("SELECT count(*)::text FROM website_roles WHERE role='owner' AND revoked_at IS NULL")).rows[0].count)).toBe(1);
   });
   it("applies concurrent retries once, audits, ranks zero-activity contributors and preserves signed totals",async()=>{
+    await pool.query("UPDATE website_roles SET role='owner' WHERE github_id=$1",[admin]);
     const input={githubId:target,delta:-10,reason,requestId:randomUUID()};
     const [a,b]=await Promise.all([service.adjust(admin,input),service.adjust(admin,input)]);expect(a.id).toBe(b.id);
     await expect(service.adjust(admin,{...input,delta:20})).rejects.toMatchObject({code:'IDEMPOTENCY_CONFLICT'});

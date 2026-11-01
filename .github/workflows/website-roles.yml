@@ -7,7 +7,7 @@ on:
         required: true
         type: string
       role:
-        description: Website role (not GitHub repository permission)
+        description: "Website role: admin adds tags only; owner manages site"
         type: choice
         options: [admin, owner, revoke]
         default: admin

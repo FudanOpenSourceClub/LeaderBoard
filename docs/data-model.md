@@ -440,7 +440,7 @@ award_key TEXT, points INTEGER CHECK(points>0), reason TEXT, awarded_at TIMESTAM
 
 `project_notification_outbox` 每个申请一条持久化邮件任务，记录尝试次数、发送时间、下次尝试时间、租约和安全错误标记。任务通过数据库锁领取，发送失败退避重试，成功后不再领取；服务重启可继续。SMTP投递采用至少一次语义，极端断电场景可能重复通知，不能保证收件方邮箱的最终投递。
 
-## 19. 已停用的 Star 缓存
+## 19. 仓库 Star 缓存与10 Star准入
 
 `repository_star_counts` 保存 `github_id BIGINT PRIMARY KEY`、`stars INTEGER NULL CHECK(stars>=0)`、`checked_at TIMESTAMPTZ NOT NULL DEFAULT now()`。GitHub API 按稳定仓库 ID 查询并核对返回 ID；相同仓库供所有用户共享缓存。`stars=NULL` 表示仓库无法公开访问；此缓存现用于Commit/Issue的10 Star准入判断。临时请求失败不覆盖最近一次核实结果，也不会为未核实仓库补造 Star 数。
 

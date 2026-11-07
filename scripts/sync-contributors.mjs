@@ -36,8 +36,12 @@ try {
     const result = await enrollContributor(name, process.env.GITHUB_TOKEN ?? "", pool, fetch, account.githubId);
     console.info(`${result.login}: enrolled with ${result.events} public contribution records`);
   }
-  const stars = await refreshRepositoryStars(process.env.GITHUB_TOKEN ?? "", pool);
-  console.info(`Repository Star snapshots refreshed: ${stars.refreshed}`);
+  try {
+    const stars = await refreshRepositoryStars(process.env.GITHUB_TOKEN ?? "", pool);
+    console.info(`Repository Star snapshots refreshed: ${stars.refreshed}`);
+  } catch {
+    console.warn("::warning::Star refresh incomplete. Verified snapshots retained; unverified repositories remain ineligible. Scheduled synchronization will retry.");
+  }
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Contributor synchronization failed");
   process.exitCode = 1;

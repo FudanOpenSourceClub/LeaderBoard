@@ -13,7 +13,8 @@ const id = () => required("bigint", "serial");
 
 // Expected columns, nullability and defaults come from docs/data-model.md.
 const tables = {
-  contribution_tags:{id:id(),contributor_id:required("bigint"),category:required("text"),repository:required("text"),evidence_urls:required("jsonb"),reason:required("text"),actor_github_id:required("bigint"),actor_login:required("text"),created_at:required(timestamp,"clock_timestamp()"),revoked_at:optional(timestamp),revoked_by:optional("bigint")},
+  project_submission_awards:{proposal_id:required("bigint"),repository_github_id:required("bigint"),contributor_id:required("bigint"),points:required("integer","20"),awarded_at:required(timestamp,"now()")},
+  contribution_tags:{id:id(),contributor_id:required("bigint"),category:required("text"),repository:required("text"),evidence_urls:required("jsonb"),reason:required("text"),actor_github_id:required("bigint"),actor_login:required("text"),created_at:required(timestamp,"clock_timestamp()"),expires_at:required(timestamp),revoked_at:optional(timestamp),revoked_by:optional("bigint")},
   website_roles: {github_id:required("bigint"),login:required("text"),role:required("text"),granted_by:required("bigint"),granted_at:required(timestamp,"clock_timestamp()"),revoked_at:optional(timestamp),revoked_by:optional("bigint"),reason:required("text")},
   website_admin_audit: {id:id(),actor_github_id:required("bigint"),actor_login:required("text"),target_github_id:required("bigint"),target_login:required("text"),action:required("text"),reason:required("text"),details:required("jsonb","'{}'::jsonb"),created_at:required(timestamp,"clock_timestamp()")},
   contributor_score_adjustments: {id:id(),contributor_id:required("bigint"),delta:required("integer"),reason:required("text"),actor_github_id:required("bigint"),actor_login:required("text"),request_id:required("uuid"),reverses_id:optional("bigint"),created_at:required(timestamp,"clock_timestamp()")},
@@ -116,6 +117,8 @@ const tables = {
 };
 
 const foreignKeys = [
+  ["project_submission_awards","contributor_id","contributors","id"],
+  ["project_submission_awards","proposal_id","project_proposals","id"],
   ["contribution_tags","contributor_id","contributors","id"],
   ["contributor_score_adjustments","contributor_id","contributors","id"],
   ["contributor_score_adjustments","reverses_id","contributor_score_adjustments","id"],
@@ -136,6 +139,7 @@ const foreignKeys = [
   ["contributor_public_activities", "contributor_id", "contributors", "id"],
 ];
 const uniques = [
+  ["project_submission_awards","repository_github_id"],
   ["contributor_score_adjustments","request_id"],["contributor_score_adjustments","reverses_id"],
   ["campus_projects","repository_github_id"],["campus_projects","html_url"],["campus_projects","proposal_id"],
   ["project_notification_outbox","proposal_id"],
@@ -147,6 +151,7 @@ const uniques = [
   ["members", "email_fingerprint"], ["github_oauth_states", "state_hash"],
 ];
 const indexes = {
+  project_submission_award_time_idx:["project_submission_awards","contributor_id","awarded_at"],
   score_adjustment_contributor_time_idx:["contributor_score_adjustments","contributor_id","created_at"],
   member_single_github_account_idx:["member_github_accounts","member_id"],
   repositories_tracked_idx: ["repositories", "tracked"],
@@ -171,6 +176,7 @@ const indexes = {
 };
 
 const primaryKeys = {
+  project_submission_awards:["proposal_id"],
   contribution_tags:["id"],
   website_roles:["github_id"],website_admin_audit:["id"],contributor_score_adjustments:["id"],
   website_sessions:["token_hash"],website_login_states:["state_hash"],campus_projects:["id"],project_notification_outbox:["id"],

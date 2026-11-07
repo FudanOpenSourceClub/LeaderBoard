@@ -56,7 +56,7 @@ export class ProjectProposalService implements ProjectProposalApi {
     if(repo&&found.rows[0].repository_github_id&&repo.githubId!==found.rows[0].repository_github_id)
       throw new ProjectError("REPOSITORY_CHANGED",409,"仓库地址对应的 GitHub ID 已变化，请核对后重新提交申请");
     await withTransaction(async client=>{
-      const result=await client.query<{status:string;lab_name:string}>("SELECT status,lab_name FROM project_proposals WHERE id=$1 FOR UPDATE",[id]);
+      const result=await client.query<{status:string;lab_name:string;member_id:string|null}>("SELECT status,lab_name,member_id::text FROM project_proposals WHERE id=$1 FOR UPDATE",[id]);
       const row=result.rows[0];
       if(!row||row.status!=="pending")throw new ProjectError("PROPOSAL_ALREADY_REVIEWED",409,"该申请已处理，请刷新页面");
       if(repo){
@@ -65,6 +65,19 @@ export class ProjectProposalService implements ProjectProposalApi {
         if(existing.rows.length)throw new ProjectError("PROJECT_ALREADY_INCLUDED",409,"该仓库已经收录");
         await client.query(`INSERT INTO campus_projects(repository_github_id,full_name,name,html_url,lab_name,lab_url,description,tags,proposal_id)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[repo.githubId,repo.fullName,repo.name,repo.url,row.lab_name,input.labUrl??null,input.description,input.tags??["社区收录"],id]);
+      }
+      if(repo&&row.member_id){
+        const submitter=(await client.query<{github_id:string;login:string;avatar_url:string|null}>(`SELECT g.github_id::text,g.login,g.avatar_url
+          FROM member_github_accounts a JOIN github_accounts g ON g.github_id=a.github_id
+          WHERE a.member_id=$1 AND a.is_primary=TRUE`,[row.member_id])).rows[0];
+        if(submitter){
+          const contributor=(await client.query<{id:string}>(`INSERT INTO contributors(github_id,login,avatar_url,is_bot,enrolled_at)
+            VALUES($1,$2,$3,FALSE,now()) ON CONFLICT(github_id) DO UPDATE
+            SET enrolled_at=coalesce(contributors.enrolled_at,EXCLUDED.enrolled_at) RETURNING id::text`,
+            [submitter.github_id,submitter.login,submitter.avatar_url])).rows[0]!;
+          await client.query(`INSERT INTO project_submission_awards(proposal_id,repository_github_id,contributor_id)
+            VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,[id,repo.githubId,contributor.id]);
+        }
       }
       await client.query(`UPDATE project_proposals SET status=$2,reviewed_by=$3,reviewed_at=now(),review_notes=$4,updated_at=now() WHERE id=$1`,[id,input.decision==="approve"?"approved":"rejected",reviewerGithubId,input.reviewNotes]);
     });

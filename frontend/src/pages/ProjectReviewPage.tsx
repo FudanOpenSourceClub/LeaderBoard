@@ -26,7 +26,7 @@ function ReviewCard({item,csrfToken,onReviewed}:{item:ProjectProposalAdmin;csrfT
     {item.status==="pending"?<>
       <label className="form-field"><span>公开简介（通过后展示在项目列表）</span><Textarea value={description} onChange={e=>setDescription(e.target.value)} minLength={10} maxLength={500} placeholder="填写项目用途和特点；申请中的原始说明不会自动公开。" /></label>
       <label className="form-field"><span>审核备注</span><Textarea value={reviewNotes} onChange={e=>setReviewNotes(e.target.value)} maxLength={1000} /></label>
-      <div className="profile-actions"><Button className="primary-button" type="button" disabled={busy} onClick={()=>void review("approve")}>通过并加入项目列表</Button><Button className="toolbar-button" variant="outline" type="button" disabled={busy} onClick={()=>void review("reject")}>拒绝申请</Button></div>
+      <div className="profile-actions"><Button className="primary-button" type="button" disabled={busy} onClick={()=>void review("approve")}>通过并收录（提交者 +20 分）</Button><Button className="toolbar-button" variant="outline" type="button" disabled={busy} onClick={()=>void review("reject")}>拒绝申请</Button></div>
     </>:<p>审核备注：{item.reviewNotes||"无"} · {item.reviewedAt?new Date(item.reviewedAt).toLocaleString("zh-CN"):""}</p>}
     {error&&<p role="alert" className="verify-notice verify-notice-error">{error}</p>}
   </Card>;

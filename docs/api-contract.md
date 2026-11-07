@@ -758,9 +758,7 @@ github_accounts、contributors，确认唯一且完整才跳回成功页面。�
 手工收录的 contributor 不是注册身份，允许通过邮箱验证及匹配该账号的 GitHub OAuth
 认领已有档案，不创建重复 contributor，保留贡献及开发奖励。已注册成员仍拒绝重复注册。
 
-Contributor rank/detail 新增可选 `bonusScore`：独立开发奖励，包含在 `score` 中，
-按奖励发放时间进入 7d/30d/90d/all；实验室分组筛选不包含全站开发奖励。
-奖励不伪装成 Commit/Issue/PR，不占白名单贡献配额。
+旧 `bonusScore` 保留响应兼容性，现为0；一次性50分开发奖励只保留历史账本，不再计入当前积分。当前奖励见下方 Outstanding 与仓库收录奖励。
 
 ## 注册会话、项目审核与关闭导出（2026-10-22）
 
@@ -794,7 +792,7 @@ OAuth sessions resolve `role: owner | admin | null` on every request. `isAdmin` 
 - POST /api/v1/admin/score-adjustments {githubId,delta,reason,requestId:UUID} → ScoreAdjustment (admin or owner). Signed nonzero integer ±100000. Retries with the same key return the original; changed payload conflicts. Target is an existing human contributor, never a supplied member ID.
 - POST /api/v1/admin/score-adjustments/:id/reverse {reason,requestId} → ScoreAdjustment. Adds one compensating entry; never erases history.
 - GET /api/v1/admin/audit → AdminAuditResponse (latest 200).
-`adjustmentScore` is signed. Overall score = contribution score + existing awards + manual adjustments. Manual changes apply to overall rankings and contributor detail, within [from,to) by server commit time; group/repository statistics and GitHub facts are unchanged. Negative overall scores are supported. /admin now exposes project review, score ledger and owner-only role management.
+`adjustmentScore` is signed. Overall score = contribution score + active Outstanding rewards + project submission rewards + manual adjustments. Manual changes apply to overall rankings and contributor detail, within [from,to) by server commit time; group/repository statistics and GitHub facts are unchanged. Negative overall scores are supported. /admin now exposes project review, score ledger and owner-only role management.
 
 
 ## Contribution categories and tag-only access
@@ -805,3 +803,14 @@ OAuth sessions resolve `role: owner | admin | null` on every request. `isAdmin` 
 - POST /api/v1/admin/contribution-tags/:id/revoke is owner-only and requires {reason}; it retains the original label and audit trail.
 - Ranking/detail responses optionally include communityTags. Detail adds contributionProfile: collected PR/Issue counts, PR merges in the selected period, the merge rate of PRs submitted in the period, active Shanghai calendar days/weeks, repository breadth, incompleteness and last sync time. PR outcomes do not count as the author's review/maintenance activity. Missing quality/governance/mentoring data is not assigned zero, and no overall 100-point evaluation is fabricated.
 
+
+
+## Outstanding 与仓库收录奖励（2026-11-07，取代旧开发奖励）
+
+- Commit 每次1分、Issue每次5分，共用每人北京时间自然月10次、每仓库每月3次额度；无Star门槛。PR白名单91个启用仓库，提交20分、合并另加30分，无次数上限。
+- 三类标签显示为 Outstanding Contributor / Outstanding Committer / Outstanding Maintainer。每个有效标签15分，不同类型及不同项目的有效标签可累加，同一贡献者/类型/项目在有效期内不可重复发放；过期可重新评选。每次评选必须填写5至1000字公开推荐理由并核对证据，沿用现有分类证据条件、自我标注限制、CSRF和审计。
+- 有效期从发放时间起按北京时间加一个日历月，月底无对应日期时取次月最后一天；区间为[createdAt,expiresAt)。过期或撤销后不再计入当前任何时间范围的积分。标签分按发放时间进入所选7d/30d/90d/all范围，不因切换范围重新发奖。分组筛选时只计算对应项目分组的标签。
+- GET /api/v1/contributors/outstanding → OutstandingBoardsResponse：asOf、北京时间month、boards三个类别，每类people按标签分降序/用户名升序，包含rank、login、avatarUrl、score和tags。公开、no-store。展示目前仍有效的获奖者（包括上个月发放但尚未到期者），推荐理由、项目、评选人、证据、到期日。三榜与普通时间/分组筛选独立。
+- ContributionTag 增加必填 expiresAt；rank/detail 增加 outstandingScore 与 projectSubmissionScore。总积分=贡献分+有效标签分+仓库收录分+人工调整。旧 bonusScore 为0，旧奖励记录保留。
+- 仓库申请批准事务同时向真实绑定GitHub账号发放20分。按审核时间进入时间范围，全站奖励不计入实验室分组；申请ID和稳定仓库ID双重防重。拒绝、待审、重复审核不发奖；历史匿名且无法确认提交者的申请不补造用户或奖励。迁移补齐已有批准且能核验提交者的历史奖励，仍按原审核时间归属。
+- UI：达人榜新增一行三个荣誉入口，展开对应人员及推荐理由；个人积分明细单列两项奖励；后台说明有效期、推荐理由和批准收录奖励。

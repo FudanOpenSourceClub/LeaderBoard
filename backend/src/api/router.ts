@@ -1,4 +1,6 @@
 import {
+  OutstandingBoardsResponseSchema,
+  type OutstandingBoardsResponse,
   CampusProjectsResponseSchema,
   ProjectProposalAdminResponseSchema,
   ProjectReviewRequestSchema,
@@ -45,6 +47,7 @@ import { getContributorActivityExport } from "../public-contributions/enrollment
 import { ProjectError, ProjectProposalService, type ProjectProposalApi } from "../projects/proposals.js";
 import { getSyncStatus as defaultGetSyncStatus, SyncAlreadyRunningError } from "../sync/index.js";
 
+import {getOutstandingBoards} from "../analytics/contribution-tags.js";
 import {createContributionTagRouter,type ContributionTagApi} from "./contribution-tags.js";
 import { AdminError } from "../auth/roles.js";
 import { createWebsiteAdminRouter, type WebsiteAdminDependencies } from "./admin.js";
@@ -58,6 +61,7 @@ interface AnalyticsApi {
 }
 
 export interface ApiDependencies {
+  outstandingBoards():Promise<OutstandingBoardsResponse>;
   websiteAdmin: Partial<WebsiteAdminDependencies>;
   contributionTags: ContributionTagApi;
   analytics: AnalyticsApi;
@@ -183,6 +187,11 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
     return user;
   };
   const router = Router();
+  router.get("/contributors/outstanding",async(_req,res,next)=>{
+    res.setHeader("Cache-Control","no-store");
+    try{res.json(OutstandingBoardsResponseSchema.parse(await (dependencies.outstandingBoards??getOutstandingBoards)()))}
+    catch(error){if(!handleServiceError(error,res))next(error)}
+  });
 
   router.get("/auth/session",async(req,res,next)=>{
     res.setHeader("Cache-Control","no-store");

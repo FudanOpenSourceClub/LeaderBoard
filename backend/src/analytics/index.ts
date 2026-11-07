@@ -16,7 +16,7 @@ import type { Pool } from "pg";
 import { getDbPool } from "../db/index.js";
 import {getTagMap} from "./contribution-tags.js";
 import { getScoreAdjustments } from "./adjustments.js";
-import { getContributorAwards } from "./awards.js";
+import { getOutstandingScores, getProjectSubmissionScores } from "./rewards.js";
 import { emptyScore, getContributionScores, type ScoreDecision } from "./scoring.js";
 
 function sumScores(decisions: ScoreDecision[]) {
@@ -185,10 +185,11 @@ export class AnalyticsService {
   async getContributorLeaderboard(input: LeaderboardQuery): Promise<ContributorRank[]> {
     const bounds = rangeBounds(input.range, this.clock());
     const scoring = await getContributionScores(this.pool, bounds.from, bounds.to);
-    const awards = input.group === undefined ? await getContributorAwards(this.pool, bounds.from, bounds.to) : new Map<string, number>();
+    const outstanding = await getOutstandingScores(this.pool,bounds.from,bounds.to,input.group);
+    const projectAwards = input.group === undefined ? await getProjectSubmissionScores(this.pool,bounds.from,bounds.to) : new Map<string,number>();
     const adjustments = input.group === undefined ? await getScoreAdjustments(this.pool,bounds.from,bounds.to) : new Map<string,number>();
     const decisions = scoring.decisions.filter(d => input.group === undefined || d.group===input.group);
-    const activeIds = [...new Set([...decisions.filter(d=>d.points>0).map(d=>d.contributorId),...adjustments.keys(),...awards.keys()])];
+    const activeIds = [...new Set([...decisions.filter(d=>d.points>0).map(d=>d.contributorId),...adjustments.keys(),...outstanding.keys(),...projectAwards.keys()])];
     const result = await this.pool.query<{
       id: string; login: string; avatar_url: string | null; commits: string; prs: string; issues: string; total: string;
     }>(
@@ -207,10 +208,11 @@ export class AnalyticsService {
       [bounds.from, bounds.to, input.group ?? null, activeIds],
     );
 
-    const communityTags=await getTagMap(this.pool,result.rows.map(r=>r.id));
+    const communityTags=await getTagMap(this.pool,result.rows.map(r=>r.id),new Date(bounds.to));
     const rows = result.rows.map((row) => {
       const contributionScore = sumScores(decisions.filter(d=>d.contributorId===row.id));
-      const bonusScore = awards.get(row.id) ?? 0;
+      const bonusScore = 0;
+      const outstandingScore=outstanding.get(row.id)??0,projectSubmissionScore=projectAwards.get(row.id)??0;
       return {
       login: row.login,
       communityTags:communityTags.get(row.id)??[],
@@ -220,9 +222,9 @@ export class AnalyticsService {
       issues: safeNumber(row.issues),
       total: safeNumber(row.total),
       ...contributionScore,
-      bonusScore,
+      bonusScore,outstandingScore,projectSubmissionScore,
       adjustmentScore:adjustments.get(row.id)??0,
-      score: contributionScore.score + bonusScore + (adjustments.get(row.id)??0),
+      score: contributionScore.score + outstandingScore + projectSubmissionScore + (adjustments.get(row.id)??0),
     };
     });
     rows.sort((a, b) => b[input.metric] - a[input.metric] || a.login.localeCompare(b.login));
@@ -244,7 +246,9 @@ export class AnalyticsService {
     const bounds = rangeBounds(range, this.clock());
     const scoring = await getContributionScores(this.pool, bounds.from, bounds.to);
     const personalScores = scoring.users.get(actor.id) ?? emptyScore();
-    const bonusScore = (await getContributorAwards(this.pool, bounds.from, bounds.to)).get(actor.id) ?? 0;
+    const bonusScore = 0;
+    const outstandingScore=(await getOutstandingScores(this.pool,bounds.from,bounds.to)).get(actor.id)??0;
+    const projectSubmissionScore=(await getProjectSubmissionScores(this.pool,bounds.from,bounds.to)).get(actor.id)??0;
     const adjustmentScore=(await getScoreAdjustments(this.pool,bounds.from,bounds.to)).get(actor.id)??0;
     const result = await this.pool.query<{
       github_id: string | null; full_name: string; group_name: string;
@@ -279,8 +283,8 @@ export class AnalyticsService {
           commits:0,prs:0,issues:0,total:0,...score});
       }
     }
-    const tags=(await getTagMap(this.pool,[actor.id])).get(actor.id)??[];
-    if (tags.length===0 && repositories.length === 0 && actor.enrolled_at === null && personalScores.score===0 && bonusScore===0 && adjustmentScore===0) return null;
+    const tags=(await getTagMap(this.pool,[actor.id],new Date(bounds.to))).get(actor.id)??[];
+    if (tags.length===0 && repositories.length === 0 && actor.enrolled_at === null && personalScores.score===0 && outstandingScore===0 && projectSubmissionScore===0 && adjustmentScore===0) return null;
     const commits = repositories.reduce((sum, row) => sum + row.commits, 0);
     const prs = repositories.reduce((sum, row) => sum + row.prs, 0);
     const issues = repositories.reduce((sum, row) => sum + row.issues, 0);
@@ -309,9 +313,9 @@ export class AnalyticsService {
       total: commits + prs + issues,
       repositories,
       ...personalScores,
-      bonusScore,
+      bonusScore,outstandingScore,projectSubmissionScore,
       adjustmentScore,
-      score: personalScores.score + bonusScore + adjustmentScore,
+      score: personalScores.score + outstandingScore + projectSubmissionScore + adjustmentScore,
     });
   }
 }

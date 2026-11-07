@@ -133,3 +133,10 @@ describe("LeadBoard API client", () => {
     });
   });
 });
+
+it('loads the public Outstanding boards with the shared response schema',async()=>{
+  const boards={asOf:'2026-11-07T03:00:00.000Z',month:'2026-11',boards:[]};
+  const {client,fetcher}=clientReturning(boards);
+  expect(await client.getOutstandingBoards()).toEqual(boards);
+  expect(fetcher).toHaveBeenCalledWith('/api/v1/contributors/outstanding',{headers:{Accept:'application/json'}});
+});

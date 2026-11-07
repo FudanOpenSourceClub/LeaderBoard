@@ -1,7 +1,8 @@
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
 import {getDbPool} from "../src/db/index.js";
-import {ContributionTagService,getTagMap} from "../src/analytics/contribution-tags.js";
+import {ContributionTagService,getTagMap,getOutstandingBoards} from "../src/analytics/contribution-tags.js";
 import {ScoreAdjustmentService} from "../src/analytics/adjustments.js";
+import {getOutstandingScores} from "../src/analytics/rewards.js";
 import {AnalyticsService} from "../src/analytics/index.js";
 const pool=getDbPool(),service=new ContributionTagService();const owner='998001',curator='998002',target='998003';
 const base={githubId:target,category:'contributor' as const,evidenceUrls:['https://github.com/org/repo/pull/1'],reason:'真实贡献已经采用并核对',confirmed:true as const};
@@ -29,9 +30,36 @@ describe('contribution categories persist separately from permissions and points
     expect(await service.add(curator,input)).toMatchObject({category:'committer',githubId:target});
     const analytics=new AnalyticsService(pool,()=>new Date(now+1000));const detail=await analytics.getContributorDetail('target','90d');
     expect(detail?.contributionProfile).toMatchObject({submittedPrs:3,mergedPrs:3,mergedSubmittedPrs:3,prMergeRate:100,activeDays:3,repositories:1});
-    expect(detail?.communityTags).toHaveLength(1);expect(detail?.score).toBe(0); // Tags never add points; repository is not on PR whitelist.
+    expect(detail?.communityTags).toHaveLength(1);expect(detail?.score).toBe(15);expect(detail?.outstandingScore).toBe(15); // The PRs are outside the whitelist; only the label adds points.
     expect((await analytics.getContributorLeaderboard({range:'all',metric:'score',limit:10}))[0]?.communityTags).toHaveLength(1);
     await pool.query('UPDATE website_roles SET revoked_at=now() WHERE github_id=$1',[curator]);
     await expect(service.add(curator,{...base,evidenceUrls:['https://github.com/other/repo/pull/1']})).rejects.toMatchObject({code:'TAGGER_REQUIRED'});
+  });
+});
+
+describe('Outstanding label rewards',()=>{
+  it('stacks all three categories, publishes reasons and removes revoked rewards',async()=>{
+    await service.add(owner,base);
+    const maintainer=await service.add(owner,{...base,category:'maintainer',evidenceUrls:['https://github.com/org/repo/blob/main/MAINTAINERS','https://github.com/org/repo/pull/1','https://github.com/org/repo/issues/2']});
+    const clock=()=>new Date(Date.now()+1000),analytics=new AnalyticsService(pool,clock);
+    expect(await analytics.getContributorDetail('target','all')).toMatchObject({outstandingScore:45,score:45});
+    const boards=await getOutstandingBoards(pool,clock());
+    expect(boards.boards.map(b=>b.people[0]?.score)).toEqual([15,15,15]);
+    expect(boards.boards.every(b=>b.people[0]?.tags[0]?.reason===base.reason)).toBe(true);
+    expect((await analytics.getContributorLeaderboard({range:'all',metric:'score',limit:10}))[0]).toMatchObject({login:'target',outstandingScore:45,score:45});
+    await service.revoke(owner,maintainer.id,'撤销本次维护者奖励');
+    expect(await analytics.getContributorDetail('target','all')).toMatchObject({outstandingScore:30,score:30});
+  });
+  it('expires after a Shanghai calendar month, respects the exact boundary and permits re-awarding',async()=>{
+    const old=(await pool.query(`INSERT INTO contribution_tags(contributor_id,category,repository,evidence_urls,reason,actor_github_id,actor_login,created_at)
+      VALUES($1,'contributor','org/monthend','["https://github.com/org/monthend/pull/1"]','月底发放的真实贡献奖励',$2,'owner','2026-01-31T15:30:00Z') RETURNING id::text,expires_at`,[targetId,owner])).rows[0];
+    expect(old.expires_at.toISOString()).toBe('2026-02-28T15:30:00.000Z');
+    expect((await getOutstandingScores(pool,null,'2026-02-28T15:29:59Z')).get(targetId)).toBe(15);
+    expect((await getOutstandingScores(pool,null,'2026-02-28T15:30:00Z')).get(targetId)).toBeUndefined();
+    expect((await getOutstandingScores(pool,'2026-02-01T00:00:00Z','2026-02-28T15:29:59Z')).get(targetId)).toBeUndefined();
+    expect((await getTagMap(pool,[targetId],old.expires_at)).get(targetId)).toBeUndefined();
+    const repeated=await service.add(owner,{...base,evidenceUrls:['https://github.com/org/monthend/pull/2']});
+    expect(repeated.id).not.toBe(old.id);
+    expect((await pool.query('SELECT id FROM contribution_tags WHERE repository=$1',['org/monthend'])).rows).toHaveLength(2);
   });
 });

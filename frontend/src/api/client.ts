@@ -1,4 +1,6 @@
 import {
+  OutstandingBoardsResponseSchema,
+  type OutstandingBoardsResponse,
   ApiErrorResponseSchema,
   ContributorDetailSchema,
   ContributorLeaderboardResponseSchema,
@@ -17,6 +19,7 @@ import {
 } from "@leadboard/contracts";
 
 export interface LeadBoardApiClient {
+  getOutstandingBoards():Promise<OutstandingBoardsResponse>;
   getOrganizationSummary(range: TimeRange): Promise<OrganizationSummaryResponse>;
   getRepositories(range: TimeRange, group?: string): Promise<RepositoryStatsResponse>;
   getGroups(): Promise<GroupsResponse>;
@@ -71,6 +74,7 @@ export function createApiClient(fetcher: typeof fetch = globalThis.fetch): LeadB
   }
 
   return {
+    getOutstandingBoards(){return requestJson("/api/v1/contributors/outstanding",OutstandingBoardsResponseSchema)},
     getOrganizationSummary(range) {
       const query = new URLSearchParams({ range });
       return requestJson(`/api/v1/organization/summary?${query}`, OrganizationSummaryResponseSchema);

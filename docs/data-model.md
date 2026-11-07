@@ -424,7 +424,7 @@ INDEX contributor_public_activities_time_idx (contributor_id, occurred_at)
 award_key TEXT, points INTEGER CHECK(points>0), reason TEXT, awarded_at TIMESTAMPTZ DEFAULT now())`。
 `PRIMARY KEY(contributor_id,award_key)` 确保同一账号同一奖励只发一次。
 `leaderboard-development-v1` 为四位实际开发者各 50 分；迁移只增加 contributor 和奖励，
-不虚构邮箱、学号或 OAuth 认证记录。重复部署/重新绑定不重复发奖。
+不虚构邮箱、学号或 OAuth 认证记录。该50分现仅保留为历史记录，不再参与当前评分。
 
 注册会话哈希在 OAuth 完成后保留到原有效期，作为只读完成凭据；
 `resumeRegistration` 仍禁止已绑定成员重复绑定。状态查询检查学号指纹存在且唯一、
@@ -452,6 +452,14 @@ Commit/Issue 无 Star 门槛，Commit 每次 1 分、Issue 每次 5 分；共用
 
 
 ## Contribution classification and reduced permissions
-`contribution_tags`: id BIGSERIAL PK, contributor_id BIGINT FK to contributors(id), category TEXT (contributor/committer/maintainer), repository TEXT, evidence_urls JSONB, reason TEXT, actor_github_id BIGINT, actor_login TEXT, created_at TIMESTAMPTZ default clock_timestamp(), revoked_at TIMESTAMPTZ nullable, revoked_by BIGINT nullable. A partial unique index covers (contributor_id,category,lower(repository)) for active records. Revocation preserves records and writes website_admin_audit.
-The legacy website_roles value `admin` now means tag contributor only. It grants no project review, score adjustment, role management, audit-list access or tag revocation. Only `owner` retains those capabilities. Session isAdmin is true only for owners; canTag is true for active admin/owner roles. Tags never change points or GitHub permissions.
+`contribution_tags`: id BIGSERIAL PK, contributor_id BIGINT FK to contributors(id), category TEXT (contributor/committer/maintainer), repository TEXT, evidence_urls JSONB, reason TEXT, actor_github_id BIGINT, actor_login TEXT, created_at TIMESTAMPTZ default clock_timestamp(), revoked_at TIMESTAMPTZ nullable, revoked_by BIGINT nullable. expires_at is generated from created_at plus one Shanghai calendar month. An index covers contributor/category/repository/expiry; the serialized add transaction checks validity so an expired label can be re-awarded without deleting history. Revocation preserves records and writes website_admin_audit.
+The legacy website_roles value `admin` now means tag contributor only. It grants no project review, score adjustment, role management, audit-list access or tag revocation. Only `owner` retains those capabilities. Session isAdmin is true only for owners; canTag is true for active admin/owner roles. Valid tags now grant 15 points each, without granting GitHub permissions. Expired/revoked labels grant no current points.
 
+
+
+## Outstanding 与收录奖励迁移
+`contribution_tags.expires_at TIMESTAMPTZ GENERATED ALWAYS AS (((created_at AT TIME ZONE 'Asia/Shanghai') + interval '1 month') AT TIME ZONE 'Asia/Shanghai') STORED NOT NULL`，固定每个有效标签15分。活跃重复检查与创建在同一全局标签事务锁内，历史标签及撤销审计保留。已有标签按原created_at计算有效期，过期不继续加分。
+
+`project_submission_awards(proposal_id BIGINT PRIMARY KEY REFERENCES project_proposals(id),repository_github_id BIGINT NOT NULL UNIQUE,contributor_id BIGINT NOT NULL REFERENCES contributors(id),points INTEGER NOT NULL DEFAULT 20 CHECK(points=20),awarded_at TIMESTAMPTZ NOT NULL DEFAULT now())`。审核通过、项目收录、奖励入账同一事务，奖励对象从原申请成员的primary GitHub绑定解析，不接受客户端指定收款人。迁移按原reviewed_at补齐可归属的已批准申请；双唯一键确保重放/重审不重发，拒绝不发奖。
+
+当前总分不再读取旧contributor_score_awards开发奖励，保留表及记录用于历史追溯。积分查询按奖励发放时间筛选，并在查询时间检查标签是否有效。新接口及字段见api-contract最新章节。

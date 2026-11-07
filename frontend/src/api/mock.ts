@@ -1,4 +1,6 @@
 import {
+  OutstandingBoardsResponseSchema,
+  OUTSTANDING_LABELS,
   ContributorDetailSchema,
   ContributorLeaderboardResponseSchema,
   GroupsResponseSchema,
@@ -49,6 +51,10 @@ export function createMockApiClient(): LeadBoardApiClient {
   }
 
   return {
+    async getOutstandingBoards(){return mockResponse(OutstandingBoardsResponseSchema,{
+      asOf:new Date().toISOString(),month:new Date(Date.now()+8*3600000).toISOString().slice(0,7),
+      boards:Object.entries(OUTSTANDING_LABELS).map(([category,title])=>({category,title,people:[]})),
+    })},
     async getOrganizationSummary(range) {
       return mockResponse(OrganizationSummaryResponseSchema, {
         range,

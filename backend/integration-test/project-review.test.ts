@@ -1,6 +1,7 @@
 import {afterAll,afterEach,beforeAll,describe,expect,it,vi} from "vitest";
 import {getDbPool} from "../src/db/index.js";
 import {WebsiteAuthService} from "../src/auth/website-session.js";
+import {AnalyticsService} from "../src/analytics/index.js";
 import {ProjectProposalService} from "../src/projects/proposals.js";
 import {ProjectNotificationWorker} from "../src/projects/notifications.js";
 const pool=getDbPool();let memberId:string;let identityId=777001;
@@ -51,9 +52,16 @@ describe("website sessions and repository review",()=>{
     await service.review(application.id,{decision:'approve',reviewNotes:'确认收录',description},'333234233');
     expect(await service.projects()).toEqual([expect.objectContaining({repo:'fixture/one',description})]);
     expect(JSON.stringify(await service.projects())).not.toContain(input.notes);
+    const analytics=new AnalyticsService(pool,()=>new Date(Date.now()+2000));
+    expect(await analytics.getContributorDetail('registered-user','all')).toMatchObject({score:20,projectSubmissionScore:20});
+    expect((await pool.query('SELECT contributor_id,points FROM project_submission_awards WHERE proposal_id=$1',[application.id])).rows).toHaveLength(1);
+    await expect(service.review(application.id,{decision:'approve',reviewNotes:'重复通过',description},'333234233')).rejects.toMatchObject({code:'PROPOSAL_ALREADY_REVIEWED'});
+
     await expect(service.review(application.id,{decision:'reject',reviewNotes:''},'333234233')).rejects.toMatchObject({code:'PROPOSAL_ALREADY_REVIEWED'});
     const second=await service.submit({...input,projectUrl:'https://github.com/fixture/two'},memberId);
     await service.review(second.id,{decision:'reject',reviewNotes:'暂不收录'},'333234233');
     expect(await service.projects()).toHaveLength(1);
+    expect((await pool.query('SELECT * FROM project_submission_awards WHERE proposal_id=$1',[second.id])).rows).toHaveLength(0);
+    expect(await analytics.getContributorDetail('registered-user','all')).toMatchObject({score:20,projectSubmissionScore:20});
   });
 });

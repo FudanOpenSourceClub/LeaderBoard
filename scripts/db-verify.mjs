@@ -255,7 +255,7 @@ try {
   }
   if (!actualIndexes.some(index => index.index_name === "sync_runs_status_finished_idx" && index.definition.includes("(status, finished_at DESC)"))) problems.push("sync_runs_status_finished_idx must sort finished_at DESC");
   if (!actualIndexes.some(index => index.index_name === "member_github_primary_idx" && /WHERE is_primary/.test(index.definition))) problems.push("member_github_primary_idx must be partial on is_primary");
-  if (!actualIndexes.some(index=>index.index_name==="contribution_tag_active_idx" && /WHERE \(revoked_at IS NULL\)/.test(index.definition) && /UNIQUE INDEX/.test(index.definition))) problems.push("missing active contribution tag uniqueness");
+  if (!actualIndexes.some(index=>index.index_name==="contribution_tag_lookup_idx" && /WHERE \(revoked_at IS NULL\)/.test(index.definition) && index.definition.includes("expires_at"))) problems.push("missing contribution tag expiry lookup index");
   if (problems.length) {
     for (const problem of problems) console.error(problem);
     process.exitCode = 1;

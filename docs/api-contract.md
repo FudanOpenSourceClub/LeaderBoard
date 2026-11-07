@@ -734,7 +734,7 @@ EMAIL_AUTH_NOT_CONFIGURED
 - 默认 `range=all&metric=score`；`score` 是新增排序指标，接口按 `limit` 返回达人；页面默认展示前 10 人，点击“显示更多”每次增加 10 人，通过额外一条记录判断是否还有后续达人，同分按 GitHub 用户名稳定排序，超额活动次数不参与破同分。
 - Contributor rank/detail/repository 增加 `score`、`commitIssueScore`、`prOpenedScore`、`prMergedScore`、`mergedPrs`。
 - PR 仅在 `scoring_repositories.enabled=true` 的稳定 Repository ID 中计分，名称和 URL 不能代替 ID。根目录 `scoring-whitelist.json` 管理 PR 白名单候选及启用状态。PR 不受 Star 门槛限制。
-- Commit/Issue 不要求白名单，也没有 Star 门槛；公开仓库（包括自己的仓库）的已采集贡献均参与额度计算。计分不读取 Star 缓存。
+- Commit/Issue 不要求白名单，要求仓库至少10 Star；公开仓库（包括自己的仓库）的已采集贡献均参与额度计算。按最近核验的 Star 缓存判断；不足10或未核验不计分，也不占用次数额度。
 - Commit/Issue 共用每用户自然月 10 次、每用户每仓库每自然月 3 次额度；Commit 每次 1 分，Issue 每次 5 分，每条有效贡献只占用 1 次额度。月度上限是次数而非分数，全部为 Issue 时每月最多 50 分。北京时间划分月份，按贡献时间和稳定身份确定次序。先检查仓库额度，未超仓库额度的记录再检查个人月度额度。
 - 每次计算先检查完整历史，再筛选展示范围；时间筛选和分组不重置额度。PR 在创建时得 20 分、在 `merged_at` 时另得 30 分，不使用 closed 状态冒充 merged。
 - CSV 增加仓库 ID、对象 ID、合并时间、白名单命中、自然月、两个额度的计数/超限标记、得分及 PR 分项。
@@ -807,7 +807,7 @@ OAuth sessions resolve `role: owner | admin | null` on every request. `isAdmin` 
 
 ## Outstanding 与仓库收录奖励（2026-11-07，取代旧开发奖励）
 
-- Commit 每次1分、Issue每次5分，共用每人北京时间自然月10次、每仓库每月3次额度；无Star门槛。PR白名单91个启用仓库，提交20分、合并另加30分，无次数上限。
+- Commit 每次1分、Issue每次5分，共用每人北京时间自然月10次、每仓库每月3次额度；仓库Star≥10。PR白名单91个启用仓库，提交20分、合并另加30分，无次数上限。
 - 三类标签显示为 Outstanding Contributor / Outstanding Committer / Outstanding Maintainer。每个有效标签15分，不同类型及不同项目的有效标签可累加，同一贡献者/类型/项目在有效期内不可重复发放；过期可重新评选。每次评选必须填写5至1000字公开推荐理由并核对证据，沿用现有分类证据条件、自我标注限制、CSRF和审计。
 - 有效期从发放时间起按北京时间加一个日历月，月底无对应日期时取次月最后一天；区间为[createdAt,expiresAt)。过期或撤销后不再计入当前任何时间范围的积分。标签分按发放时间进入所选7d/30d/90d/all范围，不因切换范围重新发奖。分组筛选时只计算对应项目分组的标签。
 - GET /api/v1/contributors/outstanding → OutstandingBoardsResponse：asOf、北京时间month、boards三个类别，每类people按标签分降序/用户名升序，包含rank、login、avatarUrl、score和tags。公开、no-store。展示目前仍有效的获奖者（包括上个月发放但尚未到期者），推荐理由、项目、评选人、证据、到期日。三榜与普通时间/分组筛选独立。

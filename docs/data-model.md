@@ -442,9 +442,9 @@ award_key TEXT, points INTEGER CHECK(points>0), reason TEXT, awarded_at TIMESTAM
 
 ## 19. 已停用的 Star 缓存
 
-`repository_star_counts` 保存 `github_id BIGINT PRIMARY KEY`、`stars INTEGER NULL CHECK(stars>=0)`、`checked_at TIMESTAMPTZ NOT NULL DEFAULT now()`。GitHub API 按稳定仓库 ID 查询并核对返回 ID；相同仓库供所有用户共享缓存。`stars=NULL` 表示仓库无法公开访问；此缓存已退出计分和同步流程，仅保留历史数据。临时请求失败不覆盖最近一次核实结果，也不会为未核实仓库补造 Star 数。
+`repository_star_counts` 保存 `github_id BIGINT PRIMARY KEY`、`stars INTEGER NULL CHECK(stars>=0)`、`checked_at TIMESTAMPTZ NOT NULL DEFAULT now()`。GitHub API 按稳定仓库 ID 查询并核对返回 ID；相同仓库供所有用户共享缓存。`stars=NULL` 表示仓库无法公开访问；此缓存现用于Commit/Issue的10 Star准入判断。临时请求失败不覆盖最近一次核实结果，也不会为未核实仓库补造 Star 数。
 
-Commit/Issue 无 Star 门槛，Commit 每次 1 分、Issue 每次 5 分；共用3次/仓库/月及10次/人/月的次数限制，每条有效贡献占用1次额度。分数在查询时按当前权重重新计算已有历史，无需修改原始贡献事实；PR仅使用 `scoring_repositories` 白名单判断，提交20分、合并另加30分。Star缓存不参与计分，也不阻塞注册、增量同步或部署。已有历史按新规则重新计算。
+Commit/Issue 仓库 Star ≥ 10，Commit 每次 1 分、Issue 每次 5 分；共用3次/仓库/月及10次/人/月的次数限制，每条有效贡献占用1次额度。分数在查询时按当前权重重新计算已有历史，无需修改原始贡献事实；PR仅使用 `scoring_repositories` 白名单判断，提交20分、合并另加30分。Star缓存参与Commit/Issue计分，注册、同步和部署刷新真实Star快照。已有历史按新规则重新计算。
 
 
 ## Website administration

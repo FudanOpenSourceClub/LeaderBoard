@@ -735,7 +735,7 @@ EMAIL_AUTH_NOT_CONFIGURED
 - Contributor rank/detail/repository 增加 `score`、`commitIssueScore`、`prOpenedScore`、`prMergedScore`、`mergedPrs`。
 - PR 仅在 `scoring_repositories.enabled=true` 的稳定 Repository ID 中计分，名称和 URL 不能代替 ID。根目录 `scoring-whitelist.json` 管理 PR 白名单候选及启用状态。PR 不受 Star 门槛限制。
 - Commit/Issue 不要求白名单，也没有 Star 门槛；公开仓库（包括自己的仓库）的已采集贡献均参与额度计算。计分不读取 Star 缓存。
-- Commit/Issue 共用每用户自然月 10 次、每用户每仓库每自然月 3 次额度，每次 1 分。北京时间划分月份，按贡献时间和稳定身份确定次序。先检查仓库额度，未超仓库额度的记录再检查个人月度额度。
+- Commit/Issue 共用每用户自然月 10 次、每用户每仓库每自然月 3 次额度；Commit 每次 1 分，Issue 每次 5 分，每条有效贡献只占用 1 次额度。月度上限是次数而非分数，全部为 Issue 时每月最多 50 分。北京时间划分月份，按贡献时间和稳定身份确定次序。先检查仓库额度，未超仓库额度的记录再检查个人月度额度。
 - 每次计算先检查完整历史，再筛选展示范围；时间筛选和分组不重置额度。PR 在创建时得 20 分、在 `merged_at` 时另得 30 分，不使用 closed 状态冒充 merged。
 - CSV 增加仓库 ID、对象 ID、合并时间、白名单命中、自然月、两个额度的计数/超限标记、得分及 PR 分项。
 - `POST /auth/email/send-code` 仅需 `{ email, studentId }`，必须携带已完成 GitHub OAuth 的 HttpOnly 会话。账号 ID 和当前 login 由服务器读取，忽略客户端伪造的账号字段；查邮箱、学号指纹及注册/绑定 GitHub ID，重复返回 409 `ALREADY_REGISTERED`，不发邮件。
@@ -804,3 +804,4 @@ OAuth sessions resolve `role: owner | admin | null` on every request. `isAdmin` 
 - Contributor: a project-adopted contribution or confirmed valid issue, manually checked. Committer: at least three collected merged PRs in the same repository, submitted within 90 days across two Shanghai calendar weeks; reviewer also confirms substantive content. Maintainer: a public maintainer roster plus two recent maintenance activity links, manually checked for identity, attribution and 90-day recency. These are platform classifications, not project appointments or permissions.
 - POST /api/v1/admin/contribution-tags/:id/revoke is owner-only and requires {reason}; it retains the original label and audit trail.
 - Ranking/detail responses optionally include communityTags. Detail adds contributionProfile: collected PR/Issue counts, PR merges in the selected period, the merge rate of PRs submitted in the period, active Shanghai calendar days/weeks, repository breadth, incompleteness and last sync time. PR outcomes do not count as the author's review/maintenance activity. Missing quality/governance/mentoring data is not assigned zero, and no overall 100-point evaluation is fabricated.
+

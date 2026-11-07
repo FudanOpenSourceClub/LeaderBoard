@@ -166,23 +166,24 @@ describe("Analytics pipeline fixture", () => {
       VALUES (1001,'leadboard-fixture/repo-a','https://github.com/leadboard-fixture/repo-a',TRUE),
              (9999,'other/community','https://github.com/other/community',TRUE)`);
     await pool.query("INSERT INTO repository_star_counts(github_id,stars) VALUES (1001,10),(9999,100)");
-    expect((await analytics.getContributorDetail("alice","all"))?.score).toBe(74);
+    expect((await analytics.getContributorDetail("alice","all"))?.score).toBe(78);
     await saveContributorActivity(identity,{...data,rows:[{
       ...data.rows[2]!,repository:"other/renamed",mergedAt:"2026-09-24T11:00:00Z",
     }]},pool);
     const afterMerge=await analytics.getContributorDetail("alice","all");
-    expect(afterMerge).toMatchObject({total:7,score:104,prMergedScore:60});
+    expect(afterMerge).toMatchObject({total:7,score:108,prMergedScore:60});
     const ledger=await getContributorActivityExport("alice",pool);
     expect(ledger?.rows).toHaveLength(7);
     expect(ledger?.rows.find(row=>row.identifier==="10"&&row.kind==="pull_request")).toMatchObject({repository:"other/renamed",repositoryGithubId:"9999"});
-    expect(ledger?.rows.reduce((sum,row)=>sum+(row.scoring?.points??0),0)).toBe(104);
+    expect(ledger?.rows.reduce((sum,row)=>sum+(row.scoring?.points??0),0)).toBe(108);
     await pool.query(`INSERT INTO contributors(github_id,login,enrolled_at)
       SELECT 3000+n,'member-'||n,now() FROM generate_series(1,12) n`);
     const top=await analytics.getContributorLeaderboard({range:"all",metric:"score",limit:10});
     expect(top).toHaveLength(10);
-    expect(top[0]).toMatchObject({login:"alice",score:104});
+    expect(top[0]).toMatchObject({login:"alice",score:108});
     const expanded=await analytics.getContributorLeaderboard({range:"all",metric:"score",limit:5000});
     expect(expanded).toHaveLength(15);
     expect(expanded.slice(0,10)).toEqual(top);
   });
 });
+

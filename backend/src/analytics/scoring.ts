@@ -74,7 +74,8 @@ export function scoreEvents(events: ScoringEvent[], whitelist: Set<string>, from
       if (repoCount <= 3) { monthCount++; monthCounts.set(userMonth, monthCount); }
     }
     const commitIssuePoints = event.kind !== "pull_request"
-      && repoCount <= 3 && monthCount <= 10 && inRange(event.occurredAt) ? 1 : 0;
+      && repoCount <= 3 && monthCount <= 10 && inRange(event.occurredAt)
+      ? (event.kind === "issue" ? 5 : 1) : 0;
     const prOpenedPoints = whitelisted && event.kind === "pull_request" && inRange(event.occurredAt) ? 20 : 0;
     const prMergedPoints = whitelisted && event.kind === "pull_request" && inRange(event.mergedAt) ? 30 : 0;
     const decision: ScoreDecision = {
@@ -143,3 +144,4 @@ export async function getContributionScores(pool: Pick<Pool,"query">, from: stri
   }));
   return scoreEvents(events, new Set(allowed.rows.map((r) => r.github_id)), from, to);
 }
+

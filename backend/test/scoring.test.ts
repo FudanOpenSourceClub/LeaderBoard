@@ -14,8 +14,9 @@ describe("Contributor scoring rules",()=>{
   it("counts Commit and Issue without Star snapshots or a whitelist",()=>{
     const own={...event(1,"999"),repository:"alice/my-project"};
     const data=scoreEvents([own,event(2,"999","issue")],allowed,null,to);
-    expect(data.users.get("1")?.commitIssueScore).toBe(2);
-    expect(data.decisions.every(d=>!d.whitelisted&&d.points===1)).toBe(true);
+    expect(data.users.get("1")?.commitIssueScore).toBe(6);
+    expect(data.decisions.every(d=>!d.whitelisted)).toBe(true);
+    expect(data.decisions.map(d=>d.points)).toEqual([1,5]);
   });
   it("applies quotas to every public repository including repositories without a stable ID",()=>{
     const rows=Array.from({length:4},(_,i)=>({...event(i+1),repositoryGithubId:null,repository:i%2?'ALICE/one':'alice/ONE'}));
@@ -33,13 +34,14 @@ describe("Contributor scoring rules",()=>{
   });
   it("shares the repository quota between Commit and Issue",()=>{
     const data=points([event(1),event(2,"101","issue"),event(3),event(4,"101","issue")]);
-    expect(data.users.get("1")?.score).toBe(3);
+    expect(data.users.get("1")?.score).toBe(7);
     expect(data.decisions[3]).toMatchObject({repositoryMonthCount:4,repositoryCapExceeded:true,points:0});
   });
-  it("caps the combined monthly total at ten across repositories",()=>{
+  it("caps the combined monthly contribution count at ten across repositories",()=>{
     const rows=Array.from({length:15},(_,i)=>event(i+1,String(101+Math.floor(i/3)),i%2?"issue":"commit"));
     const data=points(rows);
-    expect(data.users.get("1")?.commitIssueScore).toBe(10);
+    expect(data.users.get("1")?.commitIssueScore).toBe(30);
+    expect(data.decisions.filter(d=>d.points>0)).toHaveLength(10);
     expect(data.decisions.filter(d=>d.monthlyCapExceeded)).toHaveLength(5);
     expect(data.decisions.every(d=>!d.repositoryCapExceeded)).toBe(true);
   });
@@ -59,7 +61,23 @@ describe("Contributor scoring rules",()=>{
     const oct=[4,5,6].map(i=>({...event(i),occurredAt:`2026-09-30T16:00:0${i}.000Z`}));
     expect(points([...sept,...oct]).users.get("1")?.score).toBe(6);
     const other=[1,2,3].map(i=>event(i,"101","issue","2"));
-    expect(points([...oct,...other]).users.get("2")?.score).toBe(3);
+    expect(points([...oct,...other]).users.get("2")?.score).toBe(15);
+  });
+  it("counts each Issue as one quota slot and awards up to fifty monthly points",()=>{
+    const rows=Array.from({length:12},(_,i)=>event(i+1,String(101+Math.floor(i/3)),"issue"));
+    const data=points(rows);
+    expect(data.users.get("1")?.commitIssueScore).toBe(50);
+    expect(data.decisions.slice(0,10).every(d=>d.points===5)).toBe(true);
+    expect(data.decisions.slice(10).every(d=>d.points===0&&d.monthlyCapExceeded)).toBe(true);
+    expect(data.decisions[9]?.monthCount).toBe(10);
+  });
+  it("deduplicates Issues and preserves their five points in a filtered view",()=>{
+    const issue=event(2,"101","issue");
+    const rows=[event(1),issue,{...issue,repository:"renamed/project"},event(3)];
+    const data=points(rows,issue.occurredAt);
+    expect(data.users.get("1")?.score).toBe(6);
+    expect(data.decisions).toHaveLength(3);
+    expect(data.decisions.find(d=>d.kind==="issue")).toMatchObject({points:5,monthCount:2,repositoryMonthCount:2});
   });
   it("applies quotas before a view's time filter",()=>{
     const rows=[event(1),event(2),event(3),{...event(4),occurredAt:"2026-10-20T00:00:00.000Z"}];
@@ -82,3 +100,4 @@ describe("Contributor scoring rules",()=>{
     expect(points([spoof,missing]).decisions.every(d=>!d.whitelisted)).toBe(true);
   });
 });
+

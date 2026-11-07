@@ -92,7 +92,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
       <section className="filter-card leaderboard-filters" aria-label="积分规则">
         <details>
           <summary>查看积分规则</summary>
-          <p className="filter-caption">Commit / Issue：无 Star 门槛，每次 1 分，每月合计最多 10 次，每仓库最多 3 次。PR：仅白名单仓库，提交 20 分，合并另加 30 分。LeaderBoard 开发贡献奖励 50 分。</p>
+          <p className="filter-caption">Commit 每次 1 分，Issue 每次 5 分；无 Star 门槛，两者共用每人每自然月 10 次、每仓库每自然月 3 次额度。PR：仅白名单仓库，提交 20 分，合并另加 30 分。LeaderBoard 开发贡献奖励 50 分。</p>
         </details>
       </section>
 
@@ -193,3 +193,4 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
     </div>
   );
 }
+

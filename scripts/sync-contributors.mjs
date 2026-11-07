@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { getDbPool } from "../backend/dist/db/index.js";
 import { enrollContributor } from "../backend/dist/public-contributions/enrollment.js";
+import { refreshRepositoryStars } from "../backend/dist/public-contributions/repository-stars.js";
 
 const pool = getDbPool();
 try {
@@ -35,6 +36,8 @@ try {
     const result = await enrollContributor(name, process.env.GITHUB_TOKEN ?? "", pool, fetch, account.githubId);
     console.info(`${result.login}: enrolled with ${result.events} public contribution records`);
   }
+  const stars = await refreshRepositoryStars(process.env.GITHUB_TOKEN ?? "", pool);
+  console.info(`Repository Star snapshots refreshed: ${stars.refreshed}`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Contributor synchronization failed");
   process.exitCode = 1;

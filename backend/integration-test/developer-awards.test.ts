@@ -10,7 +10,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await pool.end(); });
 
-describe("developer enrollment and one-time awards", () => {
+describe("legacy developer awards remain in the ledger without affecting the new score", () => {
   it("seeds four real profiles and awards exactly 50 each even when replayed", async () => {
     let sql = "";
     up({ sql: (value: string) => { sql = value; } });
@@ -21,11 +21,11 @@ describe("developer enrollment and one-time awards", () => {
     const analytics = new AnalyticsService(pool, () => new Date(Date.now() + 10_000));
     const rows = await analytics.getContributorLeaderboard({range:"all",metric:"score",limit:10});
     expect(rows.map(row => row.login).sort()).toEqual(["Alpha-dev-code","Joseph2433","Linscon","swiftgorge5-eng"]);
-    expect(rows.every(row => row.score===50 && row.bonusScore===50 && row.total===0)).toBe(true);
+    expect(rows.every(row => row.score===0 && row.bonusScore===0 && row.total===0)).toBe(true);
     expect((await pool.query("SELECT count(*)::int AS count FROM contributor_score_awards")).rows[0].count).toBe(4);
     for (const row of rows) {
       await expect(analytics.getContributorDetail(row.login,"all"))
-        .resolves.toMatchObject({score:50,bonusScore:50,commits:0,prs:0,issues:0});
+        .resolves.toMatchObject({score:0,bonusScore:0,commits:0,prs:0,issues:0});
     }
     // Administrative enrollment has not fabricated completed identity verification.
     expect((await pool.query(`SELECT count(*)::int AS count FROM member_github_accounts
@@ -39,6 +39,6 @@ describe("developer enrollment and one-time awards", () => {
     expect(recent.every(row=>row.score===0 && row.bonusScore===0)).toBe(true);
     expect(await analytics.getContributorLeaderboard({range:"all",metric:"score",group:"systems",limit:10})).toEqual([]);
     const historical = await analytics.getContributorDetail("Linscon","all");
-    expect(historical?.score).toBe(50);
+    expect(historical?.score).toBe(0);
   });
 });

@@ -6,7 +6,7 @@ import type {WebsiteUser} from "../src/auth/website-session.js";
 const tagger:WebsiteUser={githubId:'1001',login:'curator',memberId:null,role:'admin',isAdmin:false,csrfToken:'csrf-fixture'};
 const input={githubId:'1002',category:'contributor',evidenceUrls:['https://github.com/org/repo/pull/1'],reason:'已核对真实贡献记录',confirmed:true};
 function setup(user:WebsiteUser|null=tagger){
-  const tag={id:'1',githubId:'1002',login:'contributor',category:'contributor',repository:'org/repo',evidenceUrls:input.evidenceUrls,reason:input.reason,actorLogin:'curator',createdAt:'2026-10-31T12:00:00.000Z',revokedAt:null};
+  const tag={id:'1',githubId:'1002',login:'contributor',category:'contributor',repository:'org/repo',evidenceUrls:input.evidenceUrls,reason:input.reason,actorLogin:'curator',createdAt:'2026-10-31T12:00:00.000Z',expiresAt:'2026-11-30T12:00:00.000Z',revokedAt:null};
   const tags={add:vi.fn().mockResolvedValue(tag),revoke:vi.fn().mockResolvedValue({...tag,revokedAt:'2026-11-01T00:00:00.000Z'}),list:vi.fn().mockResolvedValue([tag]),search:vi.fn().mockResolvedValue([{githubId:'1002',login:'contributor'}])};
   const scores={contributors:vi.fn(),list:vi.fn(),adjust:vi.fn(),reverse:vi.fn()},roles=vi.fn(),review=vi.fn();
   const app=createApp({apiRouter:createApiRouter({analytics:{getGroups:vi.fn(),getOrganizationActivitySummary:vi.fn(),getRepositoryStats:vi.fn(),getContributorLeaderboard:vi.fn(),getContributorDetail:vi.fn()},websiteAuth:{getSession:async()=>user,startLogin:vi.fn(),completeLogin:vi.fn(),getRegistrationIdentity:vi.fn(),fromRegistration:async()=>null},contributionTags:tags,websiteAdmin:{roles,setRole:vi.fn(),audit:vi.fn(),resolve:vi.fn(),scores},projectReview:{projects:vi.fn(),list:vi.fn(),review}})});

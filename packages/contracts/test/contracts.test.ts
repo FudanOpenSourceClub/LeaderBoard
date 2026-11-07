@@ -18,8 +18,9 @@ const config = { githubToken: "test-only", githubOrg: "fixture", groupProperty: 
 const status = { lastSuccessfulRunAt: null, lastRunStatus: null, nextScheduledRunAt: null, dataStatus: "missing" };
 const fixtures = [
   [c.ContributionCategorySchema,"contributor"],
-  [c.ContributionTagSchema,{id:"1",githubId:"2001",login:"alice",category:"contributor",repository:"org/repo",evidenceUrls:["https://github.com/org/repo/pull/1"],reason:"真实贡献已被项目采用",actorLogin:"reviewer",createdAt:at,revokedAt:null}],
+  [c.ContributionTagSchema,{id:"1",githubId:"2001",login:"alice",category:"contributor",repository:"org/repo",evidenceUrls:["https://github.com/org/repo/pull/1"],reason:"真实贡献已被项目采用",actorLogin:"reviewer",createdAt:at,expiresAt:"2026-10-25T12:00:00Z",revokedAt:null}],
   [c.ContributionTagsResponseSchema,{items:[]}],
+  [c.OutstandingBoardsResponseSchema,{asOf:at,month:"2026-09",boards:Object.entries(c.OUTSTANDING_LABELS).map(([category,title])=>({category,title,people:[]}))}],
   [c.AddContributionTagRequestSchema,{githubId:"2001",category:"contributor",evidenceUrls:["https://github.com/org/repo/pull/1"],reason:"真实贡献已被项目采用",confirmed:true}],
   [c.ContributionProfileSchema,{submittedPrs:0,submittedIssues:0,mergedPrs:0,mergedSubmittedPrs:0,prMergeRate:null,activeDays:0,activeWeeks:0,repositories:0,incomplete:false,lastSyncedAt:null}],
   [c.LeaderboardQuerySchema, { range: "30d", metric: "total", limit: 50 }],

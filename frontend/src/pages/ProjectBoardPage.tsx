@@ -187,7 +187,7 @@ export function ProjectBoardPage() {
           <section className="panel proposal-panel">
             <div className="panel-heading">
               <div>
-                <h2>提交项目</h2>
+                <h2>提交项目</h2><p className="filter-caption">审核通过后，提交者获得 20 分奖励；同一仓库只奖励一次。</p>
               </div>
             </div>
 

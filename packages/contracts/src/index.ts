@@ -126,12 +126,22 @@ export type GroupSummary = z.infer<typeof GroupSummarySchema>;
 
 const activityCounts = { commits: count, prs: count, issues: count, total: count };
 export const ContributionCategorySchema=z.enum(["contributor","committer","maintainer"]);
+export type ContributionCategory=z.infer<typeof ContributionCategorySchema>;
+export const OUTSTANDING_TAG_POINTS=15;
+export const OUTSTANDING_LABELS={contributor:"Outstanding Contributor",committer:"Outstanding Committer",maintainer:"Outstanding Maintainer"} as const;
 export const ContributionTagSchema=z.object({
   id:githubId,githubId,login:text,category:ContributionCategorySchema,repository:text,
-  evidenceUrls:z.array(webUrl),reason:text,actorLogin:text,createdAt:utc,revokedAt:utc.nullable(),
+  evidenceUrls:z.array(webUrl),reason:text,actorLogin:text,createdAt:utc,expiresAt:utc,revokedAt:utc.nullable(),
 });
 export type ContributionTag=z.infer<typeof ContributionTagSchema>;
 export const ContributionTagsResponseSchema=z.object({items:z.array(ContributionTagSchema)});
+export const OutstandingBoardsResponseSchema=z.object({
+  asOf:utc,month:z.string().regex(/^\d{4}-\d{2}$/),
+  boards:z.array(z.object({category:ContributionCategorySchema,title:text,people:z.array(z.object({
+    rank:positive,login:text,avatarUrl:webUrl.nullable(),score:count,tags:z.array(ContributionTagSchema),
+  }))})),
+});
+export type OutstandingBoardsResponse=z.infer<typeof OutstandingBoardsResponseSchema>;
 const evidenceLink=z.string().trim().max(1000).url().refine(v=>{
   try{const u=new URL(v);return u.protocol==="https:"&&u.hostname==="github.com"&&!u.port&&!u.username&&!u.password
     && /^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/(?:pull\/[1-9]\d*|issues\/[1-9]\d*|discussions\/[1-9]\d*|commit\/[a-fA-F0-9]{7,40}|blob\/.+)$/.test(u.pathname);}catch{return false}
@@ -153,6 +163,7 @@ export const ContributionProfileSchema=z.object({
   incomplete:z.boolean(),lastSyncedAt:utc.nullable(),
 });
 const scoringCounts = {
+  outstandingScore:count.optional(),projectSubmissionScore:count.optional(),
   score: z.number().int().safe().optional(), adjustmentScore: z.number().int().safe().optional(), commitIssueScore: count.optional(), prOpenedScore: count.optional(),
   prMergedScore: count.optional(), mergedPrs: count.optional(),
 };

@@ -36,7 +36,7 @@ jobs:
               assert request(f'/api/v1/{prefix}/Zecyel/export.csv',expected=410)['error']['code']=='EXPORT_DISABLED'
           for login in ['swiftgorge5-eng','Alpha-dev-code','Linscon','Joseph2433']:
               person=request(f'/api/v1/contributors/{login}?range=all')
-              assert person['bonusScore']==50 and person['score']>=50
+              assert person['bonusScore']==0 and person['score']>=0
               assert not any(field in person for field in ['studentId','student_fingerprint','email_fingerprint','name'])
           board=request('/api/v1/contributors/leaderboard?range=all&metric=score&limit=10'); assert len(board['items'])<=10
           index=request('/projects'); bundle=request(re.search(r'src="([^"]+\.js)"',index).group(1))

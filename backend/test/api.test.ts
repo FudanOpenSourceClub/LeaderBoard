@@ -89,3 +89,11 @@ describe("Phase 1 API router", () => {
     expect(contributorExport).not.toHaveBeenCalled();
   });
 });
+
+it('serves the three public Outstanding boards before the username route',async()=>{
+  const boards={asOf:'2026-11-07T03:00:00.000Z',month:'2026-11',boards:[{category:'contributor',title:'Outstanding Contributor',people:[]},{category:'committer',title:'Outstanding Committer',people:[]},{category:'maintainer',title:'Outstanding Maintainer',people:[]}]};
+  const outstandingBoards=vi.fn().mockResolvedValue(boards);
+  const app=createApp({apiRouter:createApiRouter({...dependencies(),outstandingBoards})});
+  await request(app).get('/api/v1/contributors/outstanding').expect(200,boards).expect('Cache-Control','no-store');
+  expect(outstandingBoards).toHaveBeenCalledTimes(1);
+});

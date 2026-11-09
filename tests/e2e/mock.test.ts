@@ -1,3 +1,4 @@
+import {createHash} from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { GitHubActivity, RepositorySyncResult } from "@leadboard/contracts";
@@ -8,6 +9,8 @@ const pool = getDbPool();
 const processes: ChildProcess[] = [];
 const backendPort = 3099;
 const frontendPort = 4173;
+const sessionToken='E'.repeat(43);
+const apiFetch=(url:string)=>fetch(url,{headers:{Cookie:'leaderboard_session='+sessionToken}});
 
 const repoA = {
   githubId: "1001", nodeId: "R_repo_a", owner: "leadboard-fixture", name: "repo-a",
@@ -59,6 +62,9 @@ beforeAll(async () => {
     [new Date(Date.now() - 120_000).toISOString(), now],
   );
 
+  await pool.query("INSERT INTO website_roles(github_id,login,role,granted_by,reason) VALUES(2001,'alice','owner',2001,'E2E fixture') ON CONFLICT(github_id) DO UPDATE SET role='owner',revoked_at=NULL");
+  await pool.query("INSERT INTO website_sessions(token_hash,github_id,login,csrf_token,expires_at) VALUES($1,2001,'alice','e2e-csrf',now()+interval '1 hour') ON CONFLICT(token_hash) DO UPDATE SET expires_at=EXCLUDED.expires_at",[createHash('sha256').update(sessionToken).digest('hex')]);
+
   const env = {
     ...process.env,
     PORT: String(backendPort),
@@ -93,29 +99,30 @@ describe("Phase 1 mocked end-to-end smoke", () => {
       expect(html).toContain("id=\"root\"");
     }
 
-    const summary = await (await fetch(
+    expect((await fetch(`http://127.0.0.1:${frontendPort}/api/v1/contributors/leaderboard`)).status).toBe(401);
+    const summary = await (await apiFetch(
       `http://127.0.0.1:${frontendPort}/api/v1/organization/summary?range=30d`,
     )).json() as { repositories: number; commits: number; issues: number; total: number; dataStatus: string };
     expect(summary).toMatchObject({ repositories: 1, commits: 1, issues: 1, total: 2, dataStatus: "fresh" });
 
-    const repositories = await (await fetch(
+    const repositories = await (await apiFetch(
       `http://127.0.0.1:${frontendPort}/api/v1/organization/repositories?range=30d`,
     )).json() as { items: Array<{ fullName: string; total: number }> };
     expect(repositories.items).toEqual([
       expect.objectContaining({ fullName: "leadboard-fixture/repo-a", total: 2 }),
     ]);
 
-    const sync = await (await fetch(
+    const sync = await (await apiFetch(
       `http://127.0.0.1:${frontendPort}/api/v1/sync/status`,
     )).json() as { lastRunStatus: string; dataStatus: string };
     expect(sync).toMatchObject({ lastRunStatus: "success", dataStatus: "fresh" });
 
-    const leaderboard = await (await fetch(
+    const leaderboard = await (await apiFetch(
       `http://127.0.0.1:${frontendPort}/api/v1/contributors/leaderboard?range=30d&metric=total`,
     )).json() as { items: Array<{ login: string; total: number }> };
     expect(leaderboard.items).toEqual([expect.objectContaining({ login: "alice", total: 2 })]);
 
-    const detail = await (await fetch(
+    const detail = await (await apiFetch(
       `http://127.0.0.1:${frontendPort}/api/v1/contributors/alice?range=30d`,
     )).json() as { login: string; repositories: unknown[] };
     expect(detail.login).toBe("alice");

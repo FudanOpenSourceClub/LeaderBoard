@@ -65,21 +65,21 @@ export function scoreEvents(events: ScoringEvent[], whitelist: Set<string>, from
     if (Date.parse(event.occurredAt) >= Date.parse(to)) continue;
     const whitelisted = event.repositoryGithubId !== null && whitelist.has(event.repositoryGithubId);
     const stars = event.repositoryGithubId === null ? null : repositoryStars.get(event.repositoryGithubId) ?? null;
-    const meetsStarThreshold = stars !== null && Number.isSafeInteger(stars) && stars >= 10;
+    const meetsStarThreshold = stars !== null && Number.isSafeInteger(stars) && stars >= 100;
     const month = new Date(Date.parse(event.occurredAt) + 8 * 3600000).toISOString().slice(0, 7);
     const userMonth = `${event.contributorId}:${month}`;
     const repoMonth = `${userMonth}:${event.repositoryGithubId}`;
     let repoCount = 0;
     let monthCount = 0;
-    if (meetsStarThreshold && event.kind !== "pull_request") {
+    if (meetsStarThreshold && event.kind === "issue") {
       repoCount = (repoCounts.get(repoMonth) ?? 0) + 1;
       repoCounts.set(repoMonth, repoCount);
       monthCount = monthCounts.get(userMonth) ?? 0;
       // Repository overflow does not consume the user's remaining monthly quota.
       if (repoCount <= 3) { monthCount++; monthCounts.set(userMonth, monthCount); }
     }
-    const commitIssuePoints = meetsStarThreshold && event.kind !== "pull_request"
-      && repoCount <= 3 && monthCount <= 10 && inRange(event.occurredAt) ? (event.kind === "issue" ? 5 : 1) : 0;
+    const commitIssuePoints = meetsStarThreshold && event.kind === "issue"
+      && repoCount <= 3 && monthCount <= 10 && inRange(event.occurredAt) ? 5 : 0;
     const prOpenedPoints = whitelisted && event.kind === "pull_request" && inRange(event.occurredAt) ? 20 : 0;
     const prMergedPoints = whitelisted && event.kind === "pull_request" && inRange(event.mergedAt) ? 30 : 0;
     const decision: ScoreDecision = {

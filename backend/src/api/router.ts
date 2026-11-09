@@ -51,6 +51,7 @@ import {getOutstandingBoards} from "../analytics/contribution-tags.js";
 import {createContributionTagRouter,type ContributionTagApi} from "./contribution-tags.js";
 import { AdminError } from "../auth/roles.js";
 import { createWebsiteAdminRouter, type WebsiteAdminDependencies } from "./admin.js";
+import { createOutstandingApplicationRouter, type OutstandingApplicationApi } from './outstanding-applications.js';
 
 interface AnalyticsApi {
   getGroups(): Promise<GroupSummary[]>;
@@ -61,6 +62,7 @@ interface AnalyticsApi {
 }
 
 export interface ApiDependencies {
+  outstandingApplications: OutstandingApplicationApi;
   outstandingBoards():Promise<OutstandingBoardsResponse>;
   websiteAdmin: Partial<WebsiteAdminDependencies>;
   contributionTags: ContributionTagApi;
@@ -187,6 +189,16 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
     return user;
   };
   const router = Router();
+  router.use(async(req,res,next)=>{
+    res.setHeader('Cache-Control','no-store');
+    if(req.path.startsWith('/auth/')){next();return}
+    try{
+      if(!await websiteAuth.getSession(cookie(req,'leaderboard_session'))){
+        sendError(res,401,'LOGIN_REQUIRED','请先使用 GitHub 登录后查看网站内容');return;
+      }
+      next();
+    }catch(error){if(!handleServiceError(error,res))next(error)}
+  });
   router.get("/contributors/outstanding",async(_req,res,next)=>{
     res.setHeader("Cache-Control","no-store");
     try{res.json(OutstandingBoardsResponseSchema.parse(await (dependencies.outstandingBoards??getOutstandingBoards)()))}
@@ -376,6 +388,14 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
     return user;
   },dependencies.contributionTags));
   router.use("/admin",createWebsiteAdminRouter(req=>requireUser(req,true),dependencies.websiteAdmin));
+  router.use(createOutstandingApplicationRouter(async(req,reviewer=false)=>{
+    if(!reviewer)return requireUser(req);
+    const user=await websiteAuth.getSession(cookie(req,'leaderboard_session'));
+    if(!user)throw new WebsiteAuthError('LOGIN_REQUIRED',401,'请先登录');
+    if(user.role!=='owner'&&user.role!=='admin')throw new WebsiteAuthError('TAGGER_REQUIRED',403,'当前账号没有勋章审核权限');
+    if(req.method!=='GET'&&!csrfMatches(user,req.get('X-CSRF-Token')))throw new WebsiteAuthError('INVALID_CSRF',403,'请刷新后重试');
+    return user;
+  },dependencies.outstandingApplications));
   router.use(((error, _req, res, next)=>{if(!handleServiceError(error,res))next(error)}) as import("express").ErrorRequestHandler);
 
   router.get("/organization/summary", async (req, res, next) => {

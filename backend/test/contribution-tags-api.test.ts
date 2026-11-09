@@ -13,12 +13,12 @@ function setup(user:WebsiteUser|null=tagger){
   return {app,tags,scores,roles,review};
 }
 describe('tag-only permissions',()=>{
-  it('lets a delegated curator add labels but denies every privileged route',async()=>{
+  it('lets a curator view rewards but requires a self-submitted application to award',async()=>{
     const {app,tags,scores,roles,review}=setup();
     await request(app).get('/api/v1/admin/tag-contributors?query=contributor').expect(200);
     await request(app).get('/api/v1/admin/contribution-tags').expect(200);
-    await request(app).post('/api/v1/admin/contribution-tags').set('X-CSRF-Token',tagger.csrfToken).send(input).expect(201);
-    expect(tags.add).toHaveBeenCalledExactlyOnceWith(tagger.githubId,input);
+    await request(app).post('/api/v1/admin/contribution-tags').set('X-CSRF-Token',tagger.csrfToken).send(input).expect(410);
+    expect(tags.add).not.toHaveBeenCalled();
     for(const path of ['roles','audit','score-adjustments','contributors?query=contributor','project-proposals'])await request(app).get('/api/v1/admin/'+path).expect(403);
     for(const path of ['roles','score-adjustments','score-adjustments/1/reverse','project-proposals/1/review','contribution-tags/1/revoke'])await request(app).post('/api/v1/admin/'+path).set('X-CSRF-Token',tagger.csrfToken).send(input).expect(403);
     expect(scores.adjust).not.toHaveBeenCalled();expect(roles).not.toHaveBeenCalled();expect(review).not.toHaveBeenCalled();expect(tags.revoke).not.toHaveBeenCalled();
@@ -29,7 +29,7 @@ describe('tag-only permissions',()=>{
   });
   it('requires CSRF and rejects forged authority, unconfirmed or malformed evidence',async()=>{
     const {app,tags}=setup();await request(app).post('/api/v1/admin/contribution-tags').send(input).expect(403);
-    for(const body of [{...input,role:'owner'},{...input,actorId:'1003'},{...input,confirmed:false},{...input,evidenceUrls:['not a url']},{...input,category:'committer'},{...input,category:'maintainer'}])await request(app).post('/api/v1/admin/contribution-tags').set('X-CSRF-Token',tagger.csrfToken).send(body).expect(400);
+    for(const body of [{...input,role:'owner'},{...input,actorId:'1003'},{...input,confirmed:false},{...input,evidenceUrls:['not a url']},{...input,category:'committer'},{...input,category:'maintainer'}])await request(app).post('/api/v1/admin/contribution-tags').set('X-CSRF-Token',tagger.csrfToken).send(body).expect(410);
     expect(tags.add).not.toHaveBeenCalled();
   });
   it('allows only an owner to revoke a tag',async()=>{

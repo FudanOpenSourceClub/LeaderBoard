@@ -463,3 +463,22 @@ button, a, summary { touch-action: manipulation; }
 /* Outstanding recognition row */
 .outstanding-section{margin:0 0 24px;min-width:0}.outstanding-section h2{font-size:18px}.outstanding-section .section-title-row{gap:12px;flex-wrap:wrap}.outstanding-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.outstanding-card{display:flex;flex-direction:column;gap:7px;text-align:left;padding:22px;border:1px solid #363d4b;border-radius:14px;background:linear-gradient(135deg,#202736,#161c27);color:inherit;cursor:pointer;min-width:0}.outstanding-card>span{color:#a5b5ce;font-size:13px}.outstanding-card strong{font-size:20px;overflow-wrap:anywhere}.outstanding-card small{font-size:12px;color:#a5b5ce}.outstanding-card:hover,.outstanding-card-selected{border-color:#8aafff;background:#25314a}.outstanding-card:focus-visible{outline:2px solid #b5ccff;outline-offset:3px}.outstanding-people{padding:24px;margin-top:14px}.outstanding-person{padding:18px 0;border-top:1px solid #363d4b}.outstanding-person a{overflow-wrap:anywhere}.outstanding-reason{padding:4px 0 10px}.outstanding-reason p{margin:8px 0}.outstanding-reason-text{white-space:pre-wrap;overflow-wrap:anywhere}.outstanding-reason .tag-row{gap:12px}
 @media(max-width:600px){.outstanding-grid{gap:7px}.outstanding-card{padding:15px 9px;border-radius:10px;gap:6px}.outstanding-card>span{font-size:10px}.outstanding-card strong{font-size:13px}.outstanding-card small{font-size:10px}.outstanding-people{padding:17px}.outstanding-section>.section-title-row .filter-caption{font-size:11px}}
+
+/* Identity remains visible on desktop and phones, including long GitHub usernames. */
+.persistent-account { display:flex; align-items:center; justify-content:flex-end; gap:7px; color:var(--foreground); max-width:320px; font-size:13px; }
+.persistent-account span { overflow-wrap:anywhere; }
+.login-gate-account { margin-left:auto; }
+.login-gate { min-height:70dvh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:32px 24px; text-align:center; }
+.login-gate p { max-width:460px; color:var(--muted-foreground); line-height:1.8; }
+.outstanding-application-panel { padding:24px; margin-bottom:24px; }
+.outstanding-review-card { margin-top:20px; padding:20px 0; border-bottom:1px solid var(--border); }
+@media(max-width:820px) {
+  .topbar { gap:12px; }
+  .mobile-header-actions { width:auto; min-width:0; margin-right:auto; }
+  .mobile-header-actions .mobile-round-link { display:none; }
+  .mobile-home-brand { font-size:18px; }
+  .persistent-account { max-width:56%; font-size:12px; line-height:1.4; }
+  .login-gate-account { display:inline-flex; }
+}
+
+.ranking-avatar-link { display:block; position:relative; z-index:2; }

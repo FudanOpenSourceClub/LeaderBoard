@@ -6,6 +6,8 @@ import type { LeadBoardApiClient } from "../api/client";
 import { EmptyState, ErrorState, LoadingState } from "../components/AsyncStates";
 import { useLocalFavorites } from "../lib/favorites";
 import { useFilters } from "../state/filters";
+import { useWebsiteSession } from '../auth/session';
+import { OutstandingApplicationPanel } from '../components/OutstandingApplicationPanel';
 
 type State =
   | { status: "loading" }
@@ -15,6 +17,8 @@ type State =
 export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
   const params = useParams();
   const username = params.username ?? "";
+  const {session}=useWebsiteSession();
+  const isSelf=session.authenticated&&session.login.toLowerCase()===username.toLowerCase();
   const { range, setRange } = useFilters();
   const [state, setState] = useState<State>({ status: "loading" });
   const [retry, setRetry] = useState(0);
@@ -56,6 +60,7 @@ export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
            
           {username && (
             <div className="profile-actions">
+              {isSelf&&session.authenticated&&(session.canTag||session.isAdmin)&&<Link className="profile-action-link" to="/admin">勋章申请审核与管理</Link>}
               <a
                 className="profile-action-link"
                 href={`https://github.com/${encodeURIComponent(username)}`}
@@ -88,6 +93,7 @@ export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
       </section>
 
       <section className="dashboard-content">
+        {isSelf&&<OutstandingApplicationPanel csrfToken={session.csrfToken}/>}
         {state.status === "loading" && <LoadingState label="正在加载贡献者详情…" />}
         {state.status === "error" && <ErrorState message={state.message} onRetry={() => setRetry((value) => value + 1)} />}
         {state.status === "ready" && (
@@ -99,7 +105,7 @@ export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
               <article className="metric-card metric-mint"><span>积分</span><strong>{state.detail.score ?? 0}</strong></article>
             </div>
 
-            <details className="score-breakdown"><summary>积分明细</summary><p className="filter-caption">Commit / Issue：{state.detail.commitIssueScore ?? 0} · PR：{state.detail.prOpenedScore ?? 0} · 合并 PR：{state.detail.prMergedScore ?? 0} · Outstanding 奖励：{state.detail.outstandingScore ?? 0} · 仓库收录奖励：{state.detail.projectSubmissionScore ?? 0} · 人工调整：{state.detail.adjustmentScore ?? 0}</p></details>
+            <details className="score-breakdown"><summary>积分明细</summary><p className="filter-caption">Issue：{state.detail.commitIssueScore ?? 0} · PR：{state.detail.prOpenedScore ?? 0} · 合并 PR：{state.detail.prMergedScore ?? 0} · Outstanding 奖励：{state.detail.outstandingScore ?? 0} · 仓库收录奖励：{state.detail.projectSubmissionScore ?? 0} · 人工调整：{state.detail.adjustmentScore ?? 0}</p></details>
             <ContributionProfile detail={state.detail}/><section className="panel repository-panel">
               <div className="panel-heading">
                 <div><h2>仓库贡献</h2></div>

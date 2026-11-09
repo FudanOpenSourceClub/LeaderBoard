@@ -1,30 +1,41 @@
-import {useEffect,useState,type FormEvent} from "react";
-import {OUTSTANDING_LABELS,AddContributionTagRequestSchema,ContributionTagsResponseSchema,AdminContributorsResponseSchema,type ContributionTag} from "@leadboard/contracts";
-import {Button,Card,Input,Textarea} from "../components/ui/primitives";
-const labels=OUTSTANDING_LABELS;
-const rules={contributor:'至少一项被采用的贡献，或被项目确认有效的问题反馈。',committer:'同一项目近90天至少3个合并 PR，提交跨至少两周，且包含实质功能、修复或改进。',maintainer:'公开维护者名单证明身份，近90天至少两次公开维护活动，如评审、处理 Issue、帮助新人。'};
-async function call(path:string,csrf?:string,body?:unknown){const r=await fetch('/api/v1/admin/'+path,{cache:'no-store',...(body?{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf??''},body:JSON.stringify(body)}:{})});const data=await r.json();if(!r.ok)throw new Error(data.error?.message??'操作失败');return data}
+import {useEffect,useState} from 'react';
+import {OUTSTANDING_LABELS,OutstandingApplicationsResponseSchema,ContributionTagsResponseSchema,type OutstandingApplication,type ContributionTag} from '@leadboard/contracts';
+import {Button,Card,Input,Textarea} from '../components/ui/primitives';
+import {useWebsiteSession} from '../auth/session';
+
+async function call(path:string,csrf?:string,body?:unknown){
+  const response=await fetch('/api/v1/admin/'+path,{cache:'no-store',...(body?{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf??''},body:JSON.stringify(body)}:{})});
+  const data=await response.json();if(!response.ok)throw new Error(data.error?.message??'操作失败');return data;
+}
 export function ContributionTagPanel({csrfToken,isOwner}:{csrfToken:string;isOwner:boolean}){
-  const [query,setQuery]=useState(''),[matches,setMatches]=useState<{githubId:string;login:string}[]>([]),[target,setTarget]=useState<{githubId:string;login:string}|null>(null);
-  const [category,setCategory]=useState<keyof typeof labels>('contributor'),[urls,setUrls]=useState(''),[reason,setReason]=useState(''),[confirmed,setConfirmed]=useState(false);
-  const [items,setItems]=useState<ContributionTag[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[version,setVersion]=useState(0);
-  const [revokeReason,setRevokeReason]=useState('');
-  useEffect(()=>{let active=true;void call('contribution-tags').then(d=>{if(active)setItems(ContributionTagsResponseSchema.parse(d).items)}).catch(e=>{if(active)setError(e.message)});return()=>{active=false}},[version]);
-  async function search(e:FormEvent){e.preventDefault();setBusy(true);setError('');setTarget(null);setMatches([]);try{const r=AdminContributorsResponseSchema.parse(await call('tag-contributors?query='+encodeURIComponent(query.trim())));setMatches(r.items);if(!r.items.length)setMessage('未找到贡献者，请核对用户名。')}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
-  async function add(e:FormEvent){e.preventDefault();if(!target)return;setError('');setMessage('');const input=AddContributionTagRequestSchema.safeParse({githubId:target.githubId,category,evidenceUrls:urls.split('\n').map(s=>s.trim()).filter(Boolean),reason:reason.trim(),confirmed});if(!input.success){setError(input.error.issues[0]?.message??'请核对资料');return}setBusy(true);try{await call('contribution-tags',csrfToken,input.data);setMessage('奖励标签已发放，15 分已计入，有效期一个月。');setUrls('');setReason('');setConfirmed(false);setVersion(v=>v+1)}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
-  async function revoke(id:string){setBusy(true);setError('');try{await call('contribution-tags/'+id+'/revoke',csrfToken,{reason:revokeReason.trim()});setVersion(v=>v+1);setMessage('标签已撤销，原记录保留。')}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
-  return <Card className="panel admin-panel"><h2>Outstanding 奖励评选</h2><p>每个标签奖励 15 分，自发放日起有效一个月，不同有效标签可累加。推荐理由和公开证据会展示在本月荣誉榜。</p>
-    <details><summary>审核规则</summary>{Object.entries(rules).map(([key,value])=><p key={key}><strong>{labels[key as keyof typeof labels]}：</strong>{value}</p>)}<p>重复、灌水、刷量不计；证据不足暂不添加。标注员不能给自己添加，撤销由站长处理。</p></details>
-    <form className="admin-form" onSubmit={e=>void search(e)}><label className="form-field">查找贡献者<Input required maxLength={39} value={query} disabled={busy} onChange={e=>{setQuery(e.target.value);setTarget(null);setMatches([])}}/></label><Button type="submit" disabled={busy}>查找</Button></form>
-    <div className="admin-matches">{matches.map(m=><Button key={m.githubId} disabled={busy} variant={target?.githubId===m.githubId?'default':'outline'} onClick={()=>{setTarget(m);setConfirmed(false)}}>{m.login}</Button>)}</div>
-    {target&&<form className="admin-form" onSubmit={e=>void add(e)}><p>标注对象：<strong>{target.login}</strong> · <a href={'/contributors/'+encodeURIComponent(target.login)} target="_blank" rel="noreferrer">查看贡献数据 ↗</a></p>
-      <label className="form-field">贡献分类<select disabled={busy} value={category} onChange={e=>{setCategory(e.target.value as keyof typeof labels);setConfirmed(false)}}>{Object.entries(labels).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><p>{rules[category]}</p>
-      <label className="form-field">公开证据链接（每行一个，最多6个，须属于同一项目）<Textarea required value={urls} disabled={busy} onChange={e=>{setUrls(e.target.value);setConfirmed(false)}} placeholder="https://github.com/组织/项目/pull/123"/></label>
-      <label className="form-field">推荐理由（公开展示，至少5字）<Textarea required minLength={5} maxLength={1000} disabled={busy} value={reason} onChange={e=>setReason(e.target.value)}/></label>
-      <label><input type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/>我已核对公开证据、贡献者身份及上述分类条件，确认不是重复、灌水或刷量记录。</label>
-      <Button type="submit" disabled={busy||!confirmed||reason.trim().length<5}>发放奖励标签</Button></form>}
-    {message&&<p role="status">{message}</p>}{error&&<p role="alert">{error}</p>}
-    <h3>最近标注</h3>{isOwner&&<label className="form-field">撤销原因<Input minLength={5} maxLength={1000} value={revokeReason} onChange={e=>setRevokeReason(e.target.value)}/></label>}
-    <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>贡献者 / 项目</th><th>分类 / 依据</th><th>标注人</th>{isOwner&&<th>操作</th>}</tr></thead><tbody>{items.map(t=><tr key={t.id}><td>{t.login}<br/>{t.repository}</td><td>{labels[t.category]}<br/>{t.reason}<br/>有效至 {new Date(t.expiresAt).toLocaleString('zh-CN')}<br/>{t.evidenceUrls.map((u,i)=><a key={u} href={u} target="_blank" rel="noreferrer">证据{i+1} ↗ </a>)}</td><td>{t.actorLogin}<br/>{new Date(t.createdAt).toLocaleString('zh-CN')}</td>{isOwner&&<td><Button variant="outline" disabled={busy||revokeReason.trim().length<5} onClick={()=>void revoke(t.id)}>撤销</Button></td>}</tr>)}</tbody></table>{!items.length&&<p>暂无标注。</p>}</div>
+  const {session}=useWebsiteSession();
+  const [applications,setApplications]=useState<OutstandingApplication[]>([]),[tags,setTags]=useState<ContributionTag[]>([]);
+  const [notes,setNotes]=useState<Record<string,string>>({}),[revokeReason,setRevokeReason]=useState('');
+  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[version,setVersion]=useState(0);
+  useEffect(()=>{let active=true;void Promise.all([call('outstanding-applications'),call('contribution-tags')]).then(([a,t])=>{
+    if(active){setApplications(OutstandingApplicationsResponseSchema.parse(a).items);setTags(ContributionTagsResponseSchema.parse(t).items);setError('')}
+  }).catch(e=>{if(active)setError(e.message)});return()=>{active=false}},[version]);
+  async function review(id:string,decision:'approved'|'rejected'){
+    setBusy(true);setError('');setMessage('');try{
+      await call('outstanding-applications/'+id+'/review',csrfToken,{decision,note:notes[id]??''});
+      setMessage(decision==='approved'?'申请已通过，勋章已加入当月 Outstanding 榜，奖励15分。':'申请已驳回。');setVersion(v=>v+1);
+    }catch(e){setError((e as Error).message)}finally{setBusy(false)}
+  }
+  async function revoke(id:string){setBusy(true);setError('');try{await call('contribution-tags/'+id+'/revoke',csrfToken,{reason:revokeReason.trim()});setVersion(v=>v+1);setMessage('勋章已撤销。')}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
+  return <Card className="panel admin-panel"><h2>Outstanding 勋章申请审核</h2>
+    <p>由本人在开源达人榜点击自己的头像提交申请。核对仓库、理由和证据后审核；不能审核自己的申请。</p>
+    <Button variant="outline" disabled={busy} onClick={()=>setVersion(v=>v+1)}>刷新申请</Button>
+    {error&&<p role="alert">{error}</p>}{message&&<p role="status">{message}</p>}
+    {!applications.length&&<p>暂无申请。</p>}
+    {applications.map(item=><section className="outstanding-review-card" key={item.id}>
+      <h3>{item.login} · {OUTSTANDING_LABELS[item.category]}</h3><p><a href={'https://github.com/'+item.repository} target="_blank" rel="noreferrer">{item.repository}</a> · {{pending:'待审核',approved:'已通过',rejected:'已驳回'}[item.status]}</p>
+      <p className="outstanding-reason-text">{item.reason}</p><div className="tag-row">{item.evidenceUrls.map((url,i)=><a key={url} href={url} target="_blank" rel="noreferrer">证据 {i+1} ↗</a>)}</div>
+      {item.status==='pending'&&(session.authenticated&&session.login.toLowerCase()===item.login.toLowerCase()?<p>请由其他管理员审核本人的申请。</p>:<>
+        <label className="form-field">审核意见（驳回必填，至少5字）<Textarea maxLength={1000} value={notes[item.id]??''} disabled={busy} onChange={e=>setNotes(n=>({...n,[item.id]:e.target.value}))}/></label>
+        <div className="tag-row"><Button disabled={busy} onClick={()=>void review(item.id,'approved')}>通过申请</Button><Button variant="outline" disabled={busy||(notes[item.id]??'').trim().length<5} onClick={()=>void review(item.id,'rejected')}>驳回申请</Button></div>
+      </>)}{item.reviewNote&&<p>审核意见：{item.reviewNote}</p>}
+    </section>)}
+    <h3>当前有效勋章</h3>{isOwner&&<label className="form-field">撤销原因<Input minLength={5} maxLength={1000} value={revokeReason} onChange={e=>setRevokeReason(e.target.value)}/></label>}
+    {tags.map(tag=><div className="outstanding-reason" key={tag.id}><p>{tag.login} · {OUTSTANDING_LABELS[tag.category]} · {tag.repository}</p><p>{tag.reason}</p>{isOwner&&<Button variant="outline" disabled={busy||revokeReason.trim().length<5} onClick={()=>void revoke(tag.id)}>撤销勋章</Button>}</div>)}
   </Card>;
 }

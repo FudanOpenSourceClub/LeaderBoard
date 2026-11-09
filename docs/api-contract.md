@@ -734,8 +734,8 @@ EMAIL_AUTH_NOT_CONFIGURED
 - 默认 `range=all&metric=score`；`score` 是新增排序指标，接口按 `limit` 返回达人；页面默认展示前 10 人，点击“显示更多”每次增加 10 人，通过额外一条记录判断是否还有后续达人，同分按 GitHub 用户名稳定排序，超额活动次数不参与破同分。
 - Contributor rank/detail/repository 增加 `score`、`commitIssueScore`、`prOpenedScore`、`prMergedScore`、`mergedPrs`。
 - PR 仅在 `scoring_repositories.enabled=true` 的稳定 Repository ID 中计分，名称和 URL 不能代替 ID。根目录 `scoring-whitelist.json` 管理 PR 白名单候选及启用状态。PR 不受 Star 门槛限制。
-- Commit/Issue 不要求白名单，要求仓库至少10 Star；公开仓库（包括自己的仓库）的已采集贡献均参与额度计算。按最近核验的 Star 缓存判断；不足10或未核验不计分，也不占用次数额度。
-- Commit/Issue 共用每用户自然月 10 次、每用户每仓库每自然月 3 次额度；Commit 每次 1 分，Issue 每次 5 分，每条有效贡献只占用 1 次额度。月度上限是次数而非分数，全部为 Issue 时每月最多 50 分。北京时间划分月份，按贡献时间和稳定身份确定次序。先检查仓库额度，未超仓库额度的记录再检查个人月度额度。
+- Issue 不要求白名单，要求仓库至少100 Star；公开仓库（包括自己的仓库）的已采集贡献均参与额度计算。按最近核验的 Star 缓存判断；不足100或未核验不计分，也不占用次数额度。
+- Commit 不计分且不占用额度。Issue 每用户自然月 10 次、每用户每仓库每自然月 3 次额度，每次 5 分，每条有效贡献只占用 1 次额度。月度上限是次数而非分数，全部为 Issue 时每月最多 50 分。北京时间划分月份，按贡献时间和稳定身份确定次序。先检查仓库额度，未超仓库额度的记录再检查个人月度额度。
 - 每次计算先检查完整历史，再筛选展示范围；时间筛选和分组不重置额度。PR 在创建时得 20 分、在 `merged_at` 时另得 30 分，不使用 closed 状态冒充 merged。
 - CSV 增加仓库 ID、对象 ID、合并时间、白名单命中、自然月、两个额度的计数/超限标记、得分及 PR 分项。
 - `POST /auth/email/send-code` 仅需 `{ email, studentId }`，必须携带已完成 GitHub OAuth 的 HttpOnly 会话。账号 ID 和当前 login 由服务器读取，忽略客户端伪造的账号字段；查邮箱、学号指纹及注册/绑定 GitHub ID，重复返回 409 `ALREADY_REGISTERED`，不发邮件。
@@ -807,10 +807,24 @@ OAuth sessions resolve `role: owner | admin | null` on every request. `isAdmin` 
 
 ## Outstanding 与仓库收录奖励（2026-11-07，取代旧开发奖励）
 
-- Commit 每次1分、Issue每次5分，共用每人北京时间自然月10次、每仓库每月3次额度；仓库Star≥10。PR白名单91个启用仓库，提交20分、合并另加30分，无次数上限。
-- 三类标签显示为 Outstanding Contributor / Outstanding Committer / Outstanding Maintainer。每个有效标签15分，不同类型及不同项目的有效标签可累加，同一贡献者/类型/项目在有效期内不可重复发放；过期可重新评选。每次评选必须填写5至1000字公开推荐理由并核对证据，沿用现有分类证据条件、自我标注限制、CSRF和审计。
+- Commit不计分且不占额度。Issue每次5分，每人北京时间自然月10次、每仓库每月3次额度；仓库Star≥100。PR使用启用的白名单仓库，提交20分、合并另加30分，无次数上限。
+- 三类标签显示为 Outstanding Contributor / Outstanding Committer / Outstanding Maintainer。每个有效标签15分，不同类型及不同项目的有效标签可累加，同一贡献者/类型/项目在有效期内不可重复发放；过期可重新评选。每次评选必须填写5至1000字本人申请理由并核对证据，沿用现有分类证据条件、CSRF和审计；本人申请、管理员审核，禁止自审。
 - 有效期从发放时间起按北京时间加一个日历月，月底无对应日期时取次月最后一天；区间为[createdAt,expiresAt)。过期或撤销后不再计入当前任何时间范围的积分。标签分按发放时间进入所选7d/30d/90d/all范围，不因切换范围重新发奖。分组筛选时只计算对应项目分组的标签。
 - GET /api/v1/contributors/outstanding → OutstandingBoardsResponse：asOf、北京时间month、boards三个类别，每类people按标签分降序/用户名升序，包含rank、login、avatarUrl、score和tags。公开、no-store。展示目前仍有效的获奖者（包括上个月发放但尚未到期者），推荐理由、项目、评选人、证据、到期日。三榜与普通时间/分组筛选独立。
 - ContributionTag 增加必填 expiresAt；rank/detail 增加 outstandingScore 与 projectSubmissionScore。总积分=贡献分+有效标签分+仓库收录分+人工调整。旧 bonusScore 为0，旧奖励记录保留。
 - 仓库申请批准事务同时向真实绑定GitHub账号发放20分。按审核时间进入时间范围，全站奖励不计入实验室分组；申请ID和稳定仓库ID双重防重。拒绝、待审、重复审核不发奖；历史匿名且无法确认提交者的申请不补造用户或奖励。迁移补齐已有批准且能核验提交者的历史奖励，仍按原审核时间归属。
 - UI：达人榜新增一行三个荣誉入口，展开对应人员及推荐理由；个人积分明细单列两项奖励；后台说明有效期、推荐理由和批准收录奖励。
+
+
+### Outstanding 本人申请与全站登录
+
+所有非 `/api/v1/auth/*` 的业务 API 必须持有有效 `leaderboard_session`，否则返回401 `LOGIN_REQUIRED`。响应不缓存。`/health`、SPA静态资源、登录和注册流程保留公开；页面在确认登录前不挂载业务内容。右上角持续显示当前登录者的 GitHub 用户名，兼容手机。
+
+- `GET /api/v1/outstanding-applications`：仅返回当前登录用户的申请，查询参数不能指定申请人。
+- `POST /api/v1/outstanding-applications`：`OutstandingApplicationRequestSchema`，字段为 `category`（contributor/committer/maintainer）、`repository`（owner/repository）、`reason`（5–1000字）和 `evidenceUrls`（1–6个同仓库公开证据）。严格拒绝客户端身份字段；身份只取已验证会话，要求注册、CSRF和已加入达人榜。返回201 `OutstandingApplicationSchema`。
+- `GET /api/v1/admin/outstanding-applications`：当前 owner/admin 可读取审核队列。
+- `POST /api/v1/admin/outstanding-applications/:id/review`：`OutstandingApplicationReviewSchema`，`decision=approved|rejected`，`note` 驳回时至少5字，审核需要CSRF。事务中再次检查数据库权限，禁止任何角色自审。
+- 同用户/仓库/类别只能有一个待审申请，有效勋章不可重复申请。并发审核仅一次成功，重复返回409；通过时原子写入勋章和申请结论，理由、证据自动进入当月 Outstanding 榜，每枚15分，保留自通过起一个月有效期。驳回不加分，可重新申请。
+- 旧 `POST /api/v1/admin/contribution-tags` 返回410 `APPLICATION_REQUIRED`，不再允许直接为他人发放勋章。站长保留撤销权限。
+- 仓库榜规则文案：在复旦开源仓库必吃榜里面申请仓库上榜的，通过的加20分。仍由 `project_submission_awards` 保证每仓库一次20分。
+- API保留 `commitIssueScore` 字段兼容既有客户端，其值现在仅为 Issue 得分。Commit 活动统计保留，积分从完整历史实时重算，无需修改原始贡献记录。

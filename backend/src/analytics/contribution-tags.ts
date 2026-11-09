@@ -1,4 +1,4 @@
-import type {Pool} from "pg";
+import type {Pool,PoolClient} from "pg";
 import {OUTSTANDING_LABELS,OUTSTANDING_TAG_POINTS,type OutstandingBoardsResponse,type ContributionTag,type AddContributionTagRequest} from "@leadboard/contracts";
 import {getDbPool,withTransaction} from "../db/index.js";
 import {AdminError,auditAdmin,lockAdmin} from "../auth/roles.js";
@@ -29,11 +29,21 @@ export async function getOutstandingBoards(pool:Pick<Pool,'query'>=getDbPool(),n
 export class ContributionTagService{
   async list(){return (await getDbPool().query<Row>(sql+' WHERE t.revoked_at IS NULL AND t.expires_at>clock_timestamp() ORDER BY t.id DESC LIMIT 200')).rows.map(output)}
   async search(query:string){return (await getDbPool().query<{github_id:string;login:string}>(`SELECT github_id::text,login FROM contributors WHERE is_bot=FALSE AND github_id IS NOT NULL AND login IS NOT NULL AND strpos(lower(login),lower($1))>0 ORDER BY lower(login) LIMIT 20`,[query])).rows.map(r=>({githubId:r.github_id,login:r.login}))}
-  async add(actorId:string,input:AddContributionTagRequest){return withTransaction(async client=>{
+  async add(actorId:string,input:AddContributionTagRequest){return withTransaction(client=>grantContributionTag(client,actorId,input))}
+  async revoke(actorId:string,id:string,reason:string){return withTransaction(async client=>{
+    const actor=await lockAdmin(client,actorId);const tag=(await client.query<Row>(sql+' WHERE t.id=$1',[id])).rows[0];
+    if(!tag)throw new AdminError('TAG_NOT_FOUND',404,'标签不存在');
+    if(!tag.revoked_at){await client.query('UPDATE contribution_tags SET revoked_at=clock_timestamp(),revoked_by=$2 WHERE id=$1',[id,actorId]);await auditAdmin(client,{githubId:actorId,login:actor.login},{githubId:tag.github_id,login:tag.login},'tag.revoke',reason,{id})}
+    return output((await client.query<Row>(sql+' WHERE t.id=$1',[id])).rows[0]!);
+  })}
+}
+
+/** Called within the application review transaction so awarding and review commit together. */
+export async function grantContributionTag(client:PoolClient,actorId:string,input:AddContributionTagRequest){
     await client.query('SELECT pg_advisory_xact_lock(7983161)');
     const actor=(await client.query<{role:string;login:string}>('SELECT role,login FROM website_roles WHERE github_id=$1 AND revoked_at IS NULL',[actorId])).rows[0];
     if(!actor||!['admin','owner'].includes(actor.role))throw new AdminError('TAGGER_REQUIRED',403,'当前账号没有标签添加权限');
-    if(actor.role!=='owner'&&actorId===input.githubId)throw new AdminError('SELF_TAG_DENIED',403,'不能给自己添加标签，请由其他标注员核对');
+    if(actorId===input.githubId)throw new AdminError('SELF_TAG_DENIED',403,'不能给自己添加标签，请由其他标注员核对');
     const target=(await client.query<{id:string;login:string}>('SELECT id::text,login FROM contributors WHERE github_id=$1 AND is_bot=FALSE AND login IS NOT NULL',[input.githubId])).rows[0];
     if(!target)throw new AdminError('CONTRIBUTOR_NOT_FOUND',404,'请选择已有的贡献者');
     const repository=new URL(input.evidenceUrls[0]!).pathname.split('/').slice(1,3).join('/');
@@ -50,11 +60,4 @@ export class ContributionTagService{
     const row=(await client.query<{id:string}>(`INSERT INTO contribution_tags(contributor_id,category,repository,evidence_urls,reason,actor_github_id,actor_login) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id::text`,[target.id,input.category,repository,JSON.stringify(input.evidenceUrls),input.reason,actorId,actor.login])).rows[0]!;
     await auditAdmin(client,{githubId:actorId,login:actor.login},{githubId:input.githubId,login:target.login},'tag.add',input.reason,{id:row.id,category:input.category,repository,evidenceUrls:input.evidenceUrls,confirmed:true});
     return output((await client.query<Row>(sql+' WHERE t.id=$1',[row.id])).rows[0]!);
-  })}
-  async revoke(actorId:string,id:string,reason:string){return withTransaction(async client=>{
-    const actor=await lockAdmin(client,actorId);const tag=(await client.query<Row>(sql+' WHERE t.id=$1',[id])).rows[0];
-    if(!tag)throw new AdminError('TAG_NOT_FOUND',404,'标签不存在');
-    if(!tag.revoked_at){await client.query('UPDATE contribution_tags SET revoked_at=clock_timestamp(),revoked_by=$2 WHERE id=$1',[id,actorId]);await auditAdmin(client,{githubId:actorId,login:actor.login},{githubId:tag.github_id,login:tag.login},'tag.revoke',reason,{id})}
-    return output((await client.query<Row>(sql+' WHERE t.id=$1',[id])).rows[0]!);
-  })}
 }

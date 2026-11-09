@@ -463,3 +463,10 @@ The legacy website_roles value `admin` now means tag contributor only. It grants
 `project_submission_awards(proposal_id BIGINT PRIMARY KEY REFERENCES project_proposals(id),repository_github_id BIGINT NOT NULL UNIQUE,contributor_id BIGINT NOT NULL REFERENCES contributors(id),points INTEGER NOT NULL DEFAULT 20 CHECK(points=20),awarded_at TIMESTAMPTZ NOT NULL DEFAULT now())`。审核通过、项目收录、奖励入账同一事务，奖励对象从原申请成员的primary GitHub绑定解析，不接受客户端指定收款人。迁移按原reviewed_at补齐可归属的已批准申请；双唯一键确保重放/重审不重发，拒绝不发奖。
 
 当前总分不再读取旧contributor_score_awards开发奖励，保留表及记录用于历史追溯。积分查询按奖励发放时间筛选，并在查询时间检查标签是否有效。新接口及字段见api-contract最新章节。
+
+
+### outstanding_applications
+
+迁移 `1794182400000_outstanding_applications.js`：本人勋章申请与审核记录。`id BIGSERIAL` 主键；`contributor_id BIGINT` 外键到 contributors，身份由会话的 GitHub ID 解析；`category/repository/evidence_urls JSONB/reason` 保存类别、仓库、证据与理由。`status TEXT DEFAULT 'pending'` 只能为 pending/approved/rejected；`created_at TIMESTAMPTZ DEFAULT clock_timestamp()`；审核字段 `reviewed_at/reviewer_github_id/reviewer_login` 可空；`review_note TEXT DEFAULT ''`；`tag_id BIGINT UNIQUE` 可空，外键到 contribution_tags。状态约束确保通过必须有勋章，驳回必须有原因，待审不得带审核字段。同人/类别/不区分大小写仓库的待审记录有部分唯一索引，队列按 status/created_at 建索引。
+
+申请和审核与角色变更共用事务 advisory lock，审核与发勋章、审计在同一事务提交；失败则全部回滚。原始申请保留，驳回后允许重新申请。沿用 contribution_tags 的一个月有效期和15分奖励，不更改已有数据。

@@ -20,14 +20,23 @@ export function App({ api, isMock: _isMock = false }: { api: LeadBoardApiClient;
 }
 
 function AppContent({ api }: { api: LeadBoardApiClient }) {
-  const { session } = useWebsiteSession();
+  const { session, loading } = useWebsiteSession();
   const location = useLocation();
   useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, [location.pathname]);
   const accountUrl = session.authenticated && session.login
     ? `/contributors/${encodeURIComponent(session.login)}`
     : "/join";
-  const loginUrl = "/api/v1/auth/github/login?returnTo=/projects";
+  const loginUrl = "/api/v1/auth/github/login?returnTo="+encodeURIComponent(location.pathname+location.search);
   const isHome = location.pathname === "/" || location.pathname === "/dashboard";
+
+  if(loading)return <main className="login-gate" role="status">正在确认登录状态…</main>;
+  if(!session.authenticated)return <div className="app-shell dark-shell">
+    <header className="topbar"><Link className="brand" to="/">LeaderBoard</Link><a className="header-login login-gate-account" href={loginUrl}>GitHub 登录</a></header>
+    {location.pathname==='/join'?<main id="main-content"><IdentityVerificationPage/></main>:<main id="main-content" className="login-gate">
+      <AppIcon name="github" size={40}/><h1>登录 LeaderBoard</h1><p>使用 GitHub 登录后，查看复旦开源项目、达人榜和比赛规则。</p>
+      <a className="button primary-button" href={loginUrl}>使用 GitHub 登录</a><Link to="/join">首次使用？注册并加入达人榜</Link>
+    </main>}
+  </div>;
 
   return (
     <div className={`app-shell dark-shell${isHome ? " home-shell" : ""}`}>
@@ -41,7 +50,6 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
           <NavLink className={navClass} to="/" end>首页</NavLink>
           <NavLink className={navClass} to="/projects">项目</NavLink>
           <NavLink className={navClass} to="/contributors">达人榜</NavLink>
-          {session.authenticated ? <Link className="header-account" to={accountUrl}><AppIcon name="user" size={16}/>{session.login || "我的"}</Link> : <a className="header-login" href={loginUrl}><AppIcon name="github" size={17}/> GitHub 登录</a>}
           {session.authenticated && (session.isAdmin||session.canTag) && <NavLink className={navClass} to="/admin">管理</NavLink>}
         </nav>
         <div className="mobile-header-actions">
@@ -55,6 +63,7 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
           <Link className="mobile-round-link" to="/projects?search=1" aria-label="搜索项目"><AppIcon name="search" size={21}/></Link>
           {session.authenticated&&(session.isAdmin||session.canTag)&&<Link className="mobile-round-link" to="/admin" aria-label="管理后台"><AppIcon name="settings" size={21}/></Link>}
         </div>
+        <Link className="persistent-account" to={accountUrl} aria-label={`当前登录者 ${session.login}`}><AppIcon name="github" size={17}/><span>{session.login}</span></Link>
       </header>
 
       <div className="workspace">

@@ -157,6 +157,27 @@ export const AddContributionTagRequestSchema=z.object({
   if(v.category==='maintainer'&&(!urls.some(u=>/\/blob\//.test(u.pathname))||urls.filter(u=>/\/(pull|issues|discussions)\//.test(u.pathname)).length<2))ctx.addIssue({code:"custom",message:"Maintainer 需公开维护者名单及至少两次维护活动证据"});
 });
 export type AddContributionTagRequest=z.infer<typeof AddContributionTagRequestSchema>;
+export const OutstandingApplicationRequestSchema=z.object({
+  category:ContributionCategorySchema,
+  repository:z.string().trim().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "请填写 owner/repository 格式的申请仓库"),
+  evidenceUrls:z.array(evidenceLink).min(1).max(6),reason:z.string().trim().min(5).max(1000),
+}).strict().superRefine((value,ctx)=>{
+  // Reuse category-specific evidence checks without accepting an applicant identity from the browser.
+  const evidence=AddContributionTagRequestSchema.safeParse({category:value.category,evidenceUrls:value.evidenceUrls,reason:value.reason,githubId:'1',confirmed:true});
+  if(!evidence.success)for(const issue of evidence.error.issues)ctx.addIssue({...issue});
+  if(value.evidenceUrls.some(url=>{try{return new URL(url).pathname.split('/').slice(1,3).join('/').toLowerCase()!==value.repository.toLowerCase()}catch{return true}}))ctx.addIssue({code:'custom',path:['repository'],message:'申请仓库必须与贡献证据一致'});
+});
+export type OutstandingApplicationRequest=z.infer<typeof OutstandingApplicationRequestSchema>;
+export const OutstandingApplicationSchema=z.object({
+  id:githubId,githubId,login:text,category:ContributionCategorySchema,repository:text,evidenceUrls:z.array(webUrl),reason:text,
+  status:z.enum(['pending','approved','rejected']),createdAt:utc,reviewedAt:utc.nullable(),reviewerLogin:text.nullable(),reviewNote:z.string(),tagId:githubId.nullable(),
+});
+export type OutstandingApplication=z.infer<typeof OutstandingApplicationSchema>;
+export const OutstandingApplicationsResponseSchema=z.object({items:z.array(OutstandingApplicationSchema)});
+export const OutstandingApplicationReviewSchema=z.object({
+  decision:z.enum(['approved','rejected']),note:z.string().trim().max(1000).default(''),
+}).strict().refine(v=>v.decision!=='rejected'||v.note.length>=5,{message:'驳回时请填写至少5字的原因',path:['note']});
+export type OutstandingApplicationReview=z.infer<typeof OutstandingApplicationReviewSchema>;
 export const ContributionProfileSchema=z.object({
   submittedPrs:count,submittedIssues:count,mergedPrs:count,mergedSubmittedPrs:count,
   prMergeRate:z.number().min(0).max(100).nullable(),activeDays:count,activeWeeks:count,repositories:count,

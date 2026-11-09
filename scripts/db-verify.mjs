@@ -13,6 +13,7 @@ const id = () => required("bigint", "serial");
 
 // Expected columns, nullability and defaults come from docs/data-model.md.
 const tables = {
+  outstanding_applications:{id:id(),contributor_id:required("bigint"),category:required("text"),repository:required("text"),evidence_urls:required("jsonb"),reason:required("text"),status:required("text","'pending'::text"),created_at:required(timestamp,"clock_timestamp()"),reviewed_at:optional(timestamp),reviewer_github_id:optional("bigint"),reviewer_login:optional("text"),review_note:required("text","''::text"),tag_id:optional("bigint")},
   project_submission_awards:{proposal_id:required("bigint"),repository_github_id:required("bigint"),contributor_id:required("bigint"),points:required("integer","20"),awarded_at:required(timestamp,"now()")},
   contribution_tags:{id:id(),contributor_id:required("bigint"),category:required("text"),repository:required("text"),evidence_urls:required("jsonb"),reason:required("text"),actor_github_id:required("bigint"),actor_login:required("text"),created_at:required(timestamp,"clock_timestamp()"),expires_at:required(timestamp),revoked_at:optional(timestamp),revoked_by:optional("bigint")},
   website_roles: {github_id:required("bigint"),login:required("text"),role:required("text"),granted_by:required("bigint"),granted_at:required(timestamp,"clock_timestamp()"),revoked_at:optional(timestamp),revoked_by:optional("bigint"),reason:required("text")},
@@ -117,6 +118,8 @@ const tables = {
 };
 
 const foreignKeys = [
+  ["outstanding_applications","contributor_id","contributors","id"],
+  ["outstanding_applications","tag_id","contribution_tags","id"],
   ["project_submission_awards","contributor_id","contributors","id"],
   ["project_submission_awards","proposal_id","project_proposals","id"],
   ["contribution_tags","contributor_id","contributors","id"],
@@ -139,6 +142,7 @@ const foreignKeys = [
   ["contributor_public_activities", "contributor_id", "contributors", "id"],
 ];
 const uniques = [
+  ["outstanding_applications","tag_id"],
   ["project_submission_awards","repository_github_id"],
   ["contributor_score_adjustments","request_id"],["contributor_score_adjustments","reverses_id"],
   ["campus_projects","repository_github_id"],["campus_projects","html_url"],["campus_projects","proposal_id"],
@@ -151,6 +155,8 @@ const uniques = [
   ["members", "email_fingerprint"], ["github_oauth_states", "state_hash"],
 ];
 const indexes = {
+  outstanding_application_pending_idx:["outstanding_applications","contributor_id","category","lower(repository)"],
+  outstanding_application_queue_idx:["outstanding_applications","status","created_at"],
   project_submission_award_time_idx:["project_submission_awards","contributor_id","awarded_at"],
   score_adjustment_contributor_time_idx:["contributor_score_adjustments","contributor_id","created_at"],
   member_single_github_account_idx:["member_github_accounts","member_id"],
@@ -176,6 +182,7 @@ const indexes = {
 };
 
 const primaryKeys = {
+  outstanding_applications:["id"],
   project_submission_awards:["proposal_id"],
   contribution_tags:["id"],
   website_roles:["github_id"],website_admin_audit:["id"],contributor_score_adjustments:["id"],
@@ -256,6 +263,7 @@ try {
   if (!actualIndexes.some(index => index.index_name === "sync_runs_status_finished_idx" && index.definition.includes("(status, finished_at DESC)"))) problems.push("sync_runs_status_finished_idx must sort finished_at DESC");
   if (!actualIndexes.some(index => index.index_name === "member_github_primary_idx" && /WHERE is_primary/.test(index.definition))) problems.push("member_github_primary_idx must be partial on is_primary");
   if (!actualIndexes.some(index=>index.index_name==="contribution_tag_lookup_idx" && /WHERE \(revoked_at IS NULL\)/.test(index.definition) && index.definition.includes("expires_at"))) problems.push("missing contribution tag expiry lookup index");
+  if (!actualIndexes.some(index=>index.index_name==='outstanding_application_pending_idx'&&/CREATE UNIQUE INDEX/.test(index.definition)&&/WHERE \(status = 'pending'::text\)/.test(index.definition))) problems.push('Outstanding pending application uniqueness must be partial');
   if (problems.length) {
     for (const problem of problems) console.error(problem);
     process.exitCode = 1;

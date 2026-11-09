@@ -1,3 +1,4 @@
+import {readdirSync} from "node:fs";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
@@ -47,20 +48,24 @@ async function runMigration() {
 }
 
 describe("PostgreSQL schema and transaction integration", () => {
-  it("creates all seven tables in an empty schema", async () => {
+  it("creates the application schema including Outstanding reviews", async () => {
     await runMigration();
     const first = await getDbPool().query<{ table_name: string }>(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_type = 'BASE TABLE'`, [schema],
     );
     expect(first.rows.map(row => row.table_name).sort()).toEqual([
       "commits", "contributors", "groups", "issues", "pull_requests", "repositories", "sync_runs", "pgmigrations",
+      "members", "email_verification_challenges", "github_accounts", "member_github_accounts", "github_oauth_states", "project_proposals",
+      "contributor_public_activities", "scoring_repositories", "contributor_score_awards", "website_sessions", "website_login_states",
+      "campus_projects", "project_notification_outbox", "repository_star_counts", "website_roles", "website_admin_audit", "contributor_score_adjustments",
+      "contribution_tags", "project_submission_awards", "outstanding_applications",
     ].sort());
   });
 
   it("succeeds on a second migration without duplicating it", async () => {
     await runMigration();
     const second = await getDbPool().query<{ count: string }>("SELECT count(*) AS count FROM pgmigrations");
-    expect(Number(second.rows[0]?.count)).toBe(1);
+    expect(Number(second.rows[0]?.count)).toBe(readdirSync(migrationsDir).filter(name=>/^\d+.*\.js$/.test(name)).length);
   });
 
   it.each([

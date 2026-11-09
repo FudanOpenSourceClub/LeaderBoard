@@ -95,7 +95,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
       <section className="filter-card leaderboard-filters" aria-label="积分规则">
         <details>
           <summary>查看积分规则</summary>
-          <p className="filter-caption">Commit 每次 1 分，Issue 每次 5 分；仓库 Star ≥ 10，两者共用每人每自然月 10 次、每仓库每自然月 3 次额度。PR：仅白名单仓库，提交 20 分，合并另加 30 分。Outstanding 标签每个 15 分，自发放日起有效一个月，可累加；仓库收录申请审核通过，提交者每仓库奖励 20 分。</p>
+          <p className="filter-caption">Commit 不计分。Issue 每次 5 分，仓库 Star ≥ 100；每人每自然月最多计 10 次、每仓库每自然月最多计 3 次。PR：仅白名单仓库，提交 20 分，合并另加 30 分。Outstanding 勋章由本人点击自己的头像申请，填写申请理由和申请仓库，审核通过后加入当月 Outstanding 榜；每枚 15 分，自审核通过起有效一个月，可累加。在复旦开源仓库必吃榜里面申请仓库上榜的，通过的加20分。</p>
         </details>
       </section>
 
@@ -154,9 +154,9 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
                 {visibleItems.map((item) => (
                   <div className={`ranking-row ranking-row-with-favorite ${item.rank <= 3 ? `ranking-medalist ranking-medalist-${item.rank}` : ""}`} key={item.login}>
                     {item.rank <= 3 ? <span className={`rank-medal rank-medal-${item.rank}`} role="img" aria-label={`${["金牌", "银牌", "铜牌"][item.rank - 1]}，第 ${item.rank} 名`}><svg viewBox="0 0 40 48" aria-hidden="true"><path className="medal-ribbon" d="M9 4h9l7 18-8 4zM31 4h-9l-7 18 8 4z"/><circle cx="20" cy="30" r="15" fill="currentColor"/><circle cx="20" cy="30" r="11.5" fill="none" stroke="white" strokeOpacity=".65"/><text x="20" y="35" textAnchor="middle" fill="white" fontSize="15" fontWeight="800">{item.rank}</text></svg></span> : <span className="rank-badge rank-4">{item.rank}</span>}
-                    <img className="avatar avatar-xl"
+                    <Link to={`/contributors/${encodeURIComponent(item.login)}`} aria-label={`打开 ${item.login} 的个人页面`}><img className="avatar avatar-xl"
                       src={item.avatarUrl ?? `https://github.com/${encodeURIComponent(item.login)}.png?size=96`}
-                      alt={`${item.login} 的头像`} loading="lazy" />
+                      alt={`${item.login} 的头像`} loading="lazy" /></Link>
                     <Link className="ranking-person" to={`/contributors/${encodeURIComponent(item.login)}`}>
                       <strong>{item.login}</strong>
                       <span className="tag-row"><ContributionBadges tags={item.communityTags??[]}/>

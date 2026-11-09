@@ -57,7 +57,7 @@ export class WebsiteAuthService implements WebsiteAuthApi {
   async startLogin(returnPath: string, intent?: "register") {
     if (!this.config) throw new WebsiteAuthError("LOGIN_UNAVAILABLE",503,"GitHub 登录尚未配置");
     const state=(intent === "register" ? "register." : "login.")+random(), browserToken=random();
-    const safePath=["/projects","/admin","/join"].includes(returnPath)?returnPath:"/projects";
+    const safePath=/^\/(?:\?(?:[^\\\r\n]*))?$/.test(returnPath)||/^\/(?:projects|admin|join|dashboard|contributors(?:\/[A-Za-z0-9-]+)?)(?:\?[^\\\r\n]*)?$/.test(returnPath)?returnPath:"/projects";
     await getDbPool().query(`INSERT INTO website_login_states(state_hash,browser_hash,return_path,expires_at)
       VALUES ($1,$2,$3,now()+interval '10 minutes')`,[hash(state),hash(browserToken),safePath]);
     const url=new URL("https://github.com/login/oauth/authorize");

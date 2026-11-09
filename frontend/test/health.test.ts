@@ -23,7 +23,7 @@ it.each([
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response()));
   await expect(fetchHealth()).rejects.toThrow();
 });
-it("renders the compact dark homepage with real navigation routes", () => {
+it("waits for session confirmation before rendering homepage content", () => {
   const html = renderToStaticMarkup(
     createElement(MemoryRouter, null,
       createElement(FiltersProvider, null,
@@ -31,17 +31,15 @@ it("renders the compact dark homepage with real navigation routes", () => {
       ),
     ),
   );
-  expect(html).toContain("LeaderBoard");
-  expect(html).toContain("复旦开源项目");
-  expect(html).toContain("开源达人榜");
-  expect(html).toContain("mobile-bottom-nav");
-  expect(html).toContain("mobile-tab");
+  expect(html).toContain("正在确认登录状态");
+  expect(html).not.toContain("复旦开源项目");
+  expect(html).not.toContain("开源达人榜");
   expect(html).not.toContain("服务正常");
   expect(html).not.toContain("校内开源项目");
   expect(html).not.toContain("让每一份微小贡献都被看见");
 });
 
-it("keeps repository discovery and submission on the projects route", () => {
+it("keeps repository content hidden while session confirmation is pending", () => {
   const html = renderToStaticMarkup(
     createElement(MemoryRouter, { initialEntries: ["/projects"] },
       createElement(FiltersProvider, null,
@@ -49,6 +47,7 @@ it("keeps repository discovery and submission on the projects route", () => {
       ),
     ),
   );
-  expect(html).toContain("复旦开源仓库必吃榜");
-  expect(html).toContain("加上我的项目");
+  expect(html).toContain("正在确认登录状态");
+  expect(html).not.toContain("复旦开源仓库必吃榜");
+  expect(html).not.toContain("加上我的项目");
 });

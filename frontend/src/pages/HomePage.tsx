@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { CampusProjectsResponseSchema, type CampusProject, type ContributorLeaderboardResponse } from "@leadboard/contracts";
+import { COMPETITION_PERIOD, CampusProjectsResponseSchema, type CampusProject, type ContributorLeaderboardResponse } from "@leadboard/contracts";
 import type { LeadBoardApiClient } from "../api/client";
 import { AppIcon } from "../components/AppIcon";
 import { useFilters } from "../state/filters";
@@ -75,6 +75,7 @@ export function HomePage({ api, accountUrl, authenticated }: { api: LeadBoardApi
           <div className="home-live-content">
             <section className="home-panel home-contributors">
               <div className="home-panel-heading"><h2><Link to="/contributors">达人榜<AppIcon name="arrow" size={17}/></Link></h2><Link className="home-panel-action" to="/join"><AppIcon name="plus" size={14}/>加入</Link></div>
+              {range==='competition'&&<p className="filter-caption">比赛周期：{COMPETITION_PERIOD.label}</p>}
               <div className="home-data-group">
                 {contributors.status === "loading" ? loading : contributors.status === "error" ? retryButton : contributors.items.length === 0 ? <Link className="home-empty-link" to="/join">成为第一位达人 <AppIcon name="arrow" size={18}/></Link> : contributors.items.slice(0, 3).map(item => (
                   <Link className={`home-contributor home-rank-${item.rank}`} key={item.login} to={`/contributors/${encodeURIComponent(item.login)}`}>

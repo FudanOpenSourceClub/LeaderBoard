@@ -18,6 +18,7 @@ import {getTagMap} from "./contribution-tags.js";
 import { getScoreAdjustments } from "./adjustments.js";
 import { getOutstandingScores, getProjectSubmissionScores } from "./rewards.js";
 import { emptyScore, getContributionScores, type ScoreDecision } from "./scoring.js";
+import {rangeBounds} from './period.js';
 
 function sumScores(decisions: ScoreDecision[]) {
   return decisions.reduce((s,d) => ({ score:s.score+d.points, commitIssueScore:s.commitIssueScore+d.commitIssuePoints,
@@ -31,13 +32,6 @@ function safeNumber(value: unknown): number {
   const number = typeof value === "number" ? value : Number(value);
   if (!Number.isSafeInteger(number) || number < 0) throw new Error("Database count is outside JavaScript safe integer range");
   return number;
-}
-
-function rangeBounds(range: TimeRange, now: Date): { from: string | null; to: string } {
-  const to = now.toISOString();
-  if (range === "all") return { from: null, to };
-  const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
-  return { from: new Date(now.getTime() - days * 86_400_000).toISOString(), to };
 }
 
 const TRACKED_EVENTS_SQL = `

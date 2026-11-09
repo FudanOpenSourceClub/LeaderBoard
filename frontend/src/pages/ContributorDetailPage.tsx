@@ -1,6 +1,6 @@
 import {ContributionProfile} from "../components/ContributionProfile";
 import { useEffect, useState } from "react";
-import { TimeRangeSchema, type ContributorDetail } from "@leadboard/contracts";
+import { COMPETITION_PERIOD, TimeRangeSchema, type ContributorDetail } from "@leadboard/contracts";
 import { Link, useParams } from "react-router";
 import type { LeadBoardApiClient } from "../api/client";
 import { EmptyState, ErrorState, LoadingState } from "../components/AsyncStates";
@@ -86,6 +86,7 @@ export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
         </div>
         <label className="profile-range">时间范围
           <select value={range} onChange={(event) => setRange(TimeRangeSchema.parse(event.target.value))}>
+            <option value="competition">{COMPETITION_PERIOD.optionLabel}</option>
             <option value="7d">最近 7 天</option><option value="30d">最近 30 天</option>
             <option value="90d">最近 90 天</option><option value="all">全部历史</option>
           </select>
@@ -93,6 +94,7 @@ export function ContributorDetailPage({ api }: { api: LeadBoardApiClient }) {
       </section>
 
       <section className="dashboard-content">
+        {range==='competition'&&<p className="filter-caption">比赛计分周期：{COMPETITION_PERIOD.label}（北京时间）</p>}
         {isSelf&&<OutstandingApplicationPanel csrfToken={session.csrfToken}/>}
         {state.status === "loading" && <LoadingState label="正在加载贡献者详情…" />}
         {state.status === "error" && <ErrorState message={state.message} onRetry={() => setRetry((value) => value + 1)} />}

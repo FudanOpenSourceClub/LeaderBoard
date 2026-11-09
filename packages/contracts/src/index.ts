@@ -115,7 +115,16 @@ export const SyncStatusSchema = z.object({
 });
 export type SyncStatus = z.infer<typeof SyncStatusSchema>;
 
-export const TimeRangeSchema = z.enum(["7d", "30d", "90d", "all"]);
+/** Fixed competition dates include both calendar dates in Asia/Shanghai. */
+export const COMPETITION_PERIOD = {
+  id: '2026-autumn',
+  label: '2026年9月1日至2026年12月15日',
+  optionLabel: '比赛周期（2026/9/1—12/15）',
+  startsAt: '2026-08-31T16:00:00.000Z',
+  endsAtExclusive: '2026-12-15T16:00:00.000Z',
+  timezone: 'Asia/Shanghai',
+} as const;
+export const TimeRangeSchema = z.enum(["competition", "7d", "30d", "90d", "all"]);
 export type TimeRange = z.infer<typeof TimeRangeSchema>;
 
 export const LeaderboardMetricSchema = z.enum(["score", "total", "commits", "prs", "issues"]);

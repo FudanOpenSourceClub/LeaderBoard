@@ -15,7 +15,7 @@
 - GitHub numeric ID 在 JS/TS 边界统一序列化为 `string`
 - GitHub stable ID 优先于 login / repository name
 - HTTP Base Path：`/api/v1`
-- 支持时间范围：`7d | 30d | 90d | all`
+- 支持时间范围：`competition | 7d | 30d | 90d | all`
 - `all` 表示 LeaderBoard **已经入库的全部历史**，不承诺等于 GitHub 账号/仓库的全部历史
 - 所有可重复执行的写入必须幂等
 - 正式收录用户的榜单和详情包含已保存的个人公开贡献，与已监控仓库事件按身份去重；组织统计仍使用仓库范围。
@@ -376,7 +376,7 @@ getSyncStatus(): Promise<SyncStatus>;
 ## 9. Analytics
 
 ```ts
-export type TimeRange = "7d" | "30d" | "90d" | "all";
+export type TimeRange = "competition" | "7d" | "30d" | "90d" | "all";
 export type LeaderboardMetric = "total" | "commits" | "prs" | "issues";
 
 export interface GroupSummary {
@@ -644,7 +644,7 @@ Schema 校验 numeric ID 为十进制字符串、时间为 UTC `Z` 结尾的 ISO
 数据语义边界：PR/Issue 按 `created_at` 采集时，只保证采集当时的状态；旧事件之后的关闭/合并不会因新建时间窗口自动刷新。默认分支新增但 authored_at 早于同步窗口的 Commit 也可能不被覆盖。当前不承诺完整历史、全量状态持续刷新或处理 force-push 撤回事实；需要扩展时另设任务，不能把滑动窗口描述成 GitHub 全量镜像。
 
 
-HTTP 参数默认值：省略 range 使用 30d，省略 metric 使用 total，省略 limit 使用 50；group 省略表示不过滤。显式空值、重复参数及非法值返回 JSON 4xx；不能用默认值掩盖无效输入。HTTP 层转换正十进制 limit，Analytics 接收数字。数据库聚合计数安全转换为 number，GitHub BIGINT ID 保持 string。
+HTTP 参数默认值：达人榜和个人详情省略 range 使用 competition，组织概览省略 range 使用 30d，省略 metric 使用 total，省略 limit 使用 50；group 省略表示不过滤。显式空值、重复参数及非法值返回 JSON 4xx；不能用默认值掩盖无效输入。HTTP 层转换正十进制 limit，Analytics 接收数字。数据库聚合计数安全转换为 number，GitHub BIGINT ID 保持 string。
 
 IngestionResult 的 inserted/updated/skipped/errors 以输入 Activity 条数计数，每条只属于一项；正常返回四项之和等于输入条数。异常回滚必须上报；errors>0 不能被同步器算作该仓库成功。空的完整 scope 可以成功；scope 失败或全部仓库失败为 failed，只有部分仓库失败为 partial。
 
@@ -731,7 +731,7 @@ EMAIL_AUTH_NOT_CONFIGURED
 
 ## 达人榜积分、每日增量与唯一注册
 
-- 默认 `range=all&metric=score`；`score` 是新增排序指标，接口按 `limit` 返回达人；页面默认展示前 10 人，点击“显示更多”每次增加 10 人，通过额外一条记录判断是否还有后续达人，同分按 GitHub 用户名稳定排序，超额活动次数不参与破同分。
+- 默认 `range=competition&metric=score`；`score` 是新增排序指标，接口按 `limit` 返回达人；页面默认展示前 10 人，点击“显示更多”每次增加 10 人，通过额外一条记录判断是否还有后续达人，同分按 GitHub 用户名稳定排序，超额活动次数不参与破同分。
 - Contributor rank/detail/repository 增加 `score`、`commitIssueScore`、`prOpenedScore`、`prMergedScore`、`mergedPrs`。
 - PR 仅在 `scoring_repositories.enabled=true` 的稳定 Repository ID 中计分，名称和 URL 不能代替 ID。根目录 `scoring-whitelist.json` 管理 PR 白名单候选及启用状态。PR 不受 Star 门槛限制。
 - Issue 不要求白名单，要求仓库至少100 Star；公开仓库（包括自己的仓库）的已采集贡献均参与额度计算。按最近核验的 Star 缓存判断；不足100或未核验不计分，也不占用次数额度。
@@ -809,7 +809,7 @@ OAuth sessions resolve `role: owner | admin | null` on every request. `isAdmin` 
 
 - Commit不计分且不占额度。Issue每次5分，每人北京时间自然月10次、每仓库每月3次额度；仓库Star≥100。PR使用启用的白名单仓库，提交20分、合并另加30分，无次数上限。
 - 三类标签显示为 Outstanding Contributor / Outstanding Committer / Outstanding Maintainer。每个有效标签15分，不同类型及不同项目的有效标签可累加，同一贡献者/类型/项目在有效期内不可重复发放；过期可重新评选。每次评选必须填写5至1000字本人申请理由并核对证据，沿用现有分类证据条件、CSRF和审计；本人申请、管理员审核，禁止自审。
-- 有效期从发放时间起按北京时间加一个日历月，月底无对应日期时取次月最后一天；区间为[createdAt,expiresAt)。过期或撤销后不再计入当前任何时间范围的积分。标签分按发放时间进入所选7d/30d/90d/all范围，不因切换范围重新发奖。分组筛选时只计算对应项目分组的标签。
+- 有效期从发放时间起按北京时间加一个日历月，月底无对应日期时取次月最后一天；区间为[createdAt,expiresAt)。过期或撤销后不再计入当前任何时间范围的积分。标签分按发放时间进入所选competition/7d/30d/90d/all范围，不因切换范围重新发奖。分组筛选时只计算对应项目分组的标签。
 - GET /api/v1/contributors/outstanding → OutstandingBoardsResponse：asOf、北京时间month、boards三个类别，每类people按标签分降序/用户名升序，包含rank、login、avatarUrl、score和tags。登录后可读、no-store。展示目前仍有效的获奖者（包括上个月发放但尚未到期者），推荐理由、项目、评选人、证据、到期日。三榜与普通时间/分组筛选独立。
 - ContributionTag 增加必填 expiresAt；rank/detail 增加 outstandingScore 与 projectSubmissionScore。总积分=贡献分+有效标签分+仓库收录分+人工调整。旧 bonusScore 为0，旧奖励记录保留。
 - 仓库申请批准事务同时向真实绑定GitHub账号发放20分。按审核时间进入时间范围，全站奖励不计入实验室分组；申请ID和稳定仓库ID双重防重。拒绝、待审、重复审核不发奖；历史匿名且无法确认提交者的申请不补造用户或奖励。迁移补齐已有批准且能核验提交者的历史奖励，仍按原审核时间归属。
@@ -828,3 +828,12 @@ OAuth sessions resolve `role: owner | admin | null` on every request. `isAdmin` 
 - 旧 `POST /api/v1/admin/contribution-tags` 返回410 `APPLICATION_REQUIRED`，不再允许直接为他人发放勋章。站长保留撤销权限。
 - 仓库榜规则文案：在复旦开源仓库必吃榜里面申请仓库上榜的，通过的加20分。仍由 `project_submission_awards` 保证每仓库一次20分。
 - API保留 `commitIssueScore` 字段兼容既有客户端，其值现在仅为 Issue 得分。Commit 活动统计保留，积分从完整历史实时重算，无需修改原始贡献记录。
+
+
+### 独立比赛计分周期（2026-09-01 至 2026-12-15）
+
+`TimeRangeSchema` 新增 `competition`，周期唯一配置为 `@leadboard/contracts.COMPETITION_PERIOD`。北京时间9月1日00:00:00开始，12月15日全天结束，包含首尾日期；数据库查询使用半开区间 `[2026-08-31T16:00:00Z, 2026-12-15T16:00:00Z)`。比赛进行中上界取服务器当前时间与截止时间的较小值，不计未来贡献。赛后查询不计截止后的新活动。
+
+达人榜和个人详情省略range时默认competition，前端筛选初始为competition，首页预览沿用同一筛选；用户仍可切换7d/30d/90d/all，原始贡献和历史分数不清空。组织概览API默认仍为30d，显式competition也使用同一边界。
+
+Issue按创建时间计分；PR提交20分和合并30分分别按各自发生时间过滤（赛前提交、赛中合并只计合并分；赛中提交、赛后合并只计提交分）。勋章、仓库收录奖励、人工调整按发放/审核/调整时间过滤，继续沿用勋章一个月有效期及现有撤销、Star核验规则。月度Issue额度仍按北京时间自然月计算，不因切换周期重置。接口响应range原样返回competition，筛选控件及规则显式展示比赛日期。

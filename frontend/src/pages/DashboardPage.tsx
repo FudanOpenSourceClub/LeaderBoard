@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  COMPETITION_PERIOD,
   TimeRangeSchema,
   type ContributorLeaderboardResponse,
   type GroupsResponse,
@@ -91,6 +92,7 @@ export function DashboardPage({ api, isMock = false }: { api: LeadBoardApiClient
         <div className="filter-controls">
           <label>时间范围
             <select value={range} onChange={(event) => setRange(TimeRangeSchema.parse(event.target.value))}>
+              <option value="competition">{COMPETITION_PERIOD.optionLabel}</option>
               <option value="7d">最近 7 天</option>
               <option value="30d">最近 30 天</option>
               <option value="90d">最近 90 天</option>

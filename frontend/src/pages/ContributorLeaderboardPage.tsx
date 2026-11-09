@@ -2,6 +2,7 @@ import {OutstandingBoards} from "../components/OutstandingBoards";
 import {ContributionBadges} from "../components/ContributionProfile";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  COMPETITION_PERIOD,
   TimeRangeSchema,
   type ContributorLeaderboardResponse,
   type GroupsResponse,
@@ -91,6 +92,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
       </section>
 
       <OutstandingBoards api={api}/>
+      <p className="filter-caption" data-testid="competition-period">比赛计分周期：{COMPETITION_PERIOD.label}（北京时间，包含首尾两天）。</p>
 
       <section className="filter-card leaderboard-filters" aria-label="积分规则">
         <details>
@@ -114,6 +116,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
           onChange={(event) => setRange(TimeRangeSchema.parse(event.target.value))}
           aria-label="时间范围"
         >
+          <option value="competition">{COMPETITION_PERIOD.optionLabel}</option>
           <option value="7d">最近 7 天</option>
           <option value="30d">最近 30 天</option>
           <option value="90d">最近 90 天</option>

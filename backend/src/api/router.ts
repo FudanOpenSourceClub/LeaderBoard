@@ -93,15 +93,15 @@ function registrationCookie(cookieHeader: string | undefined): string {
     .find(v=>v.startsWith("leaderboard_registration="))?.slice("leaderboard_registration=".length) ?? "";
 }
 
-function parseRange(value: unknown, res: Response): TimeRange | null {
+function parseRange(value: unknown, res: Response, defaultRange:TimeRange="30d"): TimeRange | null {
   const raw = singleQuery(value);
   if (raw === "") {
-    sendError(res, 400, "INVALID_RANGE", "range must be 7d, 30d, 90d or all");
+    sendError(res, 400, "INVALID_RANGE", "range must be competition, 7d, 30d, 90d or all");
     return null;
   }
-  const parsed = TimeRangeSchema.safeParse(raw ?? "30d");
+  const parsed = TimeRangeSchema.safeParse(raw ?? defaultRange);
   if (!parsed.success) {
-    sendError(res, 400, "INVALID_RANGE", "range must be 7d, 30d, 90d or all");
+    sendError(res, 400, "INVALID_RANGE", "range must be competition, 7d, 30d, 90d or all");
     return null;
   }
   return parsed.data;
@@ -438,7 +438,7 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
   });
 
   router.get("/contributors/leaderboard", async (req, res, next) => {
-    const range = parseRange(req.query.range, res);
+    const range = parseRange(req.query.range, res, "competition");
     if (range === null) return;
     const metric = parseMetric(req.query.metric, res);
     if (metric === null) return;
@@ -461,7 +461,7 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
   router.get("/public-contributors/:username/export.csv",disabledExport);
 
   router.get("/contributors/:username", async (req, res, next) => {
-    const range = parseRange(req.query.range, res);
+    const range = parseRange(req.query.range, res, "competition");
     if (range === null) return;
     try {
       const detail = await analytics.getContributorDetail(req.params.username, range);

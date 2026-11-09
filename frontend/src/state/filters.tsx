@@ -13,7 +13,7 @@ interface FiltersState {
 const FiltersContext = createContext<FiltersState | null>(null);
 
 export function FiltersProvider({ children }: { children: ReactNode }) {
-  const [range, setRange] = useState<TimeRange>("all");
+  const [range, setRange] = useState<TimeRange>("competition");
   const [group, setGroup] = useState<string | undefined>(undefined);
   const [metric, setMetric] = useState<LeaderboardMetric>("score");
 

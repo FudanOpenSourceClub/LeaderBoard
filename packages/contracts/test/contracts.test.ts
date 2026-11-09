@@ -146,3 +146,10 @@ it("exports Issue handoff names without duplicating schemas", () => {
     expect(c.LeaderboardQuerySchema.safeParse({ ...query, limit }).success).toBe(false);
   }
 });
+
+
+it('accepts a standalone competition range alongside historical and rolling views',()=>{
+  for(const range of ['competition','all','7d','30d','90d'])expect(c.TimeRangeSchema.parse(range)).toBe(range);
+  expect(c.LeaderboardQuerySchema.parse({range:'competition',metric:'score',limit:10}).range).toBe('competition');
+  expect(c.ContributorLeaderboardResponseSchema.parse({range:'competition',metric:'score',items:[]}).range).toBe('competition');
+});

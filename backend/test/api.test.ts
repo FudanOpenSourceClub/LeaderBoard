@@ -97,3 +97,14 @@ it('serves the three authenticated Outstanding boards before the username route'
   await request(app).get('/api/v1/contributors/outstanding').expect(200,boards).expect('Cache-Control','no-store');
   expect(outstandingBoards).toHaveBeenCalledTimes(1);
 });
+
+
+it('defaults contributor endpoints to the competition and keeps all history selectable',async()=>{
+  const deps=dependencies(),app=createApp({apiRouter:createApiRouter(deps)});
+  await request(app).get('/api/v1/contributors/leaderboard').expect(200).expect(r=>expect(r.body.range).toBe('competition'));
+  expect(deps.analytics.getContributorLeaderboard).toHaveBeenLastCalledWith(expect.objectContaining({range:'competition'}));
+  await request(app).get('/api/v1/contributors/alice').expect(200).expect(r=>expect(r.body.range).toBe('competition'));
+  expect(deps.analytics.getContributorDetail).toHaveBeenLastCalledWith('alice','competition');
+  await request(app).get('/api/v1/contributors/leaderboard?range=all').expect(200).expect(r=>expect(r.body.range).toBe('all'));
+  await request(app).get('/api/v1/organization/summary').expect(200).expect(r=>expect(r.body.range).toBe('30d'));
+});

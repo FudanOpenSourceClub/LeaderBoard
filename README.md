@@ -217,7 +217,7 @@ React Dashboard
 4. 采集默认分支 Commit、Pull Request、Issue；
 5. 标准化 GitHub Actor，并识别 Bot；
 6. 将 Repository scope 与 GitHub activity 幂等写入 PostgreSQL；
-7. 按 `7d / 30d / 90d / all` 聚合仓库和贡献者活动；
+7. 按 `competition / 7d / 30d / 90d / all` 聚合仓库和贡献者活动；
 8. 通过 REST API 输出稳定的数据结构；
 9. 在 React Dashboard 展示 Contributor Leaderboard、Repository Activity 与同步新鲜度。
 
@@ -535,7 +535,7 @@ GET /api/v1/sync/status
 统一支持：
 
 ```text
-range = 7d | 30d | 90d | all
+range = competition | 7d | 30d | 90d | all
 metric = total | commits | prs | issues
 group = group name
 ```
@@ -927,3 +927,6 @@ npm run test:e2e
 ```
 
 真实 GitHub 验收使用专用测试组织和 Token，通过 `LEADBOARD_E2E_GITHUB_TOKEN` / `LEADBOARD_E2E_GITHUB_ORG` 运行 `npm run test:e2e:live`。不要使用个人 Token，也不要把凭据写入仓库或日志。
+
+
+比赛单独计分周期：北京时间 **2026年9月1日—2026年12月15日**，包含首尾两天。达人榜默认使用 `range=competition`，首页和个人详情保持相同筛选；可切换全部历史或7/30/90天。周期外的新贡献不计入比赛分，历史记录保留。日期配置见 `@leadboard/contracts.COMPETITION_PERIOD`。

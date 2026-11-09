@@ -154,7 +154,7 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
                 {visibleItems.map((item) => (
                   <div className={`ranking-row ranking-row-with-favorite ${item.rank <= 3 ? `ranking-medalist ranking-medalist-${item.rank}` : ""}`} key={item.login}>
                     {item.rank <= 3 ? <span className={`rank-medal rank-medal-${item.rank}`} role="img" aria-label={`${["金牌", "银牌", "铜牌"][item.rank - 1]}，第 ${item.rank} 名`}><svg viewBox="0 0 40 48" aria-hidden="true"><path className="medal-ribbon" d="M9 4h9l7 18-8 4zM31 4h-9l-7 18 8 4z"/><circle cx="20" cy="30" r="15" fill="currentColor"/><circle cx="20" cy="30" r="11.5" fill="none" stroke="white" strokeOpacity=".65"/><text x="20" y="35" textAnchor="middle" fill="white" fontSize="15" fontWeight="800">{item.rank}</text></svg></span> : <span className="rank-badge rank-4">{item.rank}</span>}
-                    <Link to={`/contributors/${encodeURIComponent(item.login)}`} aria-label={`打开 ${item.login} 的个人页面`}><img className="avatar avatar-xl"
+                    <Link className="ranking-avatar-link" to={`/contributors/${encodeURIComponent(item.login)}`} aria-label={`打开 ${item.login} 的个人页面`}><img className="avatar avatar-xl"
                       src={item.avatarUrl ?? `https://github.com/${encodeURIComponent(item.login)}.png?size=96`}
                       alt={`${item.login} 的头像`} loading="lazy" /></Link>
                     <Link className="ranking-person" to={`/contributors/${encodeURIComponent(item.login)}`}>

@@ -480,3 +480,5 @@ button, a, summary { touch-action: manipulation; }
   .persistent-account { max-width:56%; font-size:12px; line-height:1.4; }
   .login-gate-account { display:inline-flex; }
 }
+
+.ranking-avatar-link { display:block; position:relative; z-index:2; }

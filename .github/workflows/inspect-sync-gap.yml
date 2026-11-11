@@ -16,7 +16,10 @@ jobs:
           set -euo pipefail
           release="$(systemctl show -p WorkingDirectory --value leadboard.service)"
           cd "$release"
-          sudo -u leadboard /usr/local/bin/leadboard-node --env-file=/etc/leadboard/leadboard.env --input-type=module <<'JS'
+          temp_env="$(mktemp /tmp/leadboard-inspect.XXXXXX)"
+          trap 'sudo rm -f "$temp_env"' EXIT
+          sudo install -o leadboard -g leadboard -m 600 /etc/leadboard/leadboard.env "$temp_env"
+          sudo -u leadboard /usr/local/bin/leadboard-node --env-file="$temp_env" --input-type=module <<'JS'
           import pg from 'pg';
           const pool = new pg.Pool({connectionString: process.env.DATABASE_URL});
           try {

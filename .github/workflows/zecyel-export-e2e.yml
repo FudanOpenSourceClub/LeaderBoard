@@ -27,22 +27,26 @@ jobs:
           assert request('/health')=={'status':'ok'}
           assert request('/api/v1/auth/session')=={'authenticated':False}
           assert request('/api/v1/auth/registration/status?github=success&login=FakeUser')=={'registered':False}
-          assert request('/api/v1/admin/project-proposals',expected=401)['error']['code']=='REGISTRATION_REQUIRED'
-          # This rejected request must not create an application, send email, or access GitHub.
-          assert request('/api/v1/project-proposals','POST',{'projectUrl':'https://github.com/FudanNLP/fastNLP','labName':'fixture','notes':'authentication smoke fixture'},401)['error']['code']=='REGISTRATION_REQUIRED'
-          projects=request('/api/v1/projects')['items']; assert len(projects)>=3
-          assert {'FudanNLP/fastNLP','FudanNLP/fastHan','FudanSELab/ClassEval'}.issubset({p['repo'] for p in projects})
-          for prefix in ['contributors','public-contributors']:
-              assert request(f'/api/v1/{prefix}/Zecyel/export.csv',expected=410)['error']['code']=='EXPORT_DISABLED'
-          for login in ['swiftgorge5-eng','Alpha-dev-code','Linscon','Joseph2433']:
-              person=request(f'/api/v1/contributors/{login}?range=all')
-              assert person['bonusScore']==0 and person['score']>=0
-              assert not any(field in person for field in ['studentId','student_fingerprint','email_fingerprint','name'])
-          board=request('/api/v1/contributors/leaderboard?range=all&metric=score&limit=10'); assert len(board['items'])<=10
-          index=request('/projects'); bundle=request(re.search(r'src="([^"]+\.js)"',index).group(1))
-          assert '复旦开源仓库必吃榜' in bundle and '请先注册 LeaderBoard' in bundle
-          assert 'Star ≥ 10' in bundle and '仅白名单仓库' in bundle
-          assert '/export.csv' not in bundle and '导出 CSV' not in bundle
-          assert '<!doctype html>' in request('/admin')
-          print('Public smoke passed: catalog, permissions, rewards, backend registration confirmation, disabled exports')
+          # Website content is now login-gated; do not try to read private
+          # leaderboard data without a session or assert obsolete public copy.
+          gated_paths = [
+              '/api/v1/admin/project-proposals',
+              '/api/v1/projects',
+              '/api/v1/contributors/leaderboard?range=all&metric=score&limit=10',
+              '/api/v1/contributors/swiftgorge5-eng?range=all',
+              '/api/v1/contributors/Zecyel/export.csv',
+              '/api/v1/public-contributors/Zecyel/export.csv',
+              '/api/v1/sync/status',
+          ]
+          for path in gated_paths:
+              assert request(path,expected=401)['error']['code']=='LOGIN_REQUIRED',path
+          # A rejected application must not create data or call GitHub.
+          assert request('/api/v1/project-proposals','POST',{'projectUrl':'https://github.com/FudanNLP/fastNLP','labName':'fixture','notes':'authentication smoke fixture'},401)['error']['code']=='LOGIN_REQUIRED'
+          index=request('/projects')
+          assert '<!doctype html>' in index.lower()
+          script=re.search(r'src="([^"]+\.js)"',index)
+          assert script is not None,'missing frontend JavaScript'
+          assert len(request(script.group(1)))>100
+          assert '<!doctype html>' in request('/admin').lower()
+          print('Public smoke passed: health, login gates, registration status, and static frontend assets')
           PY

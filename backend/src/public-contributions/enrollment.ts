@@ -4,6 +4,10 @@ import { getDbPool } from "../db/index.js";
 import { collectPublicContributions, type PublicContributionExport } from "./export.js";
 import { refreshRepositoryStars } from "./repository-stars.js";
 
+class UnavailableContributorError extends Error {
+  constructor(message: string) { super(message); this.name = "UnavailableContributorError"; }
+}
+
 export interface ContributorIdentity {
   githubId: string;
   login: string;
@@ -39,6 +43,15 @@ export async function saveContributorActivity(
     const rows = [...new Map(data.rows.map(row => [
       [row.kind, row.repositoryGithubId ?? row.repository.toLowerCase(), row.identifier].join(":"), row,
     ])).values()];
+    // Count actual newly inserted rows, not search results or re-imports.
+    // Locking the contributor row above serializes concurrent submissions.
+    const quota = await client.query<{ count: string }>(
+      "SELECT count(*)::text AS count FROM contributor_public_activities WHERE contributor_id=$1 AND first_seen_at>=now()-interval '6 hours'",
+      [id],
+    );
+    const remaining = Math.max(0, 50 - Number(quota.rows[0]?.count ?? 0));
+    const acceptedRows = rows.slice(0, remaining);
+    const capped = data.truncated || acceptedRows.length < rows.length;
     await client.query(
       `UPDATE contributor_public_activities a SET repository_github_id=d."repositoryGithubId"::bigint
        FROM jsonb_to_recordset($2::jsonb) AS d
@@ -49,7 +62,7 @@ export async function saveContributorActivity(
          AND NOT EXISTS (SELECT 1 FROM contributor_public_activities known
            WHERE known.contributor_id=$1 AND known.kind=d.kind
              AND known.repository_github_id=d."repositoryGithubId"::bigint AND known.identifier=d.identifier)`,
-      [id, JSON.stringify(rows)],
+      [id, JSON.stringify(acceptedRows)],
     );
     await client.query(
       `INSERT INTO contributor_public_activities
@@ -63,13 +76,13 @@ export async function saveContributorActivity(
          repository=EXCLUDED.repository, object_github_id=EXCLUDED.object_github_id,
          merged_at=coalesce(EXCLUDED.merged_at,contributor_public_activities.merged_at),
          title=EXCLUDED.title, html_url=EXCLUDED.html_url, last_seen_at=now()`,
-      [id, JSON.stringify(rows)],
+      [id, JSON.stringify(acceptedRows)],
     );
     await client.query(
-      `UPDATE contributors SET public_synced_at=CASE WHEN $2 THEN public_synced_at ELSE now() END,
+      `UPDATE contributors SET public_synced_at=now(),
          public_sync_truncated=$2, public_sync_incomplete=FALSE,
-         public_sync_version=CASE WHEN $2 THEN public_sync_version ELSE 2 END WHERE id=$1`,
-      [id, data.truncated],
+         public_sync_version=2 WHERE id=$1`,
+      [id, capped],
     );
     await client.query("COMMIT");
   } catch (error) {
@@ -100,36 +113,59 @@ export async function enrollContributor(
     },
     signal: AbortSignal.timeout(25000),
   });
-  if (!response.ok) throw new Error(`GitHub account lookup returned HTTP ${response.status}`);
+  if (!response.ok) {
+    const limited = response.headers.get("x-ratelimit-remaining") === "0" || response.headers.has("retry-after");
+    if ([404, 410].includes(response.status) || (response.status === 403 && !limited)) {
+      throw new UnavailableContributorError(`GitHub account unavailable: HTTP ${response.status}`);
+    }
+    throw new Error(`GitHub account lookup returned HTTP ${response.status}`);
+  }
   const user = await response.json() as { id?: unknown; login?: unknown; avatar_url?: unknown; type?: unknown };
   if (typeof user.id !== "number" || !Number.isSafeInteger(user.id) || user.id <= 0
       || typeof user.login !== "string" || (expectedGithubId ? String(user.id) !== expectedGithubId : user.login.toLowerCase() !== username.toLowerCase())
       || user.type !== "User"
       || !(user.avatar_url === null || typeof user.avatar_url === "string")) {
-    throw new Error("GitHub returned an invalid user account");
+    throw new UnavailableContributorError("GitHub account unavailable or stable ID mismatch");
   }
-  // Every refresh only requests the six hours preceding this run.
-  const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+  // No catch-up: scan only the latest six hours, starting after the
+  // previously completed refresh so discarded overflow is never backfilled.
+  const lastResult = await pool.query<{ public_synced_at: Date | null }>(
+    "SELECT public_synced_at FROM contributors WHERE github_id=$1", [String(user.id)],
+  );
+  const now = Date.now();
+  const previous = lastResult.rows[0]?.public_synced_at?.getTime();
+  const since = new Date(Math.max(now - 6 * 60 * 60 * 1000, previous && previous <= now ? previous : 0)).toISOString();
   const data = await collectPublicContributions(user.login, githubToken, fetcher, {since, contributorGithubId:String(user.id), maxRowsPerKind:50});
   // Rows arrive newest first; ignore anything beyond this run’s per-account limit.
+  data.truncated ||= data.rows.length > 50 || Object.values(data.totals).reduce((a, b) => a + b, 0) > 50;
   data.rows = data.rows.slice(0, 50);
   const repositoryIds = new Map<string, string>();
   for (const row of data.rows) if (row.repositoryGithubId) repositoryIds.set(row.repository.toLowerCase(), row.repositoryGithubId);
+  const validRows: typeof data.rows = [];
   for (const row of data.rows) {
     if (!repositoryIds.has(row.repository.toLowerCase())) {
       const repo = await fetcher(`https://api.github.com/repos/${row.repository}`, {
         headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${githubToken}`, "User-Agent": "LeaderBoard" },
         signal: AbortSignal.timeout(25000),
       });
-      if (!repo.ok) throw new Error(`GitHub repository lookup returned HTTP ${repo.status}`);
+      if (!repo.ok) {
+        const limited = repo.headers.get("x-ratelimit-remaining") === "0" || repo.headers.has("retry-after");
+        if ([404, 410].includes(repo.status) || (repo.status === 403 && !limited)) continue;
+        throw new Error(`GitHub repository lookup returned HTTP ${repo.status}`);
+      }
       const meta = await repo.json() as { id?: unknown };
       if (typeof meta.id !== "number" || !Number.isSafeInteger(meta.id) || meta.id <= 0) throw new Error("Invalid GitHub repository ID");
       repositoryIds.set(row.repository.toLowerCase(), String(meta.id));
     }
     row.repositoryGithubId = repositoryIds.get(row.repository.toLowerCase())!;
+    validRows.push(row);
   }
+  data.rows = validRows;
   await saveContributorActivity({ githubId: String(user.id), login: user.login, avatarUrl: user.avatar_url }, data, pool);
-  await refreshRepositoryStars(githubToken, pool, fetcher, String(user.id));
+  // The global Star scheduler retries its own metadata failures; they must
+  // not cause successfully saved contribution events to be marked as failed.
+  try { await refreshRepositoryStars(githubToken, pool, fetcher, String(user.id)); }
+  catch { console.warn("Contributor events saved; repository star refresh deferred"); }
   return { login: user.login, events: data.rows.length };
 }
 
@@ -145,7 +181,14 @@ export async function refreshEnrolledContributors(githubToken: string, pool: Poo
   let failures = 0;
   for (const row of result.rows) {
     try { await enrollContributor(row.login, githubToken, pool, fetcher, row.github_id); }
-    catch { failures++; }
+    catch (error) {
+      if (error instanceof UnavailableContributorError) {
+        console.info("Unavailable enrolled contributor skipped", row.github_id);
+        continue;
+      }
+      failures++;
+      console.warn("Contributor refresh failed", row.github_id, error instanceof Error ? error.message : "unknown error");
+    }
   }
   if (failures) throw new Error(`${failures} enrolled contributor synchronization(s) failed`);
 }

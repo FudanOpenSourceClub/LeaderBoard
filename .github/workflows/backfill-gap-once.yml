@@ -32,15 +32,15 @@ jobs:
             for(let attempt=0;attempt<4;attempt++){
               if(search){await pause(Math.max(0,2200-(Date.now()-lastSearch)));lastSearch=Date.now();}
               const response=await fetch(url,{headers,signal:AbortSignal.timeout(30000)});
-              if(response.ok) return response.json();
+              if(response.ok) { const data=await response.json(); if(search && data.incomplete_results && attempt<3){await pause(5000*(attempt+1));continue;} return data; }
               if([403,429,500,502,503,504].includes(response.status) && attempt<3){await pause(15000*(attempt+1));continue;}
-              throw new Error('GitHub HTTP '+response.status);
+              const error = new Error('GitHub HTTP '+response.status); error.status=response.status; throw error;
             }
           }
           const cutoff=new Date('2026-11-07T04:00:00.036Z');
           const endTime=new Date();
           const repoIds=new Map();
-          let failed=0, completed=0, saved=0;
+          let failed=0, completed=0, saved=0, skippedItems=0, skippedAccounts=0;
           try {
             const accounts=await pool.query(`SELECT github_id::text,login,public_synced_at
               FROM contributors WHERE enrolled_at IS NOT NULL ORDER BY id`);
@@ -49,7 +49,7 @@ jobs:
               try {
                 const user=await get('https://api.github.com/user/'+account.github_id);
                 if(String(user.id)!==account.github_id || user.type!=='User') throw Error('Account identity mismatch');
-                const start=account.public_synced_at && account.public_synced_at>cutoff ? account.public_synced_at : cutoff;
+                const start=cutoff;
                 let total=0, windows=0;
                 for(let from=start.getTime();from<endTime.getTime();from+=21600000){
                   const to=Math.min(from+21600000,endTime.getTime());
@@ -59,20 +59,22 @@ jobs:
                   for(const kind of ['commit','pull_request','issue']){
                     const url=new URL('https://api.github.com/search/'+(kind==='commit'?'commits':'issues'));
                     const field=kind==='commit'?'committer-date':'updated';
-                    url.searchParams.set('q','author:'+user.login+(kind==='commit'?'':' is:'+(kind==='pull_request'?'pr':'issue'))+' '+field+':>='+fromIso+' '+field+':<'+toIso);
+                    url.searchParams.set('q','author:'+user.login+(kind==='commit'?'':' is:'+(kind==='pull_request'?'pr':'issue'))+' '+field+':'+fromIso+'..'+new Date(to-1000).toISOString().replace(/\.\d{3}Z$/,'Z'));
                     url.searchParams.set('per_page','100');
                     url.searchParams.set('sort',kind==='commit'?'author-date':'created');
                     url.searchParams.set('order','desc');
                     const result=await get(url,true);
                     if(result.incomplete_results || !Array.isArray(result.items)) throw Error('Incomplete GitHub search');
                     for(const item of result.items.slice(0,50)){
-                      if(String((kind==='commit'?item.author:item.user)?.id)!==account.github_id) throw Error('Contribution identity mismatch');
+                      if(String((kind==='commit'?item.author:item.user)?.id)!==account.github_id) { skippedItems++; continue; }
+                      const changedAt=kind==='commit'?item.commit?.committer?.date:item.updated_at;
+                      if (!changedAt || Date.parse(changedAt)<from || Date.parse(changedAt)>=to) { skippedItems++; continue; }
                       const repo=kind==='commit'?item.repository?.full_name:item.repository_url?.replace('https://api.github.com/repos/','');
                       const occurredAt=kind==='commit'?item.commit?.author?.date:item.created_at;
                       const identifier=kind==='commit'?item.sha:String(item.number??'');
                       if(!repo || !/^[^/]+\/[^/]+$/.test(repo) || !occurredAt || !identifier || !item.html_url?.startsWith('https://github.com/')) continue;
                       let repoId=item.repository?.id?String(item.repository.id):repoIds.get(repo.toLowerCase());
-                      if(!repoId){const meta=await get('https://api.github.com/repos/'+repo);repoId=String(meta.id);if(!/^[1-9]\d*$/.test(repoId))throw Error('Invalid repository ID');repoIds.set(repo.toLowerCase(),repoId);}
+                      if(!repoId){let meta; try { meta=await get('https://api.github.com/repos/'+repo); } catch(error) { if(error?.status===404 || error?.status===410){skippedItems++;continue;} throw error; } repoId=String(meta.id);if(!/^[1-9]\d*$/.test(repoId))throw Error('Invalid repository ID');repoIds.set(repo.toLowerCase(),repoId);}
                       rows.push({kind,repository:repo,repositoryGithubId:repoId,objectGithubId:item.id?String(item.id):null,occurredAt,identifier,title:kind==='commit'?(item.commit?.message??'').split('\n')[0]:(item.title??''),url:item.html_url,mergedAt:kind==='pull_request'?item.pull_request?.merged_at??null:null});
                     }
                   }
@@ -83,9 +85,9 @@ jobs:
                 }
                 completed++;saved+=total;
                 console.log('Completed account',completed,'windows',windows,'records processed',total);
-              }catch(error){failed++;console.error('Account recovery failed:',error instanceof Error?error.message:'unknown');}
+              }catch(error){if(error?.status===404 || error?.status===410){skippedAccounts++;console.error('Account unavailable; skipped');} else {failed++;console.error('Account recovery failed:',error instanceof Error?error.message:'unknown');}}
             }
-            console.log(JSON.stringify({accounts:accounts.rows.length,completed,failed,recordsProcessed:saved}));
+            console.log(JSON.stringify({accounts:accounts.rows.length,completed,failed,skippedAccounts,skippedItems,recordsProcessed:saved}));
             if(failed)process.exitCode=1;
           } finally {await pool.end();}
           JS

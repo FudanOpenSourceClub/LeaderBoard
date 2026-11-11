@@ -79,9 +79,18 @@ describe("Public contributor activity export", () => {
     const fetcher=vi.fn(mockFetcher) as unknown as typeof fetch;
     await collectPublicContributions("Zecyel","token",fetcher,{since:"2026-10-01T12:00:00Z"});
     const queries=vi.mocked(fetcher).mock.calls.map(([url])=>new URL(String(url)).searchParams.get("q"));
-    expect(queries[0]).toContain("committer-date:>=2026-10-01");
-    expect(queries[1]).toContain("updated:>=2026-10-01");
-    expect(queries[2]).toContain("updated:>=2026-10-01");
+    expect(queries[0]).toContain("committer-date:>=2026-10-01T12:00:00Z");
+    expect(queries[1]).toContain("updated:>=2026-10-01T12:00:00Z");
+    expect(queries[2]).toContain("updated:>=2026-10-01T12:00:00Z");
+  });
+
+  it("limits per-kind searches to the newest page for bounded synchronization", async () => {
+    const fetcher = vi.fn(mockFetcher) as unknown as typeof fetch;
+    await collectPublicContributions("Zecyel", "token", fetcher, {since:"2026-10-01T12:00:00Z", maxRowsPerKind:50});
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    const urls = vi.mocked(fetcher).mock.calls.map(([url]) => new URL(String(url)));
+    expect(urls.map(url => url.searchParams.get("sort"))).toEqual(["author-date", "created", "created"]);
+    expect(urls.every(url => url.searchParams.get("order") === "desc")).toBe(true);
   });
 
   it("checks stable author IDs before accepting results for a renamed login",async()=>{

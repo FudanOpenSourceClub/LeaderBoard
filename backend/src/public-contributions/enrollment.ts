@@ -108,13 +108,11 @@ export async function enrollContributor(
       || !(user.avatar_url === null || typeof user.avatar_url === "string")) {
     throw new Error("GitHub returned an invalid user account");
   }
-  const previous = await pool.query<{ public_synced_at: Date | null; public_sync_version: number }>(
-    "SELECT public_synced_at, public_sync_version FROM contributors WHERE github_id=$1", [String(user.id)],
-  );
-  const last = previous.rows[0];
-  const since = last?.public_sync_version === 2 && last.public_synced_at
-    ? new Date(last.public_synced_at.getTime() - 86400000).toISOString() : undefined;
-  const data = await collectPublicContributions(user.login, githubToken, fetcher, {...(since?{since}:{}),contributorGithubId:String(user.id)});
+  // Every refresh only requests the six hours preceding this run.
+  const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+  const data = await collectPublicContributions(user.login, githubToken, fetcher, {since, contributorGithubId:String(user.id), maxRowsPerKind:50});
+  // Rows arrive newest first; ignore anything beyond this run’s per-account limit.
+  data.rows = data.rows.slice(0, 50);
   const repositoryIds = new Map<string, string>();
   for (const row of data.rows) if (row.repositoryGithubId) repositoryIds.set(row.repository.toLowerCase(), row.repositoryGithubId);
   for (const row of data.rows) {
@@ -137,9 +135,12 @@ export async function enrollContributor(
 
 export async function refreshEnrolledContributors(githubToken: string, pool: Pool = getDbPool(), fetcher: typeof fetch = fetch): Promise<void> {
   const result = await pool.query<{ login: string; github_id: string }>(
-    `SELECT login, github_id::text FROM contributors WHERE enrolled_at IS NOT NULL
-       AND (public_synced_at IS NULL OR public_synced_at < now() - interval '1 day' OR public_sync_version < 2)
-     ORDER BY id`,
+    `SELECT login, github_id FROM (
+       SELECT login, github_id::text,
+         (row_number() OVER (ORDER BY id) - 1) % 12 AS batch
+       FROM contributors WHERE enrolled_at IS NOT NULL
+     ) enrolled WHERE batch = floor(extract(epoch FROM now()) / 1800)::bigint % 12
+     ORDER BY github_id`,
   );
   let failures = 0;
   for (const row of result.rows) {

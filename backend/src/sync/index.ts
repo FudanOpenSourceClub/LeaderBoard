@@ -18,7 +18,6 @@ import { getDbPool } from "../db/index.js";
 import { GitHubApiClient } from "../github/client.js";
 import { applyRepositoryScope, ingestActivities } from "../ingestion/index.js";
 import { RepositorySync } from "../repositories/sync.js";
-import { refreshEnrolledContributors } from "../public-contributions/enrollment.js";
 import { refreshRepositoryStars } from "../public-contributions/repository-stars.js";
 
 const SYNC_LOCK_KEY = 1279411268;
@@ -249,7 +248,6 @@ export function createDefaultSyncCoordinator(config: SyncConfig): SyncCoordinato
     pullIssues: new PullRequestIssueCollector(github),
     applyScope: applyRepositoryScope,
     ingest: ingestActivities,
-    refreshContributors: () => refreshEnrolledContributors(loadConfig().githubToken),
     refreshStars: async () => { await refreshRepositoryStars(loadConfig().githubToken); },
   });
 }

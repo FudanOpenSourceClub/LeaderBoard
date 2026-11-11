@@ -57,6 +57,19 @@ describe("stable enrolled account identity",()=>{
     const fetcher=vi.fn(async()=>new Response(JSON.stringify({id:999,login:"reused-name",avatar_url:null,type:"User"}))) as typeof fetch;
     await expect(refreshEnrolledContributors("fixture",pool,fetcher)).resolves.toBeUndefined();expect(saved).toEqual([]);
   });
+  it("does not silently skip a GitHub rate-limit 403",async()=>{
+    const {pool}=fixture([{login:"limited",github_id:"111"}]);
+    const fetcher=vi.fn(async()=>new Response(JSON.stringify({message:"API rate limit exceeded"}),{status:403})) as typeof fetch;
+    await expect(refreshEnrolledContributors("fixture",pool,fetcher)).rejects.toThrow("1 enrolled");
+  });
+  it("continues healthy accounts after an explicit resource-denied 403",async()=>{
+    const {pool,saved}=fixture([{login:"blocked",github_id:"111"},{login:"healthy",github_id:"222"}]);
+    const fetcher=vi.fn(async(url:URL|RequestInfo)=>String(url).endsWith("/user/111")
+      ?new Response(JSON.stringify({message:"Resource not accessible by integration"}),{status:403})
+      :String(url).endsWith("/user/222")?new Response(JSON.stringify({id:222,login:"healthy",avatar_url:null,type:"User"})):empty()) as typeof fetch;
+    await expect(refreshEnrolledContributors("fixture",pool,fetcher)).resolves.toBeUndefined();
+    expect(saved[0]?.[0]).toBe("222");
+  });
   it("continues healthy accounts while ignoring unavailable account lookups",async()=>{
     const {pool,saved}=fixture([{login:"missing",github_id:"111"},{login:"healthy",github_id:"222"}]);
     const fetcher=vi.fn(async(url:URL|RequestInfo)=>String(url).endsWith('/user/111')?new Response('{}',{status:404}):String(url).endsWith('/user/222')?new Response(JSON.stringify({id:222,login:"healthy",avatar_url:null,type:"User"})):empty()) as typeof fetch;

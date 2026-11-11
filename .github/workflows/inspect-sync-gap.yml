@@ -1,0 +1,32 @@
+name: Inspect contribution sync gap
+on:
+  push:
+    branches: ["ops/inspect-sync-gap-20261111"]
+    paths: [".github/workflows/inspect-sync-gap.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 5
+    steps:
+      - name: Inspect aggregate sync timestamps
+        shell: bash
+        run: |
+          set -euo pipefail
+          release="$(systemctl show -p WorkingDirectory --value leadboard.service)"
+          cd "$release"
+          sudo -u leadboard /usr/local/bin/leadboard-node --env-file=/etc/leadboard/leadboard.env --input-type=module <<'JS'
+          import pg from 'pg';
+          const pool = new pg.Pool({connectionString: process.env.DATABASE_URL});
+          try {
+            const contributors = await pool.query(`SELECT count(*)::int AS total,
+              count(public_synced_at)::int AS synced, min(public_synced_at) AS oldest,
+              max(public_synced_at) AS newest,
+              count(*) FILTER (WHERE public_synced_at < now()-interval '6 hours' OR public_synced_at IS NULL)::int AS older_than_six_hours
+              FROM contributors WHERE enrolled_at IS NOT NULL`);
+            const runs = await pool.query(`SELECT status, trigger, range_from, range_to, started_at, finished_at, repositories_failed
+              FROM sync_runs ORDER BY started_at DESC LIMIT 12`);
+            console.log(JSON.stringify({contributors:contributors.rows[0],runs:runs.rows}));
+          } finally { await pool.end(); }
+          JS

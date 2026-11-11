@@ -1,3 +1,4 @@
+import { startContributorScheduler } from "./public-contributions/scheduler.js";
 import { createApiRouter } from "./api/router.js";
 import { createApp } from "./app.js";
 import {
@@ -23,6 +24,7 @@ try {
     githubLink,
   });
   const scheduler = startSyncScheduler(coordinator, config.ingestionCronSchedule);
+  const contributorScheduler = startContributorScheduler(config.githubToken);
   const server = createApp({ apiRouter }).listen(config.port, () => {
     console.info(`LeadBoard backend listening on port ${config.port}`);
   });
@@ -39,7 +41,7 @@ try {
     const timer = setTimeout(() => process.exit(1), 10_000);
     timer.unref();
     server.close(() => {
-      void Promise.all([scheduler.stop(),notificationScheduler.stop()])
+      void Promise.all([scheduler.stop(),contributorScheduler.stop(),notificationScheduler.stop()])
         .then(() => getDbPool().end())
         .finally(() => {
           clearTimeout(timer);

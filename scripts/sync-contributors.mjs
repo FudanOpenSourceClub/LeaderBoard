@@ -25,12 +25,11 @@ try {
   for (const account of accounts) {
     const name=account.login;
     const existing = await pool.query(
-      `SELECT 1 FROM contributors WHERE github_id=$1 AND enrolled_at IS NOT NULL AND public_sync_version=2
-         AND public_synced_at >= now() - interval '1 day'`,
+      `SELECT 1 FROM contributors WHERE github_id=$1 AND enrolled_at IS NOT NULL`,
       [account.githubId],
     );
     if (existing.rowCount) {
-      console.info(`${name}: enrolled, public activity is current`);
+      console.info(`${name}: already enrolled; scheduled refresh handles activity`);
       continue;
     }
     const result = await enrollContributor(name, process.env.GITHUB_TOKEN ?? "", pool, fetch, account.githubId);

@@ -147,7 +147,7 @@ export async function collectPublicContributions(
 
   for (const kind of SEARCH_KINDS) {
     const seen = new Set<string>();
-    const since = options.since ? new Date(options.since).toISOString().slice(0, 10) : null;
+    const since = options.since ? new Date(options.since).toISOString().replace(/\.\d{3}Z$/, "Z") : null;
     const baseQuery = "author:" + username + (kind === "commit" ? "" :
       " is:" + (kind === "pull_request" ? "pr" : "issue"))
       + (since ? (kind === "commit" ? " committer-date:>=" : " updated:>=") + since : "");

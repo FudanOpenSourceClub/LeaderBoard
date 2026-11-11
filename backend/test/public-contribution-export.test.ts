@@ -75,13 +75,13 @@ describe("Public contributor activity export", () => {
     expect(fetcher).toHaveBeenCalledTimes(4);
   });
 
-  it("uses update time for incremental PR/Issue collection so later merges are refreshed",async()=>{
+  it("limits bounded refresh queries to newly created activity, not old edited PRs",async()=>{
     const fetcher=vi.fn(mockFetcher) as unknown as typeof fetch;
     await collectPublicContributions("Zecyel","token",fetcher,{since:"2026-10-01T12:00:00Z"});
     const queries=vi.mocked(fetcher).mock.calls.map(([url])=>new URL(String(url)).searchParams.get("q"));
-    expect(queries[0]).toContain("committer-date:>=2026-10-01T12:00:00Z");
-    expect(queries[1]).toContain("updated:>=2026-10-01T12:00:00Z");
-    expect(queries[2]).toContain("updated:>=2026-10-01T12:00:00Z");
+    expect(queries[0]).toContain("author-date:>=2026-10-01T12:00:00Z");
+    expect(queries[1]).toContain("created:>=2026-10-01T12:00:00Z");
+    expect(queries[2]).toContain("created:>=2026-10-01T12:00:00Z");
   });
 
   it("limits per-kind searches to the newest page for bounded synchronization", async () => {
@@ -103,7 +103,17 @@ describe("Public contributor activity export", () => {
     }) as typeof fetch;
     expect((await collectPublicContributions("new-name","token",fetcher,{contributorGithubId:"111"})).rows).toHaveLength(3);
     changedAuthor=true;
-    await expect(collectPublicContributions("new-name","token",fetcher,{contributorGithubId:"111"})).rejects.toThrow("stable ID");
+    expect((await collectPublicContributions("new-name","token",fetcher,{contributorGithubId:"111"})).rows).toHaveLength(1);
+  });
+
+  it("does not import an old PR returned by a stale or updated search hit", async () => {
+    const fetcher = vi.fn(async (url: URL | RequestInfo) => {
+      if (String(url).includes("/commits")) return new Response(JSON.stringify({total_count:0,incomplete_results:false,items:[]}));
+      const item = {html_url:"https://github.com/a/b/issues/1",repository_url:"https://api.github.com/repos/a/b",created_at:"2026-09-01T00:00:00Z",number:1,title:"Old edit",user:{id:111}};
+      return new Response(JSON.stringify({total_count:1,incomplete_results:false,items:[item]}));
+    }) as typeof fetch;
+    const result = await collectPublicContributions("person","token",fetcher,{since:"2026-11-10T00:00:00Z",contributorGithubId:"111",maxRowsPerKind:50});
+    expect(result.rows).toHaveLength(0);
   });
 
   it("retrieves more than GitHub's per-query 1000 cap by splitting date windows", async () => {

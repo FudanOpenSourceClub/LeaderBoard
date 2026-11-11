@@ -8,6 +8,17 @@ class UnavailableContributorError extends Error {
   constructor(message: string) { super(message); this.name = "UnavailableContributorError"; }
 }
 
+// HTTP 403 can mean global API rate limiting; only treat a clearly
+// account-scoped permission denial as an unavailable user/repository.
+async function unavailableGitHubResource(response: Response): Promise<boolean> {
+  if (response.status === 404 || response.status === 410) return true;
+  if (response.status !== 403 || response.headers.has("retry-after")
+      || response.headers.get("x-ratelimit-remaining") === "0") return false;
+  const body = await response.clone().json().catch(() => null) as { message?: unknown } | null;
+  return typeof body?.message === "string"
+    && /resource not accessible by integration|permission denied|account suspended/i.test(body.message);
+}
+
 export interface ContributorIdentity {
   githubId: string;
   login: string;
@@ -114,8 +125,7 @@ export async function enrollContributor(
     signal: AbortSignal.timeout(25000),
   });
   if (!response.ok) {
-    const limited = response.headers.get("x-ratelimit-remaining") === "0" || response.headers.has("retry-after");
-    if ([404, 410].includes(response.status) || (response.status === 403 && !limited)) {
+    if (await unavailableGitHubResource(response)) {
       throw new UnavailableContributorError(`GitHub account unavailable: HTTP ${response.status}`);
     }
     throw new Error(`GitHub account lookup returned HTTP ${response.status}`);
@@ -149,8 +159,7 @@ export async function enrollContributor(
         signal: AbortSignal.timeout(25000),
       });
       if (!repo.ok) {
-        const limited = repo.headers.get("x-ratelimit-remaining") === "0" || repo.headers.has("retry-after");
-        if ([404, 410].includes(repo.status) || (repo.status === 403 && !limited)) continue;
+        if (await unavailableGitHubResource(repo)) continue;
         throw new Error(`GitHub repository lookup returned HTTP ${repo.status}`);
       }
       const meta = await repo.json() as { id?: unknown };

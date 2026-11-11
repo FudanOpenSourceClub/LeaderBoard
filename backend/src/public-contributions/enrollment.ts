@@ -110,7 +110,9 @@ export async function enrollContributor(
   }
   // Every refresh only requests the six hours preceding this run.
   const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
-  const data = await collectPublicContributions(user.login, githubToken, fetcher, {since, contributorGithubId:String(user.id)});
+  const data = await collectPublicContributions(user.login, githubToken, fetcher, {since, contributorGithubId:String(user.id), maxRowsPerKind:50});
+  // Rows arrive newest first; ignore anything beyond this run’s per-account limit.
+  data.rows = data.rows.slice(0, 50);
   const repositoryIds = new Map<string, string>();
   for (const row of data.rows) if (row.repositoryGithubId) repositoryIds.set(row.repository.toLowerCase(), row.repositoryGithubId);
   for (const row of data.rows) {

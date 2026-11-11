@@ -70,12 +70,13 @@ export async function collectPublicContributions(
   username: string,
   githubToken: string,
   fetcher: typeof fetch = fetch,
-  options: { since?: string; contributorGithubId?: string } = {},
+  options: { since?: string; contributorGithubId?: string; maxRowsPerKind?: number } = {},
 ): Promise<PublicContributionExport> {
   if (!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(username)) {
     throw new Error("Invalid GitHub username");
   }
   if (!githubToken.trim()) throw new Error("GitHub token not configured");
+  if (options.maxRowsPerKind !== undefined && (!Number.isInteger(options.maxRowsPerKind) || options.maxRowsPerKind < 1 || options.maxRowsPerKind > 100)) throw new Error("Invalid per-kind limit");
 
   const rows: PublicContribution[] = [];
   const totals = { commit: 0, pull_request: 0, issue: 0 };
@@ -89,6 +90,10 @@ export async function collectPublicContributions(
     url.searchParams.set("q", query);
     url.searchParams.set("per_page", "100");
     url.searchParams.set("page", String(page));
+    if (options.maxRowsPerKind !== undefined) {
+      url.searchParams.set("sort", kind === "commit" ? "author-date" : "created");
+      url.searchParams.set("order", "desc");
+    }
     for (let attempt = 0; attempt < 4; attempt++) {
       // Keep authenticated GitHub search calls below roughly 30/minute.
       // Mock fetchers bypass the delay so unit tests remain fast.
@@ -196,6 +201,10 @@ export async function collectPublicContributions(
     // Search once without a date qualifier to retain GitHub's total count.
     const root = await search(kind, baseQuery, 1);
     totals[kind] = root.total_count;
+    if (options.maxRowsPerKind !== undefined) {
+      addItems(root.items.slice(0, options.maxRowsPerKind));
+      continue;
+    }
     if (root.total_count <= GITHUB_SEARCH_LIMIT) {
       await collectPages(baseQuery, root);
       continue;

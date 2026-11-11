@@ -155,13 +155,13 @@ export async function collectPublicContributions(
     const since = options.since ? new Date(options.since).toISOString().replace(/\.\d{3}Z$/, "Z") : null;
     const baseQuery = "author:" + username + (kind === "commit" ? "" :
       " is:" + (kind === "pull_request" ? "pr" : "issue"))
-      + (since ? (kind === "commit" ? " committer-date:>=" : " updated:>=") + since : "");
+      + (since ? (kind === "commit" ? " author-date:>=" : " created:>=") + since : "");
 
     function addItems(items: SearchItem[]) {
       for (const item of items) {
-        if(options.contributorGithubId && String((kind==="commit"?item.author:item.user)?.id)!==options.contributorGithubId) {
-          throw new Error("GitHub contribution author does not match the enrolled stable ID");
-        }
+        // GitHub search sometimes returns stale or cross-account hits. Ignore them
+        // rather than blocking the other valid contributions for this user.
+        if(options.contributorGithubId && String((kind==="commit"?item.author:item.user)?.id)!==options.contributorGithubId) continue;
         if (seen.size >= MAX_PER_KIND) break;
         const url = item.html_url;
         if (!url?.startsWith("https://github.com/") || seen.has(url)) continue;
@@ -172,6 +172,9 @@ export async function collectPublicContributions(
         const occurredAt = kind === "commit" ? item.commit?.author?.date : item.created_at;
         const identifier = kind === "commit" ? item.sha : String(item.number ?? "");
         if (!occurredAt || !identifier || Number.isNaN(Date.parse(occurredAt))) continue;
+        // A bounded refresh must never insert older items solely because a PR
+        // or issue was edited, or the GitHub search index returned a stale hit.
+        if (options.maxRowsPerKind !== undefined && since && Date.parse(occurredAt) < Date.parse(since)) continue;
         rows.push({
           kind, repository, occurredAt, identifier,
           title: kind === "commit" ? ((item.commit?.message ?? "").split("\n")[0] ?? "") : (item.title ?? ""),
@@ -203,6 +206,7 @@ export async function collectPublicContributions(
     totals[kind] = root.total_count;
     if (options.maxRowsPerKind !== undefined) {
       addItems(root.items.slice(0, options.maxRowsPerKind));
+      truncated ||= root.total_count > options.maxRowsPerKind;
       continue;
     }
     if (root.total_count <= GITHUB_SEARCH_LIMIT) {

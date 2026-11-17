@@ -41,7 +41,7 @@ npm -v
 如果你已经安装 Git，也可以在准备存放项目的位置打开终端，依次运行：
 
 ```text
-git clone https://github.com/swiftgorge5-eng/LeaderBoard.git
+git clone https://github.com/FudanOpenSourceClub/LeaderBoard.git
 cd LeaderBoard
 ```
 
@@ -541,79 +541,13 @@ group = group name
 
 ## 11. 当前正式开发任务：按方向认领
 
-每个 Issue 原则上控制在 **2–5 小时**，具体要实现的接口、使用的接口、产物和验收要求都写在对应 Issue 中。
-
-以下为初期开发计划，表内“现在”“优先”等指当时安排，不代表当前待办。#3、#4、#16 已关闭；请以 [开放的 Issues](https://github.com/FudanOpenSourceClub/LeaderBoard/issues?q=is%3Aissue%20is%3Aopen) 和对应 PR 为准。
-
-### 数据库方向
-
-负责设计数据如何保存，以及如何写入、查询。#8、#14 同时属于后端工作，适合熟悉 TypeScript 和 SQL 的同学。
-
-| Issue | 要做什么 | 什么时候做 | 依赖 |
-|---|---|---|---|
-| [#3](https://github.com/swiftgorge5-eng/LeaderBoard/issues/3) | 建立数据库表、数据库连接和建表命令 | **现在优先做** | #2 |
-| [#8](https://github.com/swiftgorge5-eng/LeaderBoard/issues/8) | 把采集结果存入数据库，处理重复记录、仓库变更和机器人识别 | 后做，等数据库和采集模块可用 | #3、#5、#6、#7 |
-| [#14](https://github.com/swiftgorge5-eng/LeaderBoard/issues/14) | 从数据库统计贡献数量，计算排行榜和贡献者详情 | 后做，等表结构和数据写入模块可用 | #3、#8 |
-
-### 后端方向
-
-负责从 GitHub 获取数据、组织同步流程，以及给网页提供查询接口。数据库写入和统计任务 #8、#14 已列在上面的数据库方向，不是额外的重复任务。
-
-| Issue | 要做什么 | 什么时候做 | 依赖 |
-|---|---|---|---|
-| [#4](https://github.com/swiftgorge5-eng/LeaderBoard/issues/4) | 封装访问 GitHub 的公共工具，处理授权、分页、限流和重试 | **现在优先做** | #2 |
-| [#5](https://github.com/swiftgorge5-eng/LeaderBoard/issues/5) | 获取组织下的仓库，筛选出需要统计的仓库和分组 | #4 完成后做 | #4 |
-| [#6](https://github.com/swiftgorge5-eng/LeaderBoard/issues/6) | 采集默认分支的代码提交记录（Commit） | #5 完成后，与 #7 同时做 | #4、#5 |
-| [#7](https://github.com/swiftgorge5-eng/LeaderBoard/issues/7) | 采集 Pull Request 和 Issue 记录 | #5 完成后，与 #6 同时做 | #4、#5 |
-| [#13](https://github.com/swiftgorge5-eng/LeaderBoard/issues/13) | 串起采集和入库流程，定时更新，记录同步状态 | #8 完成后，可与 #14 同时做 | #5、#6、#7、#8 |
-| [#15](https://github.com/swiftgorge5-eng/LeaderBoard/issues/15) | 把统计结果和同步状态做成网页可以调用的接口 | #13、#14 完成后做 | #13、#14 |
-
-### 前端方向
-
-负责用户在浏览器里看到的页面和交互，使用 TypeScript、React 和 TSX。后端接口未完成时，可以先使用符合约定格式的模拟数据开发页面。
-
-| Issue | 要做什么 | 什么时候做 | 依赖 |
-|---|---|---|---|
-| [#16](https://github.com/swiftgorge5-eng/LeaderBoard/issues/16) | 搭页面结构、路由、统一请求工具和加载/错误提示 | **现在优先做，不必等后端业务接口** | #2；先用模拟数据，之后接 #15 |
-| [#17](https://github.com/swiftgorge5-eng/LeaderBoard/issues/17) | 做贡献排行榜和贡献者详情页，支持筛选和切换 | #16 完成后即可做，不必等整条后端流程 | #16；先用模拟数据，之后接 #15 |
-| [#18](https://github.com/swiftgorge5-eng/LeaderBoard/issues/18) | 展示仓库活动和同步新鲜度，并验证整套系统能跑通 | **最后集成验收**，需要前后端同学配合 | #13、#15、#17；复用 #16 的请求工具 |
-
-### 公共基础
-
-| Issue | 要做什么 | 当前安排 |
-|---|---|---|
-| [#2](https://github.com/swiftgorge5-eng/LeaderBoard/issues/2) | 建好前后端工程、共享类型、运行命令和本地数据库环境 | 工程实现已有，按 PR 流程验收；后续任务基于它开发 |
-
-#1 是 GitHub 写权限测试；#9–#12 是已关闭的重复 Issue，均不属于正式开发任务。
+早期 Phase 1 任务已关闭，不再保留过期任务表。请从[开放的 Issues](https://github.com/FudanOpenSourceClub/LeaderBoard/issues?q=is%3Aissue%20is%3Aopen)选择任务，阅读目标、依赖和验收要求。
 
 ---
 
-## 12. 开发顺序：先做什么，后做什么
+## 12. 开发依赖
 
-> 以下保留初期模块依赖顺序，不作为当前任务清单。
-
-**可以提前阅读和认领后续任务，但完整接入与验收要等依赖模块可用。** “依赖”就是该任务需要使用的其他任务产物，不是要求所有人按 Issue 编号排队。
-
-### 现在：三个方向一起开始
-
-| 方向 | 优先任务 | 完成后让谁接着做 |
-|---|---|---|
-| 数据库 | #3 建表和数据库连接 | #8 数据写入、#14 统计查询 |
-| 后端 | #4 GitHub 请求工具 | #5 仓库筛选 |
-| 前端 | #16 页面结构和请求工具 | #17 排行榜与详情页 |
-
-### 接下来：前后端各自推进
-
-| 顺序 | 后端与数据库 | 前端 |
-|---|---|---|
-| 第一步 | #4 完成后做 #5 | #16 完成后就可以做 #17，用模拟数据开发 |
-| 第二步 | #5 完成后，同时做 #6 和 #7 | 继续完成排行榜、详情页和交互 |
-| 第三步 | #3、#5、#6、#7 可用后做 #8 | 按统一接口等待接入真实数据 |
-| 第四步 | #8 完成后，#13 同步调度与 #14 统计查询可以同时做 | 配合确认接口返回值和页面需求 |
-| 第五步 | #13、#14 完成后做 #15 | 接入 #15 的真实接口 |
-| 最后 | 与前端一起完成 #18，验证采集、入库、查询、展示的完整流程 | 完成 #18 的仓库活动、同步状态页面和整体验收 |
-
-前端不需要等所有后端任务完成才开始；但使用模拟数据完成页面，不等于真实数据已经接通。所有跨模块数据仍使用已约定的共享类型。
+跨模块开发先对齐 [API Contract](docs/api-contract.md) 和 [架构说明](docs/architecture.md)，按当前 Issue 中的依赖安排工作。模拟数据通过不代表真实数据已接通。
 
 ---
 
@@ -754,33 +688,7 @@ Review threads resolved
 
 ## 16. 当前进度
 
-> 以下为初期记录，勾选状态已过时；当前进度以对应 Issue / PR 为准，不应据此判断模块尚未实现。
-
-- [x] Phase 1 范围确定
-- [x] 技术栈确定
-- [x] Monorepo 规划确定
-- [x] 模块边界确定
-- [x] 核心输入 / 输出接口完成第二轮对齐
-- [x] Repository scope 生命周期定义
-- [x] Activity discriminated union 定义
-- [x] PostgreSQL 数据模型对齐
-- [x] 增量同步窗口语义定义
-- [x] REST API Contract 定义
-- [x] GitHub Issue / PR 协作规范
-- [x] 第一批 Phase 1 Issues
-- [x] #2 Bootstrap（工程实现；合并以 PR 验收和 Review 为准）
-- [ ] #3 Database
-- [ ] #4 GitHub Client
-- [ ] #5 Repository Sync
-- [ ] #6 Commit Collector
-- [ ] #7 PR / Issue Collector
-- [ ] #8 Ingestion
-- [ ] #13 Sync
-- [ ] #14 Analytics
-- [ ] #15 API
-- [ ] #16 Frontend Skeleton
-- [ ] #17 Contributor Leaderboard
-- [ ] #18 E2E
+进度以对应 Issue / PR 为准。代码合并、CI 通过和线上部署是不同状态，核对线上问题时还需检查实际运行结果。
 
 ---
 

@@ -3,6 +3,7 @@ import { getContributionScores } from "../analytics/scoring.js";
 import { getDbPool } from "../db/index.js";
 import { collectPublicContributions, type PublicContributionExport } from "./export.js";
 import { refreshRepositoryStars } from "./repository-stars.js";
+import { collectStoredPullRequestUpdates, type PullRequestUpdate } from "./pull-request-refresh.js";
 
 class UnavailableContributorError extends Error {
   constructor(message: string) { super(message); this.name = "UnavailableContributorError"; }
@@ -30,6 +31,7 @@ export async function saveContributorActivity(
   identity: ContributorIdentity,
   data: PublicContributionExport,
   pool: Pool = getDbPool(),
+  pullRequestUpdates: PullRequestUpdate[] = [],
 ): Promise<void> {
   if (data.incomplete) throw new Error("GitHub returned incomplete search results; keeping the previous snapshot");
   if (data.rows.some(row=>!row.repositoryGithubId || !/^[1-9]\d*$/.test(row.repositoryGithubId))) {
@@ -88,6 +90,17 @@ export async function saveContributorActivity(
          merged_at=coalesce(EXCLUDED.merged_at,contributor_public_activities.merged_at),
          title=EXCLUDED.title, html_url=EXCLUDED.html_url, last_seen_at=now()`,
       [id, JSON.stringify(acceptedRows)],
+    );
+    // Existing PR merge updates consume no insertion quota and cannot create rows.
+    // Commit them with the refresh timestamp so a failed refresh remains retryable.
+    await client.query(
+      `UPDATE contributor_public_activities a
+       SET merged_at=coalesce(a.merged_at,d."mergedAt"::timestamptz), last_seen_at=now()
+       FROM jsonb_to_recordset($2::jsonb) AS d
+         ("repositoryGithubId" text, identifier text, "mergedAt" text)
+       WHERE a.contributor_id=$1 AND a.kind='pull_request'
+         AND a.repository_github_id=d."repositoryGithubId"::bigint AND a.identifier=d.identifier`,
+      [id, JSON.stringify(pullRequestUpdates)],
     );
     await client.query(
       `UPDATE contributors SET public_synced_at=now(),
@@ -170,7 +183,8 @@ export async function enrollContributor(
     validRows.push(row);
   }
   data.rows = validRows;
-  await saveContributorActivity({ githubId: String(user.id), login: user.login, avatarUrl: user.avatar_url }, data, pool);
+  const pullRequestUpdates = await collectStoredPullRequestUpdates(String(user.id), githubToken, pool, fetcher);
+  await saveContributorActivity({ githubId: String(user.id), login: user.login, avatarUrl: user.avatar_url }, data, pool, pullRequestUpdates);
   // The global Star scheduler retries its own metadata failures; they must
   // not cause successfully saved contribution events to be marked as failed.
   try { await refreshRepositoryStars(githubToken, pool, fetcher, String(user.id)); }

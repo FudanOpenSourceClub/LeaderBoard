@@ -29,7 +29,19 @@ npm run build
 - `503 LOGIN_UNAVAILABLE`：GitHub OAuth 登录尚未配置。
 - `401 REGISTRATION_REQUIRED`：当前本地库中没有符合条件的注册记录，需先访问 `/join` 注册；网站角色也会影响准入。
 
-OAuth 登录、邮箱验证和数据采集是不同配置。占位 Token 不提供登录能力，线上账号也不会自动出现在本地空库中。按 README 配置开发用 OAuth App、数据库及注册所需邮件服务。
+OAuth 登录、邮箱验证和数据采集是不同配置。占位 Token 不提供登录能力，线上账号也不会自动出现在本地空库中。按 `.env.example` 填写开发配置：
+
+| 配置 | 用途 |
+| --- | --- |
+| `DATABASE_URL` | 本地开发库；启动后运行 `npm run db:migrate` 和 `npm run db:verify`。 |
+| `GITHUB_TOKEN`、`GITHUB_ORG` | 数据采集所用令牌和组织，不是 OAuth 登录凭据。 |
+| `GITHUB_OAUTH_CLIENT_ID`、`GITHUB_OAUTH_CLIENT_SECRET`、`GITHUB_OAUTH_CALLBACK_URL` | 开发用 OAuth App 的凭据与回调；具体地址见第 5 问。 |
+| `SITE_URL` | 开发站点地址，如 `http://localhost:5173`。 |
+| `EMAIL_HMAC_SECRET` | 至少 32 个随机字符，用于邮箱等信息的指纹计算。 |
+| `SMTP_HOST`、`SMTP_PORT`、`SMTP_SECURE`、`SMTP_STARTTLS`、`SMTP_USER`、`SMTP_PASSWORD`、`MAIL_FROM` | 注册验证码的发信配置，端口与 TLS 选项按 `.env.example` 说明填写。 |
+| `FUDAN_EMAIL_DOMAINS` | 允许注册的邮箱域名，默认值见 `.env.example`。 |
+
+首次使用本地空库，在 `/join` 完成 GitHub 身份验证和邮箱注册。没有开发用 OAuth / 邮件配置时，可以先执行第 1 问中的代码检查，与维护者协调联调环境。
 
 ## 4. 开启 mock 能跳过登录吗？
 

@@ -35,10 +35,11 @@ export function HomePage({ api, accountUrl, authenticated }: { api: LeadBoardApi
   }, [api, range, retry]);
 
   const navigation = <>
-    <Link to="/projects" className="home-work-link"><span className="home-action-icon icon-project"><AppIcon name="repo"/></span><span>复旦开源项目</span><AppIcon name="arrow" size={18}/></Link>
+    <Link to="/projects" className="home-work-link"><span className="home-action-icon icon-project"><AppIcon name="repo"/></span><span>浏览开源项目</span><AppIcon name="arrow" size={18}/></Link>
     <Link to="/contributors" className="home-work-link"><span className="home-action-icon icon-leaders"><AppIcon name="trophy"/></span><span>开源达人榜</span><AppIcon name="arrow" size={18}/></Link>
     <Link to="/join" className="home-work-link"><span className="home-action-icon icon-join"><AppIcon name="plus"/></span><span>加入达人榜</span><AppIcon name="arrow" size={18}/></Link>
     <Link to={accountUrl} className="home-work-link"><span className="home-action-icon icon-account"><AppIcon name="user"/></span><span>{authenticated ? "我的档案" : "登录 / 注册"}</span><AppIcon name="arrow" size={18}/></Link>
+    <Link to="/guide" className="home-work-link"><span className="home-action-icon icon-project"><AppIcon name="repo"/></span><span>新手指南</span><AppIcon name="arrow" size={18}/></Link>
   </>;
 
   const loading = <div className="home-loading" role="status" aria-label="正在加载"><span/><span/><span/></div>;

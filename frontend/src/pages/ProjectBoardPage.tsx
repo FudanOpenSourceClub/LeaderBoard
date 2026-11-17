@@ -8,6 +8,7 @@ import {
 import { Link, useSearchParams } from "react-router";
 import { useWebsiteSession } from "../auth/session";
 import { useLocalFavorites } from "../lib/favorites";
+import { getProjectCatalog, type ProjectSource } from "../lib/project-catalog";
 import { Button, Card, Input, Textarea } from "../components/ui/primitives";
 import { AppIcon } from "../components/AppIcon";
 
@@ -16,6 +17,12 @@ type SubmitState =
   | { status: "submitting" }
   | { status: "success" }
   | { status: "error"; message: string };
+
+const sourceLabels: Record<ProjectSource, string> = {
+  campus: "复旦收录",
+  "campus-recommendation": "复旦推荐",
+  community: "社区推荐",
+};
 
 export function ProjectBoardPage() {
   const [searchParams] = useSearchParams();
@@ -32,6 +39,7 @@ export function ProjectBoardPage() {
   const [labName, setLabName] = useState("");
   const [notes, setNotes] = useState("");
   const [query, setQuery] = useState("");
+  const [source, setSource] = useState("");
   const [tag, setTag] = useState("");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [submit, setSubmit] = useState<SubmitState>({ status: "idle" });
@@ -41,14 +49,20 @@ export function ProjectBoardPage() {
     if (searchParams.get("search") === "1") searchInput.current?.focus();
   }, [searchParams]);
 
+  const projects = useMemo(() => getProjectCatalog(campusProjects), [campusProjects]);
+  const projectsInScope = useMemo(() => {
+    if (source === "campus") return projects.filter((project) => project.source !== "community");
+    if (source === "community") return projects.filter((project) => project.source === "community");
+    return projects;
+  }, [projects, source]);
   const availableTags = useMemo(
-    () => [...new Set(campusProjects.flatMap((project) => [...project.tags]))].sort(),
-    [campusProjects],
+    () => [...new Set(projectsInScope.flatMap((project) => project.tags))].sort(),
+    [projectsInScope],
   );
 
   const visibleProjects = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return campusProjects.filter((project) => {
+    return projectsInScope.filter((project) => {
       const matchesQuery = !normalized || [
         project.name,
         project.repo,
@@ -60,7 +74,7 @@ export function ProjectBoardPage() {
       const matchesFavorite = !favoritesOnly || favorites.isFavorite(project.repo);
       return matchesQuery && matchesTag && matchesFavorite;
     });
-  }, [campusProjects, query, tag, favoritesOnly, favorites.items]);
+  }, [projectsInScope, query, tag, favoritesOnly, favorites.items]);
 
   async function submitProposal(event: FormEvent) {
     event.preventDefault();
@@ -97,7 +111,7 @@ export function ProjectBoardPage() {
     <div className="page-canvas">
       <section className="page-hero campus-project-hero">
         <div>
-          <h1>复旦开源仓库必吃榜</h1>
+          <h1>开源仓库必吃榜</h1>
         </div>
       </section>
 
@@ -111,6 +125,14 @@ export function ProjectBoardPage() {
             placeholder="搜索项目"
           />
         </label>
+        <select className="toolbar-select" value={source} onChange={(event) => {
+          setSource(event.target.value);
+          setTag("");
+        }} aria-label="按项目来源筛选">
+          <option value="">全部来源</option>
+          <option value="campus">复旦项目</option>
+          <option value="community">社区推荐</option>
+        </select>
         <select className="toolbar-select" value={tag} onChange={(event) => setTag(event.target.value)} aria-label="按标签筛选">
           <option value="">全部方向</option>
           {availableTags.map((item) => <option value={item} key={item}>{item}</option>)}
@@ -126,16 +148,18 @@ export function ProjectBoardPage() {
       </section>
 
       <section className="dashboard-content">
-        <div className="project-list-count"><span>{visibleProjects.length} 个项目</span></div>
+        <div className="project-list-count"><span aria-live="polite">{visibleProjects.length} 个项目</span></div>
 
-        {catalogError&&<p role="alert" className="verify-notice verify-notice-error">{catalogError}</p>}
-        {(query || tag || favoritesOnly) && (
+        {source !== "community" && catalogLoading && <p role="status">正在加载复旦收录项目…</p>}
+        {source !== "community" && catalogError && <p role="alert" className="verify-notice verify-notice-error">复旦收录项目加载失败，请刷新后重试。</p>}
+        {(query || tag || source || favoritesOnly) && (
           <div className="project-search-summary">
-            <button className="text-button" type="button" onClick={() => { setQuery(""); setTag(""); setFavoritesOnly(false); }}>清除筛选</button>
+            <button className="text-button" type="button" onClick={() => { setQuery(""); setSource(""); setTag(""); setFavoritesOnly(false); }}>清除筛选</button>
           </div>
         )}
 
-        {catalogLoading ? <p role="status">正在加载项目…</p> : visibleProjects.length === 0 ? (
+        {visibleProjects.length === 0 ? (
+          (source === "community" || (!catalogLoading && !catalogError)) &&
           <div className="empty-filter-state">没有匹配的项目。</div>
         ) : (
           <div className="project-grid">
@@ -160,7 +184,9 @@ export function ProjectBoardPage() {
  
                   </div>
                 </div>
+                <p className="project-description">{project.description}</p>
                 <div className="project-tags">
+                  <span className="tag">{sourceLabels[project.source]}</span>
                   {project.tags.map((item) => <button type="button" className="tag project-tag-button" key={item} onClick={() => setTag(item)} aria-label={`筛选 ${item}`}>{item}</button>)}
                 </div>
                 <div className="project-links">
@@ -172,13 +198,13 @@ export function ProjectBoardPage() {
         )}
 
         <section className="project-invite-card">
-          <Button className="button button-primary" type="button" disabled={sessionLoading} onClick={() => {
+          <Button className="button" variant={showForm ? "outline" : "default"} type="button" disabled={sessionLoading} onClick={() => {
             if(!session.authenticated||!session.registered){setRegisterNotice(true);setShowForm(false);return;}
             setRegisterNotice(false);
             setShowForm((value) => !value);
             if (submit.status === "success") setSubmit({ status: "idle" });
           }}>
-            <AppIcon name="plus" size={16}/>{showForm ? "收起表单" : "加上我的项目"}
+            <AppIcon name="plus" size={16}/>{showForm ? "收起表单" : "提议收录复旦项目"}
           </Button>
         </section>
 

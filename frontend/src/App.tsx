@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link, NavLink, Route, Routes, useLocation } from "react-router";
+import { Link, matchPath, NavLink, Route, Routes, useLocation } from "react-router";
 import type { LeadBoardApiClient } from "./api/client";
 import { ContributorDetailPage } from "./pages/ContributorDetailPage";
 import { ContributorLeaderboardPage } from "./pages/ContributorLeaderboardPage";
@@ -8,6 +8,7 @@ import { WebsiteSessionProvider, useWebsiteSession } from "./auth/session";
 import { ProjectReviewPage } from "./pages/ProjectReviewPage";
 import { IdentityVerificationPage } from "./pages/IdentityVerificationPage";
 import { HomePage } from "./pages/HomePage";
+import { GuidePage } from "./pages/GuidePage";
 import { AppIcon } from "./components/AppIcon";
 
 
@@ -28,13 +29,15 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
     : "/join";
   const loginUrl = "/api/v1/auth/github/login?returnTo="+encodeURIComponent(location.pathname+location.search);
   const isHome = location.pathname === "/" || location.pathname === "/dashboard";
+  const isGuide = matchPath("/guide", location.pathname) !== null;
 
-  if(loading)return <main className="login-gate" role="status">正在确认登录状态…</main>;
+  if(loading&&!isGuide)return <main className="login-gate" role="status">正在确认登录状态…</main>;
   if(!session.authenticated)return <div className="app-shell dark-shell">
     <header className="topbar"><Link className="brand" to="/">LeaderBoard</Link><a className="header-login login-gate-account" href={loginUrl}>GitHub 登录</a></header>
-    {location.pathname==='/join'?<main id="main-content"><IdentityVerificationPage/></main>:<main id="main-content" className="login-gate">
+    {isGuide?<main id="main-content" className="public-guide"><GuidePage/></main>:location.pathname==='/join'?<main id="main-content"><IdentityVerificationPage/></main>:<main id="main-content" className="login-gate">
       <AppIcon name="github" size={40}/><h1>登录 LeaderBoard</h1><p>使用 GitHub 登录后，查看复旦开源项目、达人榜和比赛规则。</p>
       <a className="button primary-button" href={loginUrl}>使用 GitHub 登录</a><Link to="/join">首次使用？注册并加入达人榜</Link>
+      <Link to="/guide">新手指南</Link>
     </main>}
   </div>;
 
@@ -50,6 +53,7 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
           <NavLink className={navClass} to="/" end>首页</NavLink>
           <NavLink className={navClass} to="/projects">项目</NavLink>
           <NavLink className={navClass} to="/contributors">达人榜</NavLink>
+          <NavLink className={navClass} to="/guide">指南</NavLink>
           {session.authenticated && (session.isAdmin||session.canTag) && <NavLink className={navClass} to="/admin">管理</NavLink>}
         </nav>
         <div className="mobile-header-actions">
@@ -70,7 +74,7 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
         <aside className="sidebar" aria-label="侧边导航">
           <nav className="side-section" aria-label="功能导航">
             <NavLink className={navClass} to="/" end><span className="side-nav-icon"><AppIcon name="home"/></span><span className="side-nav-copy"><strong>首页</strong></span></NavLink>
-            <NavLink className={navClass} to="/projects"><span className="side-nav-icon"><AppIcon name="grid"/></span><span className="side-nav-copy"><strong>复旦开源项目</strong></span></NavLink>
+            <NavLink className={navClass} to="/projects"><span className="side-nav-icon"><AppIcon name="grid"/></span><span className="side-nav-copy"><strong>开源仓库必吃榜</strong></span></NavLink>
             <NavLink className={navClass} to="/contributors"><span className="side-nav-icon"><AppIcon name="users"/></span><span className="side-nav-copy"><strong>开源达人榜</strong></span></NavLink>
             <NavLink className={navClass} to="/join"><span className="side-nav-icon"><AppIcon name="plus"/></span><span className="side-nav-copy"><strong>加入达人榜</strong></span></NavLink>
             <NavLink className={navClass} to={accountUrl}><span className="side-nav-icon"><AppIcon name="user"/></span><span className="side-nav-copy"><strong>我的</strong></span></NavLink>
@@ -87,6 +91,7 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
             <Route path="/contributors/:username" element={<ContributorDetailPage api={api} />} />
             <Route path="/admin" element={<ProjectReviewPage />} />
             <Route path="/join" element={<IdentityVerificationPage />} />
+            <Route path="/guide" element={<GuidePage />} />
             <Route path="*" element={<section className="not-found"><h1>页面不存在</h1><Link to="/">返回首页</Link></section>} />
           </Routes>
         </main>

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link, NavLink, Route, Routes, useLocation } from "react-router";
+import { Link, NavLink, Route, Routes, matchPath, useLocation } from "react-router";
 import type { LeadBoardApiClient } from "./api/client";
 import { ContributorDetailPage } from "./pages/ContributorDetailPage";
 import { ContributorLeaderboardPage } from "./pages/ContributorLeaderboardPage";
@@ -26,6 +26,8 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
   const accountUrl = session.authenticated && session.login
     ? `/contributors/${encodeURIComponent(session.login)}`
     : "/join";
+  const isAccount = matchPath(accountUrl, location.pathname) !== null;
+  const isContributorSection = !isAccount && matchPath("/contributors/*", location.pathname) !== null;
   const loginUrl = "/api/v1/auth/github/login?returnTo="+encodeURIComponent(location.pathname+location.search);
   const isHome = location.pathname === "/" || location.pathname === "/dashboard";
 
@@ -49,7 +51,7 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
         <nav className="topnav" aria-label="主导航">
           <NavLink className={navClass} to="/" end>首页</NavLink>
           <NavLink className={navClass} to="/projects">项目</NavLink>
-          <NavLink className={navClass} to="/contributors">达人榜</NavLink>
+          <Link className={navClass({ isActive: isContributorSection })} aria-current={isContributorSection ? "page" : undefined} to="/contributors">达人榜</Link>
           {session.authenticated && (session.isAdmin||session.canTag) && <NavLink className={navClass} to="/admin">管理</NavLink>}
         </nav>
         <div className="mobile-header-actions">
@@ -71,9 +73,9 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
           <nav className="side-section" aria-label="功能导航">
             <NavLink className={navClass} to="/" end><span className="side-nav-icon"><AppIcon name="home"/></span><span className="side-nav-copy"><strong>首页</strong></span></NavLink>
             <NavLink className={navClass} to="/projects"><span className="side-nav-icon"><AppIcon name="grid"/></span><span className="side-nav-copy"><strong>复旦开源项目</strong></span></NavLink>
-            <NavLink className={navClass} to="/contributors"><span className="side-nav-icon"><AppIcon name="users"/></span><span className="side-nav-copy"><strong>开源达人榜</strong></span></NavLink>
+            <Link className={navClass({ isActive: isContributorSection })} aria-current={isContributorSection ? "page" : undefined} to="/contributors"><span className="side-nav-icon"><AppIcon name="users"/></span><span className="side-nav-copy"><strong>开源达人榜</strong></span></Link>
             <NavLink className={navClass} to="/join"><span className="side-nav-icon"><AppIcon name="plus"/></span><span className="side-nav-copy"><strong>加入达人榜</strong></span></NavLink>
-            <NavLink className={navClass} to={accountUrl}><span className="side-nav-icon"><AppIcon name="user"/></span><span className="side-nav-copy"><strong>我的</strong></span></NavLink>
+            <Link className={navClass({ isActive: isAccount })} aria-current={isAccount ? "page" : undefined} to={accountUrl}><span className="side-nav-icon"><AppIcon name="user"/></span><span className="side-nav-copy"><strong>我的</strong></span></Link>
             {session.authenticated && (session.isAdmin||session.canTag) && <NavLink className={navClass} to="/admin"><span className="side-nav-icon"><AppIcon name="settings"/></span><span className="side-nav-copy"><strong>管理后台</strong></span></NavLink>}
           </nav>
         </aside>
@@ -95,8 +97,8 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
       <nav className="mobile-bottom-nav" aria-label="底部导航">
         <NavLink to="/" end className={({isActive}) => isActive ? "mobile-tab mobile-tab-active" : "mobile-tab"}><AppIcon name="home" size={22}/><span>首页</span></NavLink>
         <NavLink to="/projects" className={({isActive}) => isActive ? "mobile-tab mobile-tab-active" : "mobile-tab"}><AppIcon name="grid" size={22}/><span>项目</span></NavLink>
-        <NavLink to="/contributors" className={() => location.pathname === "/contributors" || (location.pathname.startsWith("/contributors/") && location.pathname !== accountUrl) ? "mobile-tab mobile-tab-active" : "mobile-tab"}><AppIcon name="users" size={22}/><span>达人</span></NavLink>
-        <Link to={accountUrl} className={location.pathname === accountUrl ? "mobile-tab mobile-tab-active" : "mobile-tab"}><AppIcon name="user" size={22}/><span>我的</span></Link>
+        <Link to="/contributors" aria-current={isContributorSection ? "page" : undefined} className={isContributorSection ? "mobile-tab mobile-tab-active" : "mobile-tab"}><AppIcon name="users" size={22}/><span>达人</span></Link>
+        <Link to={accountUrl} aria-current={isAccount ? "page" : undefined} className={isAccount ? "mobile-tab mobile-tab-active" : "mobile-tab"}><AppIcon name="user" size={22}/><span>我的</span></Link>
       </nav>
     </div>
   );

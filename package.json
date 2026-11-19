@@ -34,7 +34,7 @@
     "test:e2e:live": "node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run tests/e2e/live.test.ts"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.5",
     "concurrently": "^9.2.1",
     "node-pg-migrate": "^9.0.0",
     "typescript": "~5.9.3",

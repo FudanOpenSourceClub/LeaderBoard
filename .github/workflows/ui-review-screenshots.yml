@@ -57,7 +57,7 @@ jobs:
           "$browser" --headless=new --no-sandbox --disable-gpu --hide-scrollbars --virtual-time-budget=6000 --window-size=1440,1000 --screenshot="$PWD/previews/before-desktop.png" "https://47.116.20.196/projects"
           "$browser" --headless=new --no-sandbox --disable-gpu --hide-scrollbars --virtual-time-budget=6000 --window-size=390,850 --screenshot="$PWD/previews/before-mobile.png" "https://47.116.20.196/projects"
           file previews/*.png
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: leadboard-ui-phase1-before-after
           path: previews/*.png

@@ -1,0 +1,60 @@
+name: Backfill missing public contributions
+
+on:
+  workflow_run:
+    workflows: [Deploy LeadBoard]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      from:
+        description: Inclusive start (ISO 8601 UTC)
+        required: true
+        default: "2026-11-07T04:00:00Z"
+      to:
+        description: Exclusive end (ISO 8601 UTC). Empty means six hours before execution.
+      github_id:
+        description: Optional enrolled contributor's stable GitHub ID
+      apply:
+        description: Save recovered rows to production
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leadboard-contribution-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    # Run automatically only for the deployment explicitly marked for this recovery.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       contains(github.event.workflow_run.head_commit.message, '[backfill-public-contributions-20261121]'))
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 90
+    steps:
+      - name: Recover public contributions using the deployed release
+        shell: bash
+        env:
+          BACKFILL_FROM: ${{ inputs.from || '2026-11-07T04:00:00Z' }}
+          BACKFILL_TO: ${{ inputs.to }}
+          BACKFILL_GITHUB_ID: ${{ inputs.github_id }}
+          BACKFILL_APPLY: ${{ github.event_name == 'workflow_run' || inputs.apply }}
+        run: |
+          set -euo pipefail
+          release="$(systemctl show -p WorkingDirectory --value leadboard.service)"
+          cd "$release"
+          test -f scripts/backfill-contributors.mjs
+          temp_env="$(mktemp /tmp/leadboard-backfill.XXXXXX)"
+          trap 'sudo rm -f "$temp_env"' EXIT
+          sudo install -o leadboard -g leadboard -m 600 /etc/leadboard/leadboard.env "$temp_env"
+          args=(--from "$BACKFILL_FROM")
+          if [[ -n "$BACKFILL_TO" ]]; then args+=(--to "$BACKFILL_TO"); fi
+          if [[ -n "$BACKFILL_GITHUB_ID" ]]; then args+=(--github-id "$BACKFILL_GITHUB_ID"); fi
+          if [[ "$BACKFILL_APPLY" == 'true' ]]; then args+=(--apply); fi
+          sudo -u leadboard /usr/local/bin/leadboard-node --env-file="$temp_env" scripts/backfill-contributors.mjs "${args[@]}"

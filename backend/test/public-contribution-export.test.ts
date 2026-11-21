@@ -116,6 +116,60 @@ describe("Public contributor activity export", () => {
     expect(result.rows).toHaveLength(0);
   });
 
+  it("paginates historical PRs and filters by creation time and stable account ID", async () => {
+    const from = "2026-11-07T04:00:00Z";
+    const to = "2026-11-09T04:00:00Z";
+    const items = Array.from({ length: 103 }, (_, i) => ({
+      html_url: `https://github.com/example/repo/pull/${i + 1}`,
+      repository_url: "https://api.github.com/repos/example/repo",
+      created_at: i === 101 ? to : from,
+      updated_at: "2026-11-20T04:00:00Z",
+      user: { id: i === 102 ? 999 : 111 },
+      number: i + 1,
+    }));
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      const url = new URL(String(input));
+      const query = url.searchParams.get("q")!;
+      expect(query).toContain("is:public");
+      expect(query).not.toContain("updated:");
+      if (!query.includes("is:pr")) return Response.json({ total_count: 0, items: [] });
+      expect(query).toContain(`created:${from}..2026-11-09T03:59:59Z`);
+      const offset = (Number(url.searchParams.get("page")) - 1) * 100;
+      return Response.json({ total_count: items.length, items: items.slice(offset, offset + 100) });
+    }) as typeof fetch;
+
+    const data = await collectPublicContributions("new-login", "token", fetcher, { period: { from, to }, contributorGithubId: "111" });
+    expect(data.rows).toHaveLength(101);
+    expect(data.rows.some(row => row.identifier === "101")).toBe(true);
+    expect(data.incomplete).toBe(false);
+    expect(data.truncated).toBe(false);
+  });
+
+  it("splits a saturated historical search into adjacent seconds", async () => {
+    const first = "2026-11-07T04:00:00Z";
+    const second = "2026-11-07T04:00:01Z";
+    const queries: string[] = [];
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      const url = new URL(String(input));
+      if (!url.pathname.endsWith("/commits")) return Response.json({ total_count: 0, items: [] });
+      const query = url.searchParams.get("q")!;
+      queries.push(query.split("author-date:")[1]!);
+      if (queries.length === 1) return Response.json({ total_count: 1001, items: [] });
+      return Response.json({ total_count: 1, items: [{
+        author: { id: 111 }, sha: String(queries.length),
+        html_url: `https://github.com/example/repo/commit/${queries.length}`,
+        repository: { full_name: "example/repo", id: 1, private: false },
+        commit: { author: { date: queries.length === 2 ? first : second } },
+      }] });
+    }) as typeof fetch;
+
+    const data = await collectPublicContributions("member", "token", fetcher, {
+      period: { from: first, to: "2026-11-07T04:00:02Z" }, contributorGithubId: "111",
+    });
+    expect(queries).toEqual([`${first}..${second}`, `${first}..${first}`, `${second}..${second}`]);
+    expect(data.rows).toHaveLength(2);
+  });
+
   it("retrieves more than GitHub's per-query 1000 cap by splitting date windows", async () => {
     const commits = Array.from({ length: 1200 }, (_, i) => {
       const day = i < 600 ? "2025-01-12" : "2026-02-02";

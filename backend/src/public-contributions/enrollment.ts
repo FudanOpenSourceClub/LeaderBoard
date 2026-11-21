@@ -32,15 +32,23 @@ export async function saveContributorActivity(
   data: PublicContributionExport,
   pool: Pool = getDbPool(),
   pullRequestUpdates: PullRequestUpdate[] = [],
-): Promise<void> {
+  historical = false,
+): Promise<number> {
   if (data.incomplete) throw new Error("GitHub returned incomplete search results; keeping the previous snapshot");
+  if (historical && data.truncated) throw new Error("Cannot import a truncated history");
   if (data.rows.some(row=>!row.repositoryGithubId || !/^[1-9]\d*$/.test(row.repositoryGithubId))) {
     throw new Error("Every imported contribution must have a verified GitHub repository ID");
   }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const actor = await client.query<{ id: string }>(
+    const actor = historical
+      ? await client.query<{ id: string }>(
+        `SELECT id::text FROM contributors
+         WHERE github_id=$1 AND enrolled_at IS NOT NULL AND is_bot=FALSE FOR UPDATE`,
+        [identity.githubId],
+      )
+      : await client.query<{ id: string }>(
       `INSERT INTO contributors
         (github_id, login, avatar_url, actor_type, is_bot, enrolled_at)
        VALUES ($1,$2,$3,'User',FALSE,now())
@@ -51,19 +59,23 @@ export async function saveContributorActivity(
        RETURNING id::text`,
       [identity.githubId, identity.login, identity.avatarUrl],
     );
-    const id = actor.rows[0]!.id;
+    const id = actor.rows[0]?.id;
+    if (!id) throw new Error("Contributor is no longer enrolled");
     // The contributor row lock serializes imports. Never replace full history.
     const rows = [...new Map(data.rows.map(row => [
       [row.kind, row.repositoryGithubId ?? row.repository.toLowerCase(), row.identifier].join(":"), row,
     ])).values()];
     // Count actual newly inserted rows, not search results or re-imports.
     // Locking the contributor row above serializes concurrent submissions.
-    const quota = await client.query<{ count: string }>(
-      "SELECT count(*)::text AS count FROM contributor_public_activities WHERE contributor_id=$1 AND first_seen_at>=now()-interval '6 hours'",
-      [id],
-    );
-    const remaining = Math.max(0, 50 - Number(quota.rows[0]?.count ?? 0));
-    const acceptedRows = rows.slice(0, remaining);
+    let acceptedRows = rows;
+    if (!historical) {
+      const quota = await client.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM contributor_public_activities
+         WHERE contributor_id=$1 AND NOT historical_backfill AND first_seen_at>=now()-interval '6 hours'`,
+        [id],
+      );
+      acceptedRows = rows.slice(0, Math.max(0, 50 - Number(quota.rows[0]?.count ?? 0)));
+    }
     const capped = data.truncated || acceptedRows.length < rows.length;
     await client.query(
       `UPDATE contributor_public_activities a SET repository_github_id=d."repositoryGithubId"::bigint
@@ -77,20 +89,24 @@ export async function saveContributorActivity(
              AND known.repository_github_id=d."repositoryGithubId"::bigint AND known.identifier=d.identifier)`,
       [id, JSON.stringify(acceptedRows)],
     );
-    await client.query(
+    const saved = await client.query(
       `INSERT INTO contributor_public_activities
-        (contributor_id, kind, repository, repository_github_id, object_github_id, identifier, occurred_at, merged_at, title, html_url)
+        (contributor_id, kind, repository, repository_github_id, object_github_id, identifier, occurred_at, merged_at, title, html_url, historical_backfill)
        SELECT $1, kind, repository, "repositoryGithubId"::bigint, "objectGithubId"::bigint,
-         identifier, "occurredAt"::timestamptz, "mergedAt"::timestamptz, title, url
+         identifier, "occurredAt"::timestamptz, "mergedAt"::timestamptz, title, url, $3
        FROM jsonb_to_recordset($2::jsonb) AS records
          (kind text, repository text, "repositoryGithubId" text, "objectGithubId" text,
           identifier text, "occurredAt" text, "mergedAt" text, title text, url text)
-       ON CONFLICT (contributor_id, kind, repository_github_id, identifier) DO UPDATE SET
+       ON CONFLICT (contributor_id, kind, repository_github_id, identifier) ${historical ? "DO NOTHING" : `DO UPDATE SET
          repository=EXCLUDED.repository, object_github_id=EXCLUDED.object_github_id,
          merged_at=coalesce(EXCLUDED.merged_at,contributor_public_activities.merged_at),
-         title=EXCLUDED.title, html_url=EXCLUDED.html_url, last_seen_at=now()`,
-      [id, JSON.stringify(acceptedRows)],
+         title=EXCLUDED.title, html_url=EXCLUDED.html_url, last_seen_at=now()`}`,
+      [id, JSON.stringify(acceptedRows), historical],
     );
+    if (historical) {
+      await client.query("COMMIT");
+      return saved.rowCount ?? 0;
+    }
     // Existing PR merge updates consume no insertion quota and cannot create rows.
     // Commit them with the refresh timestamp so a failed refresh remains retryable.
     await client.query(
@@ -109,6 +125,7 @@ export async function saveContributorActivity(
       [id, capped],
     );
     await client.query("COMMIT");
+    return saved.rowCount ?? 0;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

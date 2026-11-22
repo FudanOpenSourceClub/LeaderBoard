@@ -316,7 +316,7 @@ export class GitHubApiClient implements GitHubClient {
         }
         const rateLimited = response.status === 429 ||
           (response.status === 403 &&
-            (response.headers.get("x-ratelimit-remaining") === "0" ||
+            (response.headers.has("retry-after") || response.headers.get("x-ratelimit-remaining") === "0" ||
               /secondary rate limit|rate limit exceeded|abuse detection/i.test(rateMessage)));
         const retryable = rateLimited || response.status >= 500;
         if (rateLimited) {

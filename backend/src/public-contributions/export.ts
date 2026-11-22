@@ -33,7 +33,7 @@ interface SearchItem {
   id?: number;
   html_url?: string;
   repository_url?: string;
-  repository?: { full_name?: string; id?: number };
+  repository?: { full_name?: string; id?: number; private?: boolean };
   pull_request?: { merged_at?: string | null };
   created_at?: string;
   title?: string;
@@ -49,6 +49,7 @@ interface SearchResponse {
 const MAX_PER_KIND = 5000;
 const GITHUB_SEARCH_LIMIT = 1000; // GitHub still caps each individual search query at 1000.
 const DAY_MS = 86_400_000;
+const SECOND_MS = 1_000;
 const SEARCH_KINDS: SearchKind[] = ["commit", "pull_request", "issue"];
 const HEADER = ["类型", "仓库", "时间(UTC)", "SHA或编号", "标题", "原始链接", "统计口径", "GitHub仓库ID", "GitHub对象ID", "合并时间(UTC)", "白名单", "月份(北京时间)", "仓库月度次序", "月度有效次序", "超过仓库月限3次", "超过总月限10次", "得分", "PR提交得分", "PR合并得分"];
 
@@ -60,23 +61,40 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export interface ContributionPeriod {
+  from: string;
+  to: string;
+}
+
 /**
  * GitHub Search caps pagination at 1,000 entries PER QUERY. If a query has
  * more matches, bisect the time range into smaller queries and page each one.
- * The date intervals are disjoint, traversed newest-first, and bounded by a
- * 5,000-event export limit per activity kind.
+ * The interactive export is capped at 5,000 events per kind. An explicit
+ * historical period reads every page in its disjoint query intervals.
  */
 export async function collectPublicContributions(
   username: string,
   githubToken: string,
   fetcher: typeof fetch = fetch,
-  options: { since?: string; contributorGithubId?: string; maxRowsPerKind?: number } = {},
+  options: {
+    since?: string;
+    contributorGithubId?: string;
+    maxRowsPerKind?: number;
+    period?: ContributionPeriod;
+    beforeSearch?: () => Promise<void>;
+  } = {},
 ): Promise<PublicContributionExport> {
   if (!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(username)) {
     throw new Error("Invalid GitHub username");
   }
   if (!githubToken.trim()) throw new Error("GitHub token not configured");
   if (options.maxRowsPerKind !== undefined && (!Number.isInteger(options.maxRowsPerKind) || options.maxRowsPerKind < 1 || options.maxRowsPerKind > 100)) throw new Error("Invalid per-kind limit");
+  const period = options.period && {
+    from: Date.parse(options.period.from), to: Date.parse(options.period.to),
+  };
+  if (period && (!(period.from < period.to) || options.since || options.maxRowsPerKind !== undefined)) {
+    throw new Error("Invalid historical contribution period");
+  }
 
   const rows: PublicContribution[] = [];
   const totals = { commit: 0, pull_request: 0, issue: 0 };
@@ -90,14 +108,15 @@ export async function collectPublicContributions(
     url.searchParams.set("q", query);
     url.searchParams.set("per_page", "100");
     url.searchParams.set("page", String(page));
-    if (options.maxRowsPerKind !== undefined) {
+    if (period || options.maxRowsPerKind !== undefined) {
       url.searchParams.set("sort", kind === "commit" ? "author-date" : "created");
       url.searchParams.set("order", "desc");
     }
     for (let attempt = 0; attempt < 4; attempt++) {
       // Keep authenticated GitHub search calls below roughly 30/minute.
       // Mock fetchers bypass the delay so unit tests remain fast.
-      if (requestCount++ > 0 && fetcher === fetch) await delay(2200);
+      if (options.beforeSearch) await options.beforeSearch();
+      else if (requestCount++ > 0 && fetcher === fetch) await delay(2200);
       let response: Response;
       try {
         response = await fetcher(url, {
@@ -124,13 +143,17 @@ export async function collectPublicContributions(
               /rate.limit|secondary|abuse|temporar/i.test(message)));
         if (retryable && attempt < 3) {
           const retryAfter = Number(response.headers.get("retry-after"));
-          const reset = Number(response.headers.get("x-ratelimit-reset"));
+          const reset = response.headers.get("x-ratelimit-remaining") === "0"
+            ? Number(response.headers.get("x-ratelimit-reset")) : 0;
           const wait = Number.isFinite(retryAfter) && retryAfter > 0
             ? retryAfter * 1000
             : Number.isFinite(reset) && reset > 0
               ? Math.max(1000, reset * 1000 - Date.now() + 1000)
-              : response.status >= 500 ? 1000 * 2 ** attempt : 10000;
-          if (fetcher === fetch) await delay(Math.min(wait, 65000));
+              : response.status >= 500 ? 1000 * 2 ** attempt : period ? 60_000 * 2 ** attempt : 10_000;
+          if (fetcher === fetch) {
+            if (period && wait > 5 * 60_000) throw new Error(`GitHub ${endpoint} search retry exceeds the wait budget`);
+            await delay(period ? wait : Math.min(wait, 65_000));
+          }
           continue;
         }
         throw new Error("GitHub " + endpoint + " search returned HTTP " + response.status + (message ? ": "+message : ""));
@@ -162,7 +185,8 @@ export async function collectPublicContributions(
         // GitHub search sometimes returns stale or cross-account hits. Ignore them
         // rather than blocking the other valid contributions for this user.
         if(options.contributorGithubId && String((kind==="commit"?item.author:item.user)?.id)!==options.contributorGithubId) continue;
-        if (seen.size >= MAX_PER_KIND) break;
+        if (!period && seen.size >= MAX_PER_KIND) break;
+        if (period && item.repository?.private) continue;
         const url = item.html_url;
         if (!url?.startsWith("https://github.com/") || seen.has(url)) continue;
         const repository = kind === "commit"
@@ -171,10 +195,13 @@ export async function collectPublicContributions(
         if (!repository || !/^[^/]+\/[^/]+$/.test(repository)) continue;
         const occurredAt = kind === "commit" ? item.commit?.author?.date : item.created_at;
         const identifier = kind === "commit" ? item.sha : String(item.number ?? "");
-        if (!occurredAt || !identifier || Number.isNaN(Date.parse(occurredAt))) continue;
+        if (!occurredAt || !identifier) continue;
+        const occurredAtMs = Date.parse(occurredAt);
+        if (Number.isNaN(occurredAtMs)) continue;
+        if (period && (occurredAtMs < period.from || occurredAtMs >= period.to)) continue;
         // A bounded refresh must never insert older items solely because a PR
         // or issue was edited, or the GitHub search index returned a stale hit.
-        if (options.maxRowsPerKind !== undefined && since && Date.parse(occurredAt) < Date.parse(since)) continue;
+        if (options.maxRowsPerKind !== undefined && since && occurredAtMs < Date.parse(since)) continue;
         rows.push({
           kind, repository, occurredAt, identifier,
           title: kind === "commit" ? ((item.commit?.message ?? "").split("\n")[0] ?? "") : (item.title ?? ""),
@@ -191,9 +218,11 @@ export async function collectPublicContributions(
     async function collectPages(query: string, first: SearchResponse) {
       addItems(first.items);
       const available = Math.min(first.total_count, GITHUB_SEARCH_LIMIT);
-      for (let page = 2; page <= Math.ceil(available / 100) && seen.size < MAX_PER_KIND; page++) {
+      if (period && first.items.length < Math.min(available, 100)) incomplete = true;
+      for (let page = 2; page <= Math.ceil(available / 100) && (period || seen.size < MAX_PER_KIND); page++) {
         const payload = await search(kind, query, page);
         addItems(payload.items);
+        if (period && payload.items.length < Math.min(100, available - (page - 1) * 100)) incomplete = true;
         if (payload.items.length === 0) {
           incomplete = true;
           break;
@@ -201,7 +230,29 @@ export async function collectPublicContributions(
       }
     }
 
-    // Search once without a date qualifier to retain GitHub's total count.
+    const qualifier = kind === "commit" ? "author-date:" : "created:";
+    if (period) {
+      // GitHub ranges include both ends and have second precision.
+      const firstSecond = Math.floor(period.from / SECOND_MS);
+      const lastSecond = Math.ceil(period.to / SECOND_MS) - 1;
+      const isoSecond = (second: number) => new Date(second * SECOND_MS).toISOString().replace(".000Z", "Z");
+      const visitPeriod = async (first: number, last: number): Promise<void> => {
+        const query = `${baseQuery} is:public ${qualifier}${isoSecond(first)}..${isoSecond(last)}`;
+        const result = await search(kind, query, 1);
+        if (result.total_count > GITHUB_SEARCH_LIMIT) {
+          if (first === last) throw new Error(`GitHub ${kind} search exceeded its limit within one second`);
+          const middle = first + Math.floor((last - first) / 2);
+          await visitPeriod(first, middle);
+          await visitPeriod(middle + 1, last);
+          return;
+        }
+        totals[kind] += result.total_count;
+        await collectPages(query, result);
+      };
+      await visitPeriod(firstSecond, lastSecond);
+      continue;
+    }
+
     const root = await search(kind, baseQuery, 1);
     totals[kind] = root.total_count;
     if (options.maxRowsPerKind !== undefined) {
@@ -214,7 +265,6 @@ export async function collectPublicContributions(
       continue;
     }
 
-    const qualifier = kind === "commit" ? "author-date:" : "created:";
     const start = Date.UTC(2008, 0, 1);
     const end = Math.floor((Date.now() + DAY_MS) / DAY_MS) * DAY_MS;
 

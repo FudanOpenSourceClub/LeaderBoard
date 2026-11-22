@@ -48,6 +48,7 @@ const tables = {
   contributor_public_activities: {
     id:id(),repository_github_id:optional("bigint"),object_github_id:optional("bigint"),merged_at:optional(timestamp),
     first_seen_at:required(timestamp,"now()"),last_seen_at:required(timestamp,"now()"),
+    historical_backfill: required("boolean", "false"),
     contributor_id: required("bigint"), kind: required("text"), repository: required("text"),
     identifier: required("text"), occurred_at: required(timestamp), title: required("text"), html_url: required("text"),
   },

@@ -185,5 +185,31 @@ describe("Analytics pipeline fixture", () => {
     expect(expanded).toHaveLength(15);
     expect(expanded.slice(0,10)).toEqual(top);
   });
+
+  it("imports missing history idempotently without consuming the live quota or changing sync metadata", async () => {
+    const identity = { githubId: "2011", login: "backfill-member", avatarUrl: null };
+    const data: PublicContributionExport = {
+      rows: Array.from({ length: 55 }, (_, index) => ({
+        kind: "pull_request", repository: "other/community", repositoryGithubId: "9999",
+        identifier: String(index + 100), occurredAt: "2026-09-20T10:00:00Z", title: "Historical PR",
+        url: `https://github.com/other/community/pull/${index + 100}`,
+      })),
+      totals: { commit: 0, pull_request: 55, issue: 0 }, truncated: false, incomplete: false,
+    };
+    await expect(saveContributorActivity(identity, data, pool, [], true)).rejects.toThrow("no longer enrolled");
+    await saveContributorActivity(identity, { ...data, rows: [], truncated: true }, pool);
+    const syncState = async () => (await pool.query(
+      "SELECT public_synced_at, public_sync_truncated, public_sync_incomplete FROM contributors WHERE github_id=$1", [identity.githubId],
+    )).rows[0];
+    const before = await syncState();
+    await expect(saveContributorActivity(identity, data, pool, [], true)).resolves.toBe(55);
+    await expect(saveContributorActivity(identity, data, pool, [], true)).resolves.toBe(0);
+    expect(await syncState()).toEqual(before);
+
+    const row = { ...data.rows[0]!, identifier: "200", url: "https://github.com/other/community/pull/200" };
+    await expect(saveContributorActivity(identity, { ...data, rows: [row] }, pool)).resolves.toBe(1);
+    const activity = await getContributorActivityExport(identity.login, pool);
+    expect(activity?.totals.pull_request).toBe(56);
+  });
 });
 

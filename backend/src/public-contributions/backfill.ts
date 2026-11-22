@@ -10,10 +10,38 @@ function unavailable(error: unknown): boolean {
   return error instanceof GitHubClientError && (error.status === 404 || error.status === 410);
 }
 
+type RepositoryMetadata = { id: number; private: boolean };
+
+async function publicRepositoryId(repository: string, github: GitHubApiClient, fetcher: typeof fetch): Promise<string | null> {
+  const path = repository.split("/").map(encodeURIComponent).join("/");
+  let metadata: RepositoryMetadata;
+  try {
+    metadata = await github.requestRest("GET", `/repos/${path}`);
+  } catch (error) {
+    if (unavailable(error)) return null;
+    if (!(error instanceof GitHubClientError && error.code === "HTTP_ERROR" && error.status === 403)) throw error;
+
+    // Search already limited this row to public results. Repository metadata is also available without a token.
+    const response = await fetcher(`https://api.github.com/repos/${path}`, {
+      headers: { Accept: "application/vnd.github+json", "User-Agent": "LeadBoard-contribution-backfill" },
+      signal: AbortSignal.timeout(25_000),
+    });
+    if ([404, 410, 451].includes(response.status)) return null;
+    if (!response.ok) throw new Error(`Public GitHub lookup returned HTTP ${response.status}`);
+    metadata = await response.json() as RepositoryMetadata;
+    console.info(`Verified public repository metadata for ${repository}`);
+  }
+  if (!Number.isSafeInteger(metadata.id) || metadata.id <= 0 || typeof metadata.private !== "boolean") {
+    throw new Error("Invalid GitHub repository metadata");
+  }
+  return metadata.private ? null : String(metadata.id);
+}
+
 export async function backfillPublicContributions(
   pool: Pool,
   githubToken: string,
   options: { period: ContributionPeriod; githubId?: string; apply: boolean },
+  fetcher: typeof fetch = fetch,
 ): Promise<{ accounts: number; completed: number; unavailable: number; failed: number; found: number; inserted: number; skippedRows: number }> {
   const { period, githubId, apply } = options;
   const from = Date.parse(period.from);
@@ -21,7 +49,9 @@ export async function backfillPublicContributions(
   if (!(from < to && to <= Date.now() - LIVE_WINDOW_MS)) throw new Error("Backfill dates must precede the live six-hour window");
   if (githubId && !/^[1-9]\d*$/.test(githubId)) throw new Error("Invalid contributor GitHub ID");
 
-  const github = new GitHubApiClient({ githubToken });
+  const github = new GitHubApiClient({ githubToken }, {
+    fetch: fetcher, ...(fetcher === fetch ? {} : { sleep: async () => undefined }),
+  });
   const accounts = await pool.query<{ github_id: string }>(
     `SELECT github_id::text FROM contributors
      WHERE enrolled_at IS NOT NULL AND is_bot=FALSE AND github_id IS NOT NULL
@@ -51,26 +81,24 @@ export async function backfillPublicContributions(
       }
       if (String(user.id) !== account.github_id || user.type !== "User") throw new Error("GitHub account identity mismatch");
 
-      const data = await collectPublicContributions(user.login, githubToken, fetch, {
-        period, contributorGithubId: account.github_id, beforeSearch,
+      const data = await collectPublicContributions(user.login, githubToken, fetcher, {
+        period, contributorGithubId: account.github_id, ...(fetcher === fetch ? { beforeSearch } : {}),
       });
       if (data.incomplete || data.truncated) throw new Error("GitHub returned partial historical search results");
 
       const rows = [];
+      const failedRepositories = new Set<string>();
       for (const row of data.rows) {
         const key = row.repository.toLowerCase();
         let id = row.repositoryGithubId ?? repositories.get(key);
         if (id === undefined) {
-          const path = row.repository.split("/").map(encodeURIComponent).join("/");
+          if (failedRepositories.has(key)) continue;
           try {
-            const repo = await github.requestRest<{ id: number; private: boolean }>("GET", `/repos/${path}`);
-            if (!Number.isSafeInteger(repo.id) || repo.id <= 0 || typeof repo.private !== "boolean") {
-              throw new Error(`Invalid GitHub repository metadata for ${row.repository}`);
-            }
-            id = repo.private ? null : String(repo.id);
+            id = await publicRepositoryId(row.repository, github, fetcher);
           } catch (error) {
-            if (!unavailable(error)) throw error;
-            id = null;
+            failedRepositories.add(key);
+            console.error(`Repository ${row.repository}: ${error instanceof Error ? error.message : "lookup failed"}`);
+            continue;
           }
           repositories.set(key, id);
         }
@@ -82,10 +110,11 @@ export async function backfillPublicContributions(
         { githubId: account.github_id, login: user.login, avatarUrl: user.avatar_url },
         { ...data, rows }, pool, [], true,
       ) : 0;
-      summary.completed++;
+      if (failedRepositories.size) summary.failed++;
+      else summary.completed++;
       summary.found += rows.length;
       summary.inserted += inserted;
-      console.info(JSON.stringify({ githubId: account.github_id, found: rows.length, inserted }));
+      console.info(JSON.stringify({ githubId: account.github_id, found: rows.length, inserted, failedRepositories: failedRepositories.size }));
     } catch (error) {
       summary.failed++;
       console.error(`Backfill failed for GitHub ID ${account.github_id}: ${error instanceof Error ? error.message : "unknown error"}`);

@@ -35,7 +35,9 @@ function fixture(lookup: (authorization: string | null) => Response) {
 }
 
 describe("Public contribution history backfill", () => {
-  beforeEach(() => vi.mocked(saveContributorActivity).mockClear());
+  beforeEach(() => {
+    vi.mocked(saveContributorActivity).mockClear();
+  });
 
   it("resolves a public repository without authorization after a token permission error", async () => {
     const headers: (string | null)[] = [];

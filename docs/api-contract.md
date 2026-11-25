@@ -763,6 +763,7 @@ github_accounts、contributors，确认唯一且完整才跳回成功页面。�
 ## 注册会话、项目审核与关闭导出（2026-10-22）
 
 - `GET /auth/session`：返回 `{authenticated:false}`，或已认证 GitHub 用户名、`registered`、`isAdmin`、会话专用 `csrfToken`。不返回学号、姓名、邮箱或内部成员 ID。
+- `POST /auth/logout`：需要有效网站会话和该会话的 `X-CSRF-Token`。成功返回 204，撤销当前会话及本浏览器携带的同账号注册凭据，并清除相关 Cookie。未登录返回 401，CSRF 校验失败返回 403。
 - `GET /auth/github/login?returnTo=/projects|/admin|/join`：GitHub 官方登录；复用既有 OAuth 回调地址，通过独立 state 与 HttpOnly 浏览器凭据防止回调串用。已注册用户和配置中的管理员可登录。网站会话有效期30天。
 - `POST /project-proposals`：仅注册且登录的成员可用，须携带 `X-CSRF-Token`。服务器固定提交者身份，忽略客户端伪造的 memberId。只接受公开 GitHub 仓库，按稳定仓库 ID 防止重复待审/已收录申请。申请与邮件 outbox 在同一事务提交。
 - `GET /admin/project-proposals`：仅管理员可读申请原文、申请人 GitHub、审核结论、通知状态。

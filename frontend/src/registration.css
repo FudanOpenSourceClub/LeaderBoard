@@ -1,0 +1,85 @@
+.registration-shell {
+  --background: #161616;
+  --foreground: #f1f1f3;
+  --ring: #78eea5;
+  --registration-muted: #aaa;
+  --registration-line: #ffffff18;
+  color: var(--foreground);
+  background: var(--background);
+}
+.registration-shell .leaderboard-header { background: var(--background); }
+.workspace.registration-workspace { display: block; max-width: none; }
+.registration-main {
+  padding: clamp(45px, 10vh, 92px) var(--site-gutter) 70px;
+  font-family: "Inter Variable", Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.registration-page { max-width: 490px; margin-inline: auto; }
+.registration-heading { margin-bottom: 22px; }
+.registration-heading h1 { margin: 0; font-size: clamp(26px, 3vw, 38px); font-weight: 650; line-height: 1.18; letter-spacing: -.04em; }
+.registration-heading p { margin: 10px 0 0; color: var(--registration-muted); font-size: 14px; line-height: 1.6; }
+
+.registration-panel { border: 1px solid var(--registration-line); border-radius: 9px; }
+.registration-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 13px clamp(14px, 3vw, 22px);
+  margin: 0;
+  border-bottom: 1px solid var(--registration-line);
+  list-style: none;
+}
+.registration-steps li { display: flex; align-items: center; gap: 8px; color: var(--registration-muted); font-size: 13px; line-height: 1.35; }
+.registration-steps li + li { padding-left: 12px; border-left: 1px solid var(--registration-line); }
+.registration-steps li[aria-current="step"] { color: var(--foreground); font-weight: 560; }
+.registration-step-number { flex: 0 0 24px; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 4px; color: #c5c5c5; background: #282828; font-size: 12px; font-variant-numeric: tabular-nums; }
+.registration-steps [aria-current="step"] .registration-step-number { color: var(--compact-green-text); background: var(--compact-green); }
+.registration-steps [data-complete] .registration-step-number { color: var(--ring); }
+
+.registration-content { padding: clamp(16px, 3vw, 23px); }
+.registration-content h2 { margin: 0 0 13px; color: var(--foreground); font-size: 19px; font-weight: 610; line-height: 1.35; letter-spacing: -.025em; }
+.registration-fields { display: grid; gap: 13px; }
+.registration-help { margin: 0; color: var(--registration-muted); font-size: 13px; line-height: 1.55; }
+.registration-email strong { color: var(--foreground); font-weight: 550; overflow-wrap: anywhere; }
+.registration-loading { display: flex; padding: 1px 0 8px; }
+.registration-loading .spinner { border-color: #343434; border-top-color: var(--ring); }
+.registration-field { display: grid; gap: 7px; color: #e0e0e0; font-size: 13px; font-weight: 520; }
+.registration-field .ui-input { min-height: 42px; border-color: #ffffff20; border-radius: 5px; color: var(--foreground); background: #202020; }
+.registration-field .ui-input:focus { border-color: var(--ring); outline: 1px solid var(--ring); outline-offset: 1px; }
+
+.registration-action, .registration-fields .registration-action.ui-button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--compact-green-text);
+  background: var(--compact-green);
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 530;
+  line-height: 1.3;
+}
+.registration-action:hover, .registration-fields .registration-action.ui-button:hover:not(:disabled) { color: var(--compact-green-text); background: var(--compact-green-hover); }
+
+.registration-login { margin: 0; padding: 12px clamp(16px, 3vw, 23px); border-top: 1px solid var(--registration-line); color: var(--registration-muted); font-size: 13px; line-height: 1.5; }
+.registration-login a, .registration-account a, .registration-text-button { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
+.registration-login a:hover, .registration-account a:hover, .registration-text-button:hover:not(:disabled) { color: var(--ring); }
+.registration-account { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 5px 12px; margin: 0 0 15px; padding-bottom: 12px; border-bottom: 1px solid var(--registration-line); font-size: 13px; }
+.registration-account span { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.registration-account strong { font-weight: 560; overflow-wrap: anywhere; }
+.registration-text-button { justify-self: start; padding: 4px 0; border: 0; background: transparent; font-size: 13px; }
+.registration-content > .registration-text-button { margin-top: 8px; }
+.registration-text-button:disabled { text-decoration: none; }
+.registration-feedback { margin: 12px 0 0; color: #b9ddc2; font-size: 13px; line-height: 1.55; }
+.registration-feedback[role="alert"] { margin: 0 0 12px; color: #f5b9be; }
+.registration-feedback[role="alert"]:last-child { margin: 12px 0 0; }
+
+@media (max-width: 600px) {
+  .registration-main { padding-top: 39px; }
+  .registration-heading { margin-bottom: 17px; }
+  .registration-steps { gap: 8px; }
+  .registration-steps li + li { padding-left: 8px; }
+}

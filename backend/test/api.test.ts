@@ -39,7 +39,7 @@ function dependencies() {
         login: "alice", avatarUrl: null, range, commits: 2, prs: 2, issues: 0, total: 4, repositories: [],
       } : null),
   };
-  return { websiteAuth:{getSession:async()=>({githubId:'2001',login:'alice',memberId:'1',isAdmin:false,csrfToken:'fixture-csrf'}),fromRegistration:async()=>null,getRegistrationIdentity:async()=>null,startLogin:vi.fn(),completeLogin:vi.fn()}, analytics, getSyncStatus: vi.fn().mockResolvedValue(sync) };
+  return { websiteAuth:{getSession:async()=>({githubId:'2001',login:'alice',memberId:'1',isAdmin:false,csrfToken:'fixture-csrf'}),fromRegistration:async()=>null,getRegistrationIdentity:async()=>null,startLogin:vi.fn(),completeLogin:vi.fn(),revokeSession:vi.fn()}, analytics, getSyncStatus: vi.fn().mockResolvedValue(sync) };
 }
 
 describe("Phase 1 API router", () => {

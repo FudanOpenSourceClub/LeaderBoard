@@ -1,0 +1,5 @@
+/* Use Tailwind utilities for the landing experience without resetting existing pages. */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./components/HomeHero.tsx";
+@source "./components/SiteHeader.tsx";

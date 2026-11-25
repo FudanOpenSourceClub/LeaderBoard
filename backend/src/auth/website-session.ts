@@ -14,6 +14,7 @@ export interface WebsiteAuthApi {
   completeLogin(code: string, state: string, browserToken: string): Promise<{sessionToken: string; returnPath: string}>;
   getRegistrationIdentity(token: string): Promise<GitHubIdentity | null>;
   fromRegistration(token: string): Promise<string | null>;
+  revokeSession(token: string, registrationToken: string, githubId: string): Promise<void>;
 }
 export class WebsiteAuthError extends Error {
   constructor(readonly code: string, readonly status: number, message: string) { super(message); }
@@ -79,6 +80,18 @@ export class WebsiteAuthService implements WebsiteAuthApi {
     const registering = state.startsWith("register.");
     if(!registering && !memberId && !(await getWebsiteRole(identity.githubId)))throw new WebsiteAuthError("REGISTRATION_REQUIRED",401,"请先注册 LeaderBoard");
     return {sessionToken:await this.issue(identity.githubId,identity.login,registering ? 30 : undefined),returnPath};
+  }
+  async revokeSession(token: string, registrationToken: string, githubId: string): Promise<void> {
+    if (!validToken(token)) return;
+    await withTransaction(async client => {
+      await client.query("DELETE FROM website_sessions WHERE token_hash=$1 AND github_id=$2", [hash(token), githubId]);
+      if (validToken(registrationToken)) {
+        await client.query(
+          "UPDATE members SET registration_session_hash=NULL, registration_session_expires_at=NULL WHERE registration_session_hash=$1 AND registration_github_id=$2",
+          [hash(registrationToken), githubId],
+        );
+      }
+    });
   }
   async fromRegistration(token: string): Promise<string | null> {
     if(!validToken(token))return null;

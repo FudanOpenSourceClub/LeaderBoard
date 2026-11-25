@@ -10,7 +10,7 @@ vi.mock("../src/auth/session", () => ({
   WebsiteSessionProvider: ({ children }: { children: ReactNode }) => children,
   useWebsiteSession: () => ({
     loading: false,
-    session: { authenticated: true, login: "wumingXZ", isAdmin: false, canTag: false },
+    session: { authenticated: true, registered: true, login: "wumingXZ", isAdmin: false, canTag: false, role: null, csrfToken: "test-token" },
   }),
 }));
 
@@ -24,8 +24,8 @@ function renderPage(path: string) {
   );
 }
 
-function currentLinks(path: string, label: string) {
-  const nav = renderPage(path).match(new RegExp(`<nav[^>]*aria-label="${label}"[^>]*>(.*?)</nav>`))?.[1];
+function currentLinks(html: string, label: string) {
+  const nav = html.match(new RegExp(`<nav[^>]*aria-label="${label}"[^>]*>(.*?)</nav>`))?.[1];
   expect(nav).toBeDefined();
   const links = [...nav!.matchAll(/<a\b([^>]*)>(.*?)<\/a>/g)];
   const active = links.filter(([, attrs = ""]) => /(?:nav-link-active|mobile-tab-active)/.test(attrs));
@@ -40,10 +40,11 @@ it.each([
   "/contributors/WUMINGXZ/",
   "/contributors/wumingXZ?range=all",
 ])("highlights only My profile at %s", (path) => {
-  expect(currentLinks(path, "功能导航")).toEqual(["/contributors/wumingXZ"]);
-  expect(currentLinks(path, "底部导航")).toEqual(["/contributors/wumingXZ"]);
-  expect(currentLinks(path, "主导航")).toEqual([]);
-  expect(renderPage(path).match(/<a\b[^>]*class="persistent-account"[^>]*>/)?.[0]).toContain('aria-current="page"');
+  const html = renderPage(path);
+  expect(html).not.toContain('aria-label="功能导航"');
+  expect(currentLinks(html, "底部导航")).toEqual(["/contributors/wumingXZ"]);
+  expect(currentLinks(html, "主导航")).toEqual([]);
+  expect(html.match(/<a\b[^>]*class="persistent-account"[^>]*>/)?.[0]).toContain('aria-current="page"');
 });
 
 it.each([
@@ -52,12 +53,12 @@ it.each([
   "/contributors/jimi-21",
   "/contributors/wumingXZ-other",
 ])("keeps the leaderboard active at %s", (path) => {
-  if (/^\/contributors\/?$/.test(path)) {
-    expect(renderPage(path)).not.toContain('aria-label="功能导航"');
-  } else {
-    expect(currentLinks(path, "功能导航")).toEqual(["/contributors"]);
-  }
+  const html = renderPage(path);
+  expect(html).not.toContain('aria-label="功能导航"');
   for (const label of ["底部导航", "主导航"]) {
-    expect(currentLinks(path, label)).toEqual(["/contributors"]);
+    expect(currentLinks(html, label)).toEqual(["/contributors"]);
   }
+  const account = html.match(/<a\b[^>]*class="persistent-account"[^>]*>/)?.[0];
+  expect(account).toBeDefined();
+  expect(account).not.toContain('aria-current="page"');
 });

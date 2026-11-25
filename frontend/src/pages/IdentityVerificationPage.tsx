@@ -1,4 +1,7 @@
+import { useLanguage, type Translate } from "../state/language";
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router";
+import { ArrowRight, Check } from "lucide-react";
 import {
   ApiErrorResponseSchema,
   EmailCodeSendResponseSchema,
@@ -9,21 +12,22 @@ import {
   RegistrationStatusSchema,
 } from "@leadboard/contracts";
 import { Button, Input } from "../components/ui/primitives";
+import { AppIcon } from "../components/AppIcon";
 
-type Notice = { tone: "info" | "success" | "error"; text: string } | null;
+type Notice = { tone: "info" | "success" | "error"; code: string } | null;
 
-function githubCallbackMessage(reason: string | null): string {
+function githubCallbackMessage(reason: string | null, t: Translate): string {
   switch (reason) {
     case "account_mismatch":
-      return "请使用注册时填写的 GitHub 账号授权。";
+      return t("请使用注册时填写的 GitHub 账号授权。", "Authorize the GitHub account you used when you registered.");
     case "access_denied":
-      return "你取消了 GitHub 授权，没有进行绑定。";
+      return t("你取消了 GitHub 授权，没有进行绑定。", "GitHub authorization was canceled. No account was linked.");
     case "already_linked":
-      return "这个 GitHub 账号已经绑定到其他复旦身份。";
+      return t("这个 GitHub 账号已经绑定到其他复旦身份。", "This GitHub account is already linked to another Fudan identity.");
     case "not_configured":
-      return "GitHub 绑定服务尚未配置。";
+      return t("GitHub 绑定服务尚未配置。", "GitHub linking is not configured.");
     default:
-      return "GitHub 授权没有完成，请重新验证邮箱后再试。";
+      return t("GitHub 授权没有完成，请重新验证邮箱后再试。", "GitHub authorization did not finish. Verify your email and try again.");
   }
 }
 
@@ -51,51 +55,58 @@ async function postJson<T>(
   return schema.parse(payload);
 }
 
-function messageFor(code: string): string {
+function messageFor(code: string, t: Translate): string {
   switch (code) {
+    case "UNCONFIRMED_REGISTRATION":
+      return t("后台未确认注册成功，请继续邮箱验证或 GitHub 绑定。", "The server has not confirmed your registration. Continue with email verification or GitHub linking.");
+    case "REGISTRATION_STATUS_UNAVAILABLE":
+      return t("暂时无法确认注册状态，请刷新后重试。", "Could not confirm your registration. Refresh to try again.");
+    case "CODE_SENT":
+      return t("验证码已发送，请检查邮箱。验证码 10 分钟内有效。", "Check your email for the verification code. It expires in 10 minutes.");
     case "ALREADY_REGISTERED":
-      return "该学号、邮箱或 GitHub 账号已注册，不能重复注册。";
+      return t("该学号、邮箱或 GitHub 账号已注册，不能重复注册。", "This student ID, email, or GitHub account is already registered.");
     case "INVALID_REGISTRATION":
-      return "请填写有效学号并完成 GitHub 授权。";
+      return t("请填写有效学号并完成 GitHub 授权。", "Enter a valid student ID and authorize GitHub.");
     case "GITHUB_AUTH_REQUIRED":
-      return "GitHub 授权已过期，请重新授权后继续。";
+      return t("GitHub 授权已过期，请重新授权后继续。", "GitHub authorization expired. Authorize again to continue.");
     case "GITHUB_ACCOUNT_MISMATCH":
-      return "GitHub 账号已变化，请重新获取邮箱验证码。";
+      return t("GitHub 账号已变化，请重新获取邮箱验证码。", "The GitHub account has changed. Request a new email code.");
     case "GITHUB_ACCOUNT_NOT_FOUND":
     case "INVALID_GITHUB_ACCOUNT":
-      return "请填写存在的个人 GitHub 账号。";
+      return t("请填写存在的个人 GitHub 账号。", "Enter a valid personal GitHub account.");
     case "GITHUB_LOOKUP_UNAVAILABLE":
-      return "暂时无法核验 GitHub 账号，请稍后再试。";
+      return t("暂时无法核验 GitHub 账号，请稍后再试。", "Could not verify the GitHub account for now. Try again later.");
     case "REGISTRATION_SESSION_REQUIRED":
-      return "没有可继续的注册，请先完成邮箱验证。";
+      return t("没有可继续的注册，请先完成邮箱验证。", "There is no registration to resume. Verify your email first.");
     case "INVALID_EMAIL":
     case "INVALID_FUDAN_EMAIL":
-      return "请输入有效的复旦邮箱。";
+      return t("请输入有效的复旦邮箱。", "Enter a valid Fudan email address.");
     case "EMAIL_RESEND_TOO_SOON":
-      return "发送得太快了，请稍后再试。";
+      return t("发送得太快了，请稍后再试。", "Please wait before requesting another code.");
     case "EMAIL_RATE_LIMITED":
     case "IP_RATE_LIMITED":
-      return "请求次数过多，请稍后再试。";
+      return t("请求次数过多，请稍后再试。", "Too many requests. Try again later.");
     case "INVALID_VERIFICATION_CODE":
-      return "验证码不正确。";
+      return t("验证码不正确。", "The verification code is incorrect.");
     case "VERIFICATION_CODE_EXPIRED":
-      return "验证码已过期，请重新获取。";
+      return t("验证码已过期，请重新获取。", "The verification code expired. Request a new one.");
     case "VERIFICATION_CODE_USED":
-      return "这个验证码已经使用过，请重新获取。";
+      return t("这个验证码已经使用过，请重新获取。", "This verification code was already used. Request a new one.");
     case "VERIFICATION_ATTEMPTS_EXCEEDED":
-      return "验证码尝试次数过多，请重新获取。";
+      return t("验证码尝试次数过多，请重新获取。", "Too many attempts. Request a new verification code.");
     case "EMAIL_AUTH_NOT_CONFIGURED":
-      return "邮件服务暂不可用，请稍后再试。";
+      return t("邮件服务暂不可用，请稍后再试。", "Email service is unavailable. Try again later.");
     case "EMAIL_DELIVERY_FAILED":
-      return "验证码邮件暂时无法发送，请稍后再试。";
+      return t("验证码邮件暂时无法发送，请稍后再试。", "The verification email could not be sent. Try again later.");
     case "NETWORK_ERROR":
-      return "暂时无法连接服务器，请检查网络后重试。";
+      return t("暂时无法连接服务器，请检查网络后重试。", "Could not reach the server. Check your connection and try again.");
     default:
-      return "操作失败，请稍后再试。";
+      return t("操作失败，请稍后再试。", "The operation failed. Try again later.");
   }
 }
 
 export function IdentityVerificationPage() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [studentId, setStudentId] = useState("");
   const [githubIdentity, setGithubIdentity] = useState<GitHubRegistrationIdentity>({ verified: false });
@@ -126,15 +137,15 @@ export function IdentityVerificationPage() {
       }),
     ]).then(([status, identity]) => {
         if (!active) return;
-        setGithubIdentity(identity);
+          setGithubIdentity(identity);
         setGithubLinked(status.registered);
         setGithubLogin(status.registered ? status.login : null);
         if (!status.registered && githubCallbackStatus === "success") {
-          setNotice({ tone: "error", text: "后台未确认注册成功，请继续邮箱验证或 GitHub 绑定。" });
+          setNotice({ tone: "error", code: "UNCONFIRMED_REGISTRATION" });
         }
       })
       .catch(() => {
-        if (active) setNotice({ tone: "error", text: "暂时无法确认注册状态，请刷新后重试。" });
+        if (active) setNotice({ tone: "error", code: "REGISTRATION_STATUS_UNAVAILABLE" });
       })
       .finally(() => { if (active) setCheckingRegistration(false); });
     return () => { active = false; };
@@ -161,9 +172,9 @@ export function IdentityVerificationPage() {
       );
       setSent(true);
       setCooldown(result.retryAfterSeconds);
-      setNotice({ tone: "success", text: "验证码已发送，请检查邮箱。验证码 10 分钟内有效。" });
+      setNotice({ tone: "success", code: "CODE_SENT" });
     } catch (error) {
-      setNotice({ tone: "error", text: messageFor(error instanceof Error ? error.message : "UNKNOWN") });
+      setNotice({ tone: "error", code: error instanceof Error ? error.message : "UNKNOWN" });
     } finally {
       setBusy(false);
     }
@@ -182,9 +193,9 @@ export function IdentityVerificationPage() {
       );
       if (!result.registered) throw new Error("REGISTRATION_WRITE_NOT_CONFIRMED");
       setVerified(true);
-      window.location.assign("/join");
+      window.location.assign("/profile");
     } catch (error) {
-      setNotice({ tone: "error", text: messageFor(error instanceof Error ? error.message : "UNKNOWN") });
+      setNotice({ tone: "error", code: error instanceof Error ? error.message : "UNKNOWN" });
     } finally {
       setBusy(false);
     }
@@ -198,107 +209,92 @@ export function IdentityVerificationPage() {
       if (link.available) window.location.assign(link.authorizeUrl);
       else throw new Error("GITHUB_AUTH_REQUIRED");
     } catch (error) {
-      setNotice({tone:"error",text:messageFor(error instanceof Error ? error.message : "UNKNOWN")});
+      setNotice({tone:"error",code:error instanceof Error ? error.message : "UNKNOWN"});
     } finally { setBusy(false); }
   }
 
+  const complete = githubLinked || verified;
+  const step = checkingRegistration || complete ? null : githubIdentity.verified ? "email" : "github";
+  const stepLabels = [
+    { id: "github", label: t("GitHub 授权", "GitHub authorization"), done: complete || githubIdentity.verified },
+    { id: "email", label: t("复旦邮箱", "Fudan email"), done: complete },
+  ] as const;
+  const loginCallback = callbackParams.get("login");
+
   return (
-    <div className="page-canvas">
-      <section className="join-hero">
-        <div className="join-copy">
-          {callbackParams.get("login")&&<p role="alert" className="verify-notice verify-notice-error">{callbackParams.get("login")==="registration_required"?"请先注册网站，再使用 GitHub 登录。":"GitHub 登录未完成，请重新尝试。"}</p>}
-          <h1>我要上榜</h1>
-           
-          <div className="join-steps" aria-label="加入达人榜步骤">
-            <div className={`join-step ${githubIdentity.verified ? "join-step-done" : "join-step-active"}`}><span>{githubIdentity.verified ? "✓" : "1"}</span><div><strong>GitHub</strong></div></div>
-            <div className={`join-step ${githubLinked ? "join-step-done" : githubIdentity.verified ? "join-step-active" : ""}`}><span>{githubLinked ? "✓" : "2"}</span><div><strong>邮箱验证</strong></div></div>
-            <div className={`join-step ${githubLinked ? "join-step-done" : ""}`}><span>{githubLinked ? "✓" : "3"}</span><div><strong>完成</strong></div></div>
-          </div>
-        </div>
+    <div className="registration-page">
+      <header className="registration-heading">
+        <h1>{complete ? t("身份验证完成", "Verification complete") : t("加入开源达人榜", "Join the leaderboard")}</h1>
+        {!complete && <p>{t("授权 GitHub 并验证复旦邮箱，即可创建你的贡献者档案。", "Authorize GitHub and verify your Fudan email to create your contributor profile.")}</p>}
+      </header>
 
-        <div className="verify-card">
-          <div className="verify-card-head">
-             
-            <div><h2>{githubLinked || verified ? "已加入达人榜" : !githubIdentity.verified ? "验证 GitHub 账号" : sent ? "输入邮箱验证码" : "验证复旦邮箱"}</h2></div>
-          </div>
+      <section className="registration-panel" aria-labelledby="registration-step-title" aria-busy={checkingRegistration}>
+        <ol className="registration-steps" aria-label={t("注册进度", "Registration progress")}>
+          {stepLabels.map(({ id, label, done }, index) => (
+            <li key={id} aria-current={step === id ? "step" : undefined} data-complete={done || undefined}>
+              <span className="registration-step-number">
+                {done ? <Check size={14} aria-label={t("已完成", "Complete")} role="img" /> : index + 1}
+              </span>
+              <span>{label}</span>
+            </li>
+          ))}
+        </ol>
 
-          {checkingRegistration ? <p role="status">正在向后台确认注册状态…</p> : githubLinked ? (
-            <div className="verified-state" role="status">
-              <span className="verified-mark" aria-hidden="true">✓</span>
-              <h2>注册成功</h2>
-              <p>{githubLogin ? <>@{githubLogin}</> : "GitHub 账号已绑定"}</p>
-              <a className="primary-button github-link-button" href="/contributors">查看达人榜</a>
+        <div className="registration-content">
+          <h2 id="registration-step-title">
+            {checkingRegistration ? t("正在确认注册状态…", "Checking registration…")
+              : complete ? t("注册成功", "Registration complete")
+              : githubIdentity.verified ? sent ? t("输入邮箱验证码", "Enter your email code") : t("验证复旦邮箱", "Verify your Fudan email")
+              : t("授权 GitHub 账号", "Authorize your GitHub account")}
+          </h2>
+
+          {loginCallback && <p className="registration-feedback" role="alert">
+            {loginCallback === "registration_required"
+              ? t("请先完成注册，再使用 GitHub 登录。", "Complete registration before signing in with GitHub.")
+              : t("GitHub 登录未完成，请重新尝试。", "GitHub sign-in did not finish. Try again.")}
+          </p>}
+          {githubCallbackStatus === "error" && <p className="registration-feedback" role="alert">{githubCallbackMessage(githubCallbackReason, t)}</p>}
+
+          {checkingRegistration ? <div className="registration-loading" role="status" aria-label={t("正在加载", "Loading")}><span className="spinner" aria-hidden="true" /></div> : complete ? (
+            <div className="registration-fields">
+              <p className="registration-help">{githubLogin ? `@${githubLogin}` : t("GitHub 账号和复旦邮箱已验证。", "Your GitHub account and Fudan email are verified.")}</p>
+              <a className="registration-action" href={githubLogin ? `/contributors/${encodeURIComponent(githubLogin)}` : "/profile"}>{t("查看个人档案", "View your profile")}<ArrowRight size={16} aria-hidden="true" /></a>
             </div>
           ) : !githubIdentity.verified ? (
-            <div className="github-link-state">
-               
-              <a className="primary-button github-link-button" href="/api/v1/auth/github/register">使用 GitHub 授权</a>
-              <a className="github-login-secondary" href="/api/v1/auth/github/login?returnTo=/projects">已有账号？GitHub 登录 →</a>
-              {notice && <p className={`verify-notice verify-notice-${notice.tone}`} role="status">{notice.text}</p>}
-              {githubCallbackStatus === "error" && <p className="verify-notice verify-notice-error" role="alert">{githubCallbackMessage(githubCallbackReason)}</p>}
+            <div className="registration-fields">
+              <p className="registration-help">{t("使用你希望在榜单上展示开源贡献的 GitHub 账号。", "Use the GitHub account whose contributions you want to show on the leaderboard.")}</p>
+              <a className="registration-action" href="/api/v1/auth/github/register"><AppIcon name="github" size={18} />{t("使用 GitHub 授权", "Authorize GitHub")}</a>
             </div>
           ) : (
             <>
-              {githubCallbackStatus === "error" && (
-                <p className="verify-notice verify-notice-error" role="status">
-                  {githubCallbackMessage(githubCallbackReason)}
-                </p>
-              )}
-              <div className="github-identity-card">
-                <div><span>GitHub 账号 ID</span><strong>{githubIdentity.githubId}</strong><small>@{githubIdentity.login}</small></div>
-                {!sent && <a href="/api/v1/auth/github/register">更换账号</a>}
-              </div>
-              <form onSubmit={sendCode}>
-                <label className="form-field">
-                  <span>学号</span>
-                  <Input type="text" inputMode="numeric" value={studentId}
-                    onChange={event=>setStudentId(event.target.value.replace(/\D/g,""))}
-                    pattern="[0-9]{6,20}" maxLength={20} placeholder="填写本人学号" required disabled={busy||sent} />
-
-                </label>
-                <label className="form-field">
-                  <span>复旦邮箱</span>
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder="name@fudan.edu.cn"
-                    autoComplete="email"
-                    required
-                    disabled={busy || sent}
-                  />
-                   
-                </label>
-                <Button className="primary-button" type="submit" disabled={busy || cooldown > 0 || sent}>
-                  {busy && !sent ? "正在发送…" : cooldown > 0 ? `${cooldown} 秒后可重发` : sent ? "验证码已发送" : "发送验证码"}
-                </Button>
-              </form>
-              {notice?.tone === "error" && notice.text.includes("已注册") && <button className="text-button" type="button" disabled={busy} onClick={() => void resumeRegistration()}>继续上次注册</button>}
-
-              {sent && (
-                <form className="verification-form" onSubmit={verify}>
-                  <label className="form-field">
-                    <span>6 位验证码</span>
+              {!sent && <div className="registration-account">
+                <span><AppIcon name="github" size={16} /><strong>@{githubIdentity.login}</strong></span>
+                <a href="/api/v1/auth/github/register">{t("更换账号", "Switch account")}</a>
+              </div>}
+              {sent ? (
+                <form key="verification-code" className="registration-fields" onSubmit={verify}>
+                  <p className="registration-help registration-email">{t("发送至", "Sent to")} <strong>{email}</strong></p>
+                  <label className="registration-field">
+                    {t("6 位验证码", "6-digit verification code")}
                     <Input
-                      className="code-input"
                       type="text"
                       inputMode="numeric"
                       autoComplete="one-time-code"
                       pattern="[0-9]{6}"
                       maxLength={6}
                       value={code}
-                      onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                      onChange={event => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
                       placeholder="000000"
                       required
                       autoFocus
+                      disabled={busy}
                     />
-                    <small>验证码 10 分钟内有效</small>
                   </label>
-                  <Button className="primary-button" type="submit" disabled={busy || code.length !== 6}>
-                    {busy ? "正在验证…" : "验证并加入达人榜"}
+                  <Button className="registration-action" type="submit" disabled={busy || code.length !== 6}>
+                    {busy ? t("正在验证…", "Verifying…") : t("验证并加入达人榜", "Verify and join")}
                   </Button>
                   <button
-                    className="text-button"
+                    className="registration-text-button"
                     type="button"
                     disabled={busy || cooldown > 0}
                     onClick={() => {
@@ -307,19 +303,41 @@ export function IdentityVerificationPage() {
                       setNotice(null);
                     }}
                   >
-                    {cooldown > 0 ? `${cooldown} 秒后可重新发送` : "更换邮箱 / 重新发送"}
+                    {cooldown > 0 ? t(`${cooldown} 秒后可重发`, `Resend in ${cooldown}s`) : t("更换邮箱或重发验证码", "Change email or resend")}
                   </button>
                 </form>
+              ) : (
+                <form key="email-details" className="registration-fields" onSubmit={sendCode}>
+                  <label className="registration-field">
+                    {t("学号", "Student ID")}
+                    <Input inputMode="numeric" value={studentId}
+                      onChange={event => setStudentId(event.target.value.replace(/\D/g, ""))}
+                      pattern="[0-9]{6,20}" maxLength={20} placeholder={t("填写本人学号", "Enter your student ID")} required disabled={busy}
+                    />
+                  </label>
+                  <label className="registration-field">
+                    {t("复旦邮箱", "Fudan email")}
+                    <Input type="email" value={email} onChange={event => setEmail(event.target.value)}
+                      placeholder="name@fudan.edu.cn" autoComplete="email" required disabled={busy}
+                    />
+                  </label>
+                  <Button className="registration-action" type="submit" disabled={busy || cooldown > 0}>
+                    {busy ? t("正在发送…", "Sending…") : cooldown > 0 ? t(`${cooldown} 秒后可重发`, `Resend in ${cooldown}s`) : t("发送验证码", "Send verification code")}
+                  </Button>
+                </form>
               )}
-
-              {notice && (
-                <p className={`verify-notice verify-notice-${notice.tone}`} role="status">
-                  {notice.text}
-                </p>
-              )}
+              {notice?.code === "ALREADY_REGISTERED" && <button className="registration-text-button" type="button" disabled={busy} onClick={() => void resumeRegistration()}>
+                {t("继续上次注册", "Resume registration")}
+              </button>}
             </>
           )}
+
+          {notice && <p className="registration-feedback" role={notice.tone === "error" ? "alert" : "status"}>{messageFor(notice.code, t)}</p>}
         </div>
+
+        {!checkingRegistration && !complete && !githubIdentity.verified && <p className="registration-login">
+          {t("已有账号？", "Already registered?")}{" "}<Link to="/login?returnTo=%2Fprojects">{t("前往登录", "Log in")}</Link>
+        </p>}
       </section>
     </div>
   );

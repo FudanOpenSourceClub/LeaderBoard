@@ -6,7 +6,9 @@ export function WebsiteSessionProvider({children}:{children:ReactNode}){
   useEffect(()=>{let active=true;const refresh=()=>void fetch("/api/v1/auth/session",{cache:"no-store",credentials:"same-origin"})
     .then(async r=>{if(!r.ok)throw new Error();return WebsiteSessionSchema.parse(await r.json())})
     .then(s=>{if(active)setSession(s)}).catch(()=>{if(active)setSession({authenticated:false})})
-    .finally(()=>{if(active)setLoading(false)});refresh();const timer=setInterval(refresh,60000);window.addEventListener('focus',refresh);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',refresh)};},[]);
+    .finally(()=>{if(active)setLoading(false)});const onPageShow=(event:PageTransitionEvent)=>{if(event.persisted){setLoading(true);refresh()}};
+    refresh();const timer=setInterval(refresh,60000);window.addEventListener('focus',refresh);window.addEventListener('pageshow',onPageShow);
+    return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('pageshow',onPageShow)};},[]);
   return <Context.Provider value={{session,loading}}>{children}</Context.Provider>;
 }
 export const useWebsiteSession=()=>useContext(Context);

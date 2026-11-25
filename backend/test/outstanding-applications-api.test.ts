@@ -9,7 +9,7 @@ function setup(identity:WebsiteUser|null=user){
   const application={...input,id:'1',githubId:user.githubId,login:'alice',status:'pending',createdAt:'2026-11-09T00:00:00.000Z',reviewedAt:null,reviewerLogin:null,reviewNote:'',tagId:null};
   const service={apply:vi.fn().mockResolvedValue(application),list:vi.fn().mockResolvedValue([application]),review:vi.fn().mockResolvedValue({...application,status:'approved',reviewedAt:'2026-11-09T01:00:00.000Z',reviewerLogin:'reviewer',tagId:'1'})};
   const analytics={getGroups:vi.fn(),getOrganizationActivitySummary:vi.fn(),getRepositoryStats:vi.fn(),getContributorLeaderboard:vi.fn(),getContributorDetail:vi.fn()};
-  const app=createApp({apiRouter:createApiRouter({analytics,outstandingApplications:service,websiteAuth:{getSession:async()=>identity,fromRegistration:async()=>null,getRegistrationIdentity:async()=>null,startLogin:vi.fn(),completeLogin:vi.fn()}})});
+  const app=createApp({apiRouter:createApiRouter({analytics,outstandingApplications:service,websiteAuth:{getSession:async()=>identity,fromRegistration:async()=>null,getRegistrationIdentity:async()=>null,startLogin:vi.fn(),completeLogin:vi.fn(),revokeSession:vi.fn()}})});
   return {app,service,analytics};
 }
 describe('Outstanding self applications and login gate',()=>{

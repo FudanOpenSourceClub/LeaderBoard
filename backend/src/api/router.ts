@@ -214,6 +214,26 @@ export function createApiRouter(dependencies: Partial<ApiDependencies> = {}): Ro
       res.json(WebsiteSessionSchema.parse(user?{authenticated:true,login:user.login,registered:!!user.memberId,isAdmin:user.role==="owner",canTag:user.role==="owner"||user.role==="admin",role:user.role??null,csrfToken:user.csrfToken}:{authenticated:false}));
     }catch(error){if(!handleServiceError(error,res))next(error)}
   });
+  router.post("/auth/logout", async (req, res, next) => {
+    try {
+      const token = cookie(req, "leaderboard_session");
+      const user = await websiteAuth.getSession(token);
+      if (!user) {
+        sendError(res, 401, "LOGIN_REQUIRED", "请先使用 GitHub 登录");
+        return;
+      }
+      if (!csrfMatches(user, req.get("X-CSRF-Token"))) {
+        sendError(res, 403, "INVALID_CSRF", "登录状态已变化，请刷新后重试");
+        return;
+      }
+      await websiteAuth.revokeSession(token, registrationCookie(req.headers.cookie), user.githubId);
+      const cookieOptions = { httpOnly: true, secure: true, sameSite: "lax" as const };
+      res.clearCookie("leaderboard_session", { ...cookieOptions, path: "/" });
+      res.clearCookie("leaderboard_registration", { ...cookieOptions, path: "/api/v1/auth" });
+      res.clearCookie("leaderboard_login", { ...cookieOptions, path: "/api/v1/auth" });
+      res.status(204).end();
+    } catch (error) { if (!handleServiceError(error, res)) next(error); }
+  });
   router.get("/auth/github/login",async(req,res,next)=>{
     try{const result=await websiteAuth.startLogin(singleQuery(req.query.returnTo)??"/projects");
       res.cookie("leaderboard_login",result.browserToken,{httpOnly:true,secure:true,sameSite:"lax",maxAge:10*60000,path:"/api/v1/auth"});

@@ -11,7 +11,7 @@ function setup(user:WebsiteUser|null=admin) {
   const roles=vi.fn().mockResolvedValue([]),setRole=vi.fn(),resolve=vi.fn().mockResolvedValue({githubId:"8002",login:"new-admin"});
   const app=createApp({apiRouter:createApiRouter({
     analytics:{getGroups:vi.fn(),getOrganizationActivitySummary:vi.fn(),getRepositoryStats:vi.fn(),getContributorLeaderboard:vi.fn(),getContributorDetail:vi.fn()},
-    websiteAuth:{getSession:async()=>user,fromRegistration:async()=>null,getRegistrationIdentity:async()=>null,startLogin:vi.fn(),completeLogin:vi.fn()},
+    websiteAuth:{getSession:async()=>user,fromRegistration:async()=>null,getRegistrationIdentity:async()=>null,startLogin:vi.fn(),completeLogin:vi.fn(),revokeSession:vi.fn()},
     websiteAdmin:{scores,roles,setRole,resolve,audit:vi.fn().mockResolvedValue([])},
   })});
   return {app,scores,roles,setRole,resolve};

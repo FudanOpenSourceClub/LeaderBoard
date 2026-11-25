@@ -20,6 +20,7 @@ function fixture(overrides: Partial<ApiDependencies> = {}) {
     getSession: vi.fn().mockResolvedValue(null),
     getRegistrationIdentity: vi.fn(async token => token === "proof" ? identity : null),
     fromRegistration: vi.fn().mockResolvedValue("new-session"),
+    revokeSession: vi.fn(),
     startLogin: vi.fn().mockResolvedValue({authorizeUrl:"https://github.com/login/oauth/authorize?state=register.fixture",browserToken:"nonce"}),
     completeLogin: vi.fn().mockResolvedValue({sessionToken:"proof",returnPath:"/join"}),
   };
@@ -116,5 +117,33 @@ describe("OAuth-backed registration HTTP API", () => {
       .set("Cookie",`leaderboard_registration=${receipt}`).expect(303);
     expect(githubLink.completeAuthorization).toHaveBeenCalledWith("abc","legacy-state",receipt);
     expect(response.headers.location).toBe("/join?github=success");
+  });
+});
+
+describe("Website logout HTTP API", () => {
+  const path = "/api/v1/auth/logout";
+  const cookies = `leaderboard_session=active; leaderboard_registration=${receipt}`;
+  const user = { ...identity, memberId: "42", isAdmin: false, csrfToken: "website-csrf" };
+
+  it("requires authentication and the current session's CSRF token", async () => {
+    const { app, websiteAuth } = fixture();
+    await request(app).post(path).expect(401);
+    websiteAuth.getSession.mockResolvedValue(user);
+    await request(app).post(path).set("Cookie", cookies).expect(403);
+    expect(websiteAuth.revokeSession).not.toHaveBeenCalled();
+  });
+
+  it("revokes the current session and clears cookies at their original paths", async () => {
+    const { app, websiteAuth } = fixture();
+    websiteAuth.getSession.mockResolvedValue(user);
+    const response = await request(app).post(path).set("Cookie", cookies)
+      .set("X-CSRF-Token", user.csrfToken).expect(204);
+
+    expect(websiteAuth.revokeSession).toHaveBeenCalledExactlyOnceWith("active", receipt, user.githubId);
+    expect(response.headers["set-cookie"]).toEqual([
+      expect.stringMatching(/^leaderboard_session=; Path=\/; Expires=.*; HttpOnly; Secure; SameSite=Lax$/),
+      expect.stringMatching(/^leaderboard_registration=; Path=\/api\/v1\/auth; Expires=.*; HttpOnly; Secure; SameSite=Lax$/),
+      expect.stringMatching(/^leaderboard_login=; Path=\/api\/v1\/auth; Expires=.*; HttpOnly; Secure; SameSite=Lax$/),
+    ]);
   });
 });

@@ -1,31 +1,77 @@
-import {OutstandingBoards} from "../components/OutstandingBoards";
-import {ContributionBadges} from "../components/ContributionProfile";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   COMPETITION_PERIOD,
   TimeRangeSchema,
   type ContributorLeaderboardResponse,
   type GroupsResponse,
+  type OrganizationSummary,
 } from "@leadboard/contracts";
 import { Link } from "react-router";
 import type { LeadBoardApiClient } from "../api/client";
+import { AppIcon } from "../components/AppIcon";
 import { EmptyState, ErrorState, LoadingState } from "../components/AsyncStates";
+import { ContributionBadges } from "../components/ContributionProfile";
+import { ContributorAvatar } from "../components/ContributorAvatar";
+import { OutstandingBoards } from "../components/OutstandingBoards";
+import { Button, Input } from "../components/ui/primitives";
 import { useLocalFavorites } from "../lib/favorites";
 import { useFilters } from "../state/filters";
-import { Badge, Button, Card, Input } from "../components/ui/primitives";
-import { AppIcon } from "../components/AppIcon";
 
+const pageSize = 10;
 type State =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "ready"; leaderboard: ContributorLeaderboardResponse; groups: GroupsResponse["items"] };
+
+function RankingSummary({ api }: { api: LeadBoardApiClient }) {
+  const { range } = useFilters();
+  const [summary, setSummary] = useState<OrganizationSummary | null>(null);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setError(false);
+    void api.getOrganizationSummary(range).then(
+      value => { if (active) setSummary(value); },
+      () => { if (active) setError(true); },
+    );
+    return () => { active = false; };
+  }, [api, range, retry]);
+
+  const current = !error && summary?.range === range ? summary : null;
+  const format = new Intl.NumberFormat("zh-CN");
+  const metrics = [
+    { label: "活跃贡献者", value: current?.contributors, icon: <AppIcon name="users" size={17} /> },
+    { label: "Commit", value: current?.commits, icon: <AppIcon name="commit" size={17} /> },
+    { label: "PR", value: current?.prs, icon: <AppIcon name="pull-request" size={17} /> },
+    { label: "Issue", value: current?.issues, icon: <AppIcon name="issue" size={17} /> },
+  ];
+
+  return (
+    <section className="rank-surface rank-summary" aria-labelledby="rank-summary-title" aria-busy={!current && !error}>
+      <div className="rank-summary-heading">
+        <h2 id="rank-summary-title">{"全站贡献概览"}</h2>
+        {error && <button type="button" onClick={() => setRetry(value => value + 1)}>{"概览加载失败 · 重试"}</button>}
+      </div>
+      <dl>
+        {metrics.map(({ label, value, icon }) => (
+          <div key={label}>
+            <dt>{icon}<span>{label}</span></dt>
+            <dd>{value === undefined ? "—" : format.format(value)}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
 
 export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient }) {
   const { range, setRange, group, setGroup } = useFilters();
   const [state, setState] = useState<State>({ status: "loading" });
   const [retry, setRetry] = useState(0);
   const [query, setQuery] = useState("");
-  const [visibleCount, setVisibleCount] = useState(10);
+  const [visibleCount, setVisibleCount] = useState(pageSize);
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
   const generation = useRef(0);
@@ -34,13 +80,12 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
 
   useEffect(() => {
     let active = true;
-    generation.current += 1;
-    setVisibleCount(10);
+    setVisibleCount(pageSize);
     setLoadingMore(false);
     setMoreError(null);
     setState({ status: "loading" });
     void Promise.all([
-      api.getContributorLeaderboard({ range, metric: "score", ...(group === undefined ? {} : { group }), limit: 11 }),
+      api.getContributorLeaderboard({ range, metric: "score", ...(group === undefined ? {} : { group }), limit: pageSize + 1 }),
       api.getGroups(),
     ]).then(
       ([leaderboard, groups]) => { if (active) setState({ status: "ready", leaderboard, groups: groups.items }); },
@@ -48,20 +93,16 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
         if (active) setState({ status: "error", message: error instanceof Error ? error.message : "排行榜加载失败" });
       },
     );
-    return () => { active = false; };
+    return () => { active = false; generation.current += 1; };
   }, [api, range, group, retry]);
 
   const groups = state.status === "ready" ? state.groups : [];
-  const visibleItems = useMemo(() => {
-    if (state.status !== "ready") return [];
-    const normalized = query.trim().toLowerCase();
-    return state.leaderboard.items.slice(0, visibleCount).filter((item) => {
-      const matchesQuery = !normalized || item.login.toLowerCase().includes(normalized);
-      const matchesFavorite = !favoritesOnly || favorites.isFavorite(item.login);
-      return matchesQuery && matchesFavorite;
-    });
-  }, [state, query, favoritesOnly, favorites.items, visibleCount]);
-
+  const loadedItems = state.status === "ready" ? state.leaderboard.items.slice(0, visibleCount) : [];
+  const normalized = query.trim().toLowerCase();
+  const filtered = Boolean(normalized || favoritesOnly);
+  const visibleItems = loadedItems.filter(item =>
+    item.login.toLowerCase().includes(normalized) && (!favoritesOnly || favorites.isFavorite(item.login))
+  );
 
   async function showMore() {
     if (loadingMore || state.status !== "ready") return;
@@ -69,134 +110,150 @@ export function ContributorLeaderboardPage({ api }: { api: LeadBoardApiClient })
     setLoadingMore(true);
     setMoreError(null);
     try {
-      const leaderboard = await api.getContributorLeaderboard({range, metric:"score", ...(group === undefined ? {} : {group}), limit:visibleCount + 11});
+      const leaderboard = await api.getContributorLeaderboard({ range, metric: "score", ...(group === undefined ? {} : { group }), limit: visibleCount + pageSize + 1 });
       if (generation.current !== currentGeneration) return;
-      setState({...state, leaderboard});
-      setVisibleCount(value => value + 10);
+      setState({ ...state, leaderboard });
+      setVisibleCount(value => value + pageSize);
     } catch (error) {
       if (generation.current === currentGeneration) setMoreError(error instanceof Error ? error.message : "加载失败，请重试");
     } finally {
       if (generation.current === currentGeneration) setLoadingMore(false);
     }
   }
-  const hasMore = state.status === "ready" && state.leaderboard.items.length > visibleCount;
 
+  const hasMore = state.status === "ready" && state.leaderboard.items.length > visibleCount;
+  const number = new Intl.NumberFormat("zh-CN");
 
   return (
-    <div className="page-canvas">
-      <section className="page-hero compact-hero">
+    <div className="rank-page">
+      <header className="rank-page-heading">
         <div>
-          <h1>开源达人榜</h1>
+          <h1><AppIcon name="trophy" size={24} />{"开源达人榜"}</h1>
+          <p data-testid="competition-period">{"比赛计分周期"} · {COMPETITION_PERIOD.label}（北京时间，含首尾两天）</p>
         </div>
-        <Link to="/join" className="button primary-button"><AppIcon name="plus" size={16}/>加入达人榜</Link>
-      </section>
-
-      <OutstandingBoards api={api}/>
-      <p className="filter-caption" data-testid="competition-period">比赛计分周期：{COMPETITION_PERIOD.label}（北京时间，包含首尾两天）。</p>
-
-      <section className="filter-card leaderboard-filters" aria-label="积分规则">
-        <details>
-          <summary>查看积分规则</summary>
-          <p className="filter-caption">Commit 不计分。Issue 每次 5 分，仓库 Star ≥ 100；每人每自然月最多计 10 次、每仓库每自然月最多计 3 次。PR：仅白名单仓库，提交 20 分，合并另加 30 分。Outstanding 勋章由本人点击自己的头像申请，填写申请理由和申请仓库，审核通过后加入当月 Outstanding 榜；每枚 15 分，自审核通过起有效一个月，可累加。在复旦开源仓库必吃榜里面申请仓库上榜的，通过的加20分。</p>
+        <a className="rank-honor-jump" href="#monthly-honors">{"本月荣誉榜"}<AppIcon name="chevron-down" size={14} /></a>
+        <details className="rank-rules">
+          <summary>{"积分规则"}<AppIcon name="chevron-down" size={15} /></summary>
+          <p>{"Commit 不计分。仓库 Star ≥ 100 时，Issue 每次 5 分，每人每自然月最多计 10 次，每仓库每自然月最多计 3 次。白名单仓库的 PR 提交得 20 分，合并另加 30 分。Outstanding 勋章可在个人档案申请，每枚 15 分，审核通过后有效一个月，可累加。复旦开源仓库必吃榜的仓库收录申请通过后加 20 分。"}</p>
         </details>
-      </section>
+      </header>
 
-      <section className="toolbar-card" aria-label="贡献者搜索和操作">
-        <label className="search-box" aria-label="搜索贡献者">
-          <Input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索 GitHub 用户名"
-          />
-        </label>
-        <select
-          className="toolbar-select"
-          value={range}
-          onChange={(event) => setRange(TimeRangeSchema.parse(event.target.value))}
-          aria-label="时间范围"
-        >
-          <option value="competition">{COMPETITION_PERIOD.optionLabel}</option>
-          <option value="7d">最近 7 天</option>
-          <option value="30d">最近 30 天</option>
-          <option value="90d">最近 90 天</option>
-          <option value="all">全部历史</option>
-        </select>
-        <select
-          className="toolbar-select"
-          value={group ?? ""}
-          onChange={(event) => setGroup(event.target.value || undefined)}
-          aria-label="分组"
-        >
-          <option value="">全部分组</option>
-          {groups.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
-        </select>
-        <button
-          className="toolbar-button"
-          type="button"
-          aria-pressed={favoritesOnly}
-          onClick={() => setFavoritesOnly((value) => !value)}
-        >
-          <AppIcon name="star" size={16}/>{favoritesOnly ? "已收藏" : "收藏"}
-        </button>
-
-      </section>
-
-      <section className="dashboard-content">
-        {state.status === "loading" && <LoadingState label="正在加载贡献者排行榜…" />}
-        {state.status === "error" && <ErrorState message={state.message} onRetry={() => setRetry((value) => value + 1)} />}
-        {state.status === "ready" && state.leaderboard.items.length === 0 && <EmptyState label="当前筛选下没有贡献者活动" />}
-        {state.status === "ready" && state.leaderboard.items.length > 0 && visibleItems.length === 0 && (
-          <div className="empty-filter-state">没有匹配的达人。<button className="text-button" type="button" onClick={() => { setQuery(""); setFavoritesOnly(false); }}>清除筛选</button></div>
-        )}
-        {state.status === "ready" && state.leaderboard.items.length > 0 && (
-          <>
-            <div className="section-title-row"><Badge className="count-pill">{Math.min(visibleCount, state.leaderboard.items.length)} 位达人</Badge></div>
-            <Card className="panel ranking-panel">
-              <div className="ranking-list">
-                {visibleItems.map((item) => (
-                  <div className={`ranking-row ranking-row-with-favorite ${item.rank <= 3 ? `ranking-medalist ranking-medalist-${item.rank}` : ""}`} key={item.login}>
-                    {item.rank <= 3 ? <span className={`rank-medal rank-medal-${item.rank}`} role="img" aria-label={`${["金牌", "银牌", "铜牌"][item.rank - 1]}，第 ${item.rank} 名`}><svg viewBox="0 0 40 48" aria-hidden="true"><path className="medal-ribbon" d="M9 4h9l7 18-8 4zM31 4h-9l-7 18 8 4z"/><circle cx="20" cy="30" r="15" fill="currentColor"/><circle cx="20" cy="30" r="11.5" fill="none" stroke="white" strokeOpacity=".65"/><text x="20" y="35" textAnchor="middle" fill="white" fontSize="15" fontWeight="800">{item.rank}</text></svg></span> : <span className="rank-badge rank-4">{item.rank}</span>}
-                    <Link className="ranking-avatar-link" to={`/contributors/${encodeURIComponent(item.login)}`} aria-label={`打开 ${item.login} 的个人页面`}><img className="avatar avatar-xl"
-                      src={item.avatarUrl ?? `https://github.com/${encodeURIComponent(item.login)}.png?size=96`}
-                      alt={`${item.login} 的头像`} loading="lazy" /></Link>
-                    <Link className="ranking-person" to={`/contributors/${encodeURIComponent(item.login)}`}>
-                      <strong>{item.login}</strong>
-                      <span className="tag-row"><ContributionBadges tags={item.communityTags??[]}/>
-                        {item.commits > 0 && <Badge className="tag tag-purple">{item.commits} Commit</Badge>}
-                        {item.prs > 0 && <Badge className="tag tag-blue">{item.prs} PR</Badge>}
-                        {item.issues > 0 && <Badge className="tag tag-gold">{item.issues} Issue</Badge>}
-                      </span>
-                    </Link>
-                    <span className="ranking-metrics">
-                      <span><small>Commit</small><b>{item.commits}</b></span>
-                      <span><small>PR</small><b>{item.prs}</b></span>
-                      <span><small>Issue</small><b>{item.issues}</b></span>
-                    </span>
-                    <span className="ranking-total"><strong>{item.score ?? 0}</strong><small>积分</small></span>
-                    <button
-                      className="favorite-button"
-                      type="button"
-                      aria-label={favorites.isFavorite(item.login) ? `取消收藏 ${item.login}` : `收藏 ${item.login}`}
-                      aria-pressed={favorites.isFavorite(item.login)}
-                      onClick={() => favorites.toggle(item.login)}
-                      title="收藏只保存在当前浏览器"
-                    >
-                      <AppIcon name="star" size={18}/>
-                    </button>
-                    <Link className="row-arrow" to={`/contributors/${encodeURIComponent(item.login)}`} aria-label={`查看 ${item.login} 详情`}>→</Link>
-                  </div>
-                ))}
+      <div className="rank-layout">
+        <div className="rank-primary">
+          <RankingSummary api={api} />
+          <section className="rank-surface rank-list-panel" aria-label={"贡献者排名"}>
+            <div className="rank-toolbar" role="group" aria-label={"贡献者搜索和筛选"}>
+              <div className="rank-search">
+                <AppIcon name="search" size={17} />
+                <Input
+                  aria-label={"搜索 GitHub 用户名"}
+                  aria-describedby={filtered && hasMore ? "rank-search-scope" : undefined}
+                  type="search"
+                  value={query}
+                  onChange={event => setQuery(event.target.value)}
+                  placeholder={"搜索 GitHub 用户名"}
+                />
               </div>
-              <div className="ranking-more">
-                {moreError && <p role="alert">{moreError}</p>}
-                {hasMore && <Button className="toolbar-button" variant="outline" type="button" disabled={loadingMore} onClick={() => void showMore()}>{loadingMore ? "正在加载…" : "显示更多"}<span aria-hidden="true">↓</span></Button>}
+              <div className="rank-filter-controls">
+                <label className="rank-select rank-time">
+                  <AppIcon name="calendar" size={16} />
+                  <select value={range} onChange={event => setRange(TimeRangeSchema.parse(event.target.value))} aria-label={"时间范围"}>
+                    <option value="competition">{"比赛周期"}</option>
+                    <option value="7d">{"最近 7 天"}</option>
+                    <option value="30d">{"最近 30 天"}</option>
+                    <option value="90d">{"最近 90 天"}</option>
+                    <option value="all">{"全部历史"}</option>
+                  </select>
+                  <AppIcon name="chevron-down" size={14} />
+                </label>
+                <label className="rank-select rank-group">
+                  <select value={group ?? ""} onChange={event => setGroup(event.target.value || undefined)} aria-label={"分组"}>
+                    <option value="">{"全部分组"}</option>
+                    {group && !groups.some(item => item.name === group) && <option value={group}>{group}</option>}
+                    {groups.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
+                  </select>
+                  <AppIcon name="chevron-down" size={14} />
+                </label>
+                <button className="rank-favorites-filter" type="button" aria-pressed={favoritesOnly} onClick={() => setFavoritesOnly(value => !value)}>
+                  <AppIcon name="star" size={16} />{"仅收藏"}
+                </button>
               </div>
-            </Card>
-          </>
-        )}
-      </section>
+            </div>
+            {filtered && hasMore && <p className="rank-search-scope" id="rank-search-scope">{"在已加载的排名中筛选，可继续加载查找更多贡献者。"}</p>}
+
+            {state.status === "loading" && <LoadingState label={"正在加载贡献者排行榜…"} />}
+            {state.status === "error" && <ErrorState message={state.message} onRetry={() => setRetry(value => value + 1)} />}
+            {state.status === "ready" && loadedItems.length === 0 && <EmptyState label={"当前筛选下没有贡献者活动"} />}
+            {state.status === "ready" && loadedItems.length > 0 && visibleItems.length === 0 && (
+              <div className="async-state rank-no-match" role="status">
+                {"没有匹配的达人。"}
+                <button type="button" onClick={() => { setQuery(""); setFavoritesOnly(false); }}>{"清除筛选"}</button>
+              </div>
+            )}
+            {visibleItems.length > 0 && (
+              <table className="rank-table">
+                <thead><tr>
+                  <th scope="col" className="rank-position" aria-label={"排名"}>#</th>
+                  <th scope="col" className="rank-person-heading">{"贡献者"}</th>
+                  <th scope="col" className="rank-number rank-score-heading" aria-sort="descending">{"积分"}<AppIcon name="chevron-down" size={13} /></th>
+                  <th scope="col" className="rank-number rank-activity">Commit</th>
+                  <th scope="col" className="rank-number rank-activity">PR</th>
+                  <th scope="col" className="rank-number rank-activity">Issue</th>
+                  <th scope="col" className="rank-favorite-cell" aria-label={"收藏"}><AppIcon name="star" size={14} /></th>
+                </tr></thead>
+                <tbody>{visibleItems.map(item => {
+                  const favorite = favorites.isFavorite(item.login);
+                  const profileUrl = `/contributors/${encodeURIComponent(item.login)}`;
+                  return (
+                    <tr key={item.login}>
+                      <td className="rank-position"><span className="rank-place" data-place={item.rank <= 3 ? item.rank : undefined}>{item.rank}</span></td>
+                      <th className="rank-person-cell" scope="row">
+                        <div className="rank-person">
+                          <Link to={profileUrl} className="rank-person-link">
+                            <ContributorAvatar login={item.login} src={item.avatarUrl} />
+                            <strong>{item.login}</strong>
+                          </Link>
+                          {item.communityTags && item.communityTags.length > 0 && (
+                            <div className="rank-row-badges"><ContributionBadges tags={item.communityTags} /></div>
+                          )}
+                          <div className="rank-mobile-activity">
+                            <span>{number.format(item.commits)} Commit</span><span>{number.format(item.prs)} PR</span><span>{number.format(item.issues)} Issue</span>
+                          </div>
+                        </div>
+                      </th>
+                      <td className="rank-number"><span className="rank-score">{number.format(item.score ?? 0)}</span></td>
+                      <td className="rank-number rank-activity">{number.format(item.commits)}</td>
+                      <td className="rank-number rank-activity">{number.format(item.prs)}</td>
+                      <td className="rank-number rank-activity">{number.format(item.issues)}</td>
+                      <td className="rank-favorite-cell">
+                        <button
+                          className="favorite-button rank-favorite"
+                          type="button"
+                          aria-label={favorite ? `取消收藏 ${item.login}` : `收藏 ${item.login}`}
+                          aria-pressed={favorite}
+                          onClick={() => favorites.toggle(item.login)}
+                        >
+                          <AppIcon name="star" size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}</tbody>
+              </table>
+            )}
+            {state.status === "ready" && loadedItems.length > 0 && (
+              <footer className="rank-list-footer">
+                <p role="status">{filtered
+                  ? `已加载 ${number.format(loadedItems.length)} 人 · 匹配 ${number.format(visibleItems.length)} 人`
+                  : `已显示 ${number.format(visibleItems.length)} 人`}</p>
+                {moreError && <p className="rank-more-error" role="alert">{moreError}</p>}
+                {hasMore && <Button className="rank-more" variant="outline" disabled={loadingMore} onClick={() => void showMore()}>{loadingMore ? "正在加载…" : "显示更多"}<AppIcon name="chevron-down" size={14} /></Button>}
+              </footer>
+            )}
+          </section>
+        </div>
+        <OutstandingBoards api={api} />
+      </div>
     </div>
   );
 }
-

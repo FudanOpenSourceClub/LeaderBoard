@@ -14,15 +14,18 @@ vi.mock("../src/auth/session", () => ({
   }),
 }));
 
-function currentLinks(path: string, label: string) {
-  const html = renderToStaticMarkup(
+function renderPage(path: string) {
+  return renderToStaticMarkup(
     createElement(MemoryRouter, { initialEntries: [path] },
       createElement(FiltersProvider, null,
         createElement(App, { api: createMockApiClient() }),
       ),
     ),
   );
-  const nav = html.match(new RegExp(`<nav[^>]*aria-label="${label}"[^>]*>(.*?)</nav>`))?.[1];
+}
+
+function currentLinks(path: string, label: string) {
+  const nav = renderPage(path).match(new RegExp(`<nav[^>]*aria-label="${label}"[^>]*>(.*?)</nav>`))?.[1];
   expect(nav).toBeDefined();
   const links = [...nav!.matchAll(/<a\b([^>]*)>(.*?)<\/a>/g)];
   const active = links.filter(([, attrs = ""]) => /(?:nav-link-active|mobile-tab-active)/.test(attrs));
@@ -40,6 +43,7 @@ it.each([
   expect(currentLinks(path, "功能导航")).toEqual(["/contributors/wumingXZ"]);
   expect(currentLinks(path, "底部导航")).toEqual(["/contributors/wumingXZ"]);
   expect(currentLinks(path, "主导航")).toEqual([]);
+  expect(renderPage(path).match(/<a\b[^>]*class="persistent-account"[^>]*>/)?.[0]).toContain('aria-current="page"');
 });
 
 it.each([
@@ -48,7 +52,12 @@ it.each([
   "/contributors/jimi-21",
   "/contributors/wumingXZ-other",
 ])("keeps the leaderboard active at %s", (path) => {
-  for (const label of ["功能导航", "底部导航", "主导航"]) {
+  if (/^\/contributors\/?$/.test(path)) {
+    expect(renderPage(path)).not.toContain('aria-label="功能导航"');
+  } else {
+    expect(currentLinks(path, "功能导航")).toEqual(["/contributors"]);
+  }
+  for (const label of ["底部导航", "主导航"]) {
     expect(currentLinks(path, label)).toEqual(["/contributors"]);
   }
 });

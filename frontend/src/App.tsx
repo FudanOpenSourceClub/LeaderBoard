@@ -11,6 +11,8 @@ import { HomePage } from "./pages/HomePage";
 import { AppIcon } from "./components/AppIcon";
 
 
+const brandLogo = import.meta.env.BASE_URL + "leaderboard-mark.png";
+
 function navClass({ isActive }: { isActive: boolean }) {
   return isActive ? "nav-link nav-link-active" : "nav-link";
 }
@@ -29,11 +31,12 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
   const isAccount = matchPath(accountUrl, location.pathname) !== null;
   const isContributorSection = !isAccount && matchPath("/contributors/*", location.pathname) !== null;
   const loginUrl = "/api/v1/auth/github/login?returnTo="+encodeURIComponent(location.pathname+location.search);
+  const isRanking = matchPath("/contributors", location.pathname) !== null;
   const isHome = location.pathname === "/" || location.pathname === "/dashboard";
 
   if(loading)return <main className="login-gate" role="status">正在确认登录状态…</main>;
   if(!session.authenticated)return <div className="app-shell dark-shell">
-    <header className="topbar"><Link className="brand" to="/">LeaderBoard</Link><a className="header-login login-gate-account" href={loginUrl}>GitHub 登录</a></header>
+    <header className="topbar"><Link className="brand" to="/"><img className="brand-logo" src={brandLogo} alt="" width={34} height={34} />LeaderBoard</Link><a className="header-login login-gate-account" href={loginUrl}>GitHub 登录</a></header>
     {location.pathname==='/join'?<main id="main-content"><IdentityVerificationPage/></main>:<main id="main-content" className="login-gate">
       <AppIcon name="github" size={40}/><h1>登录 LeaderBoard</h1><p>使用 GitHub 登录后，查看复旦开源项目、达人榜和比赛规则。</p>
       <a className="button primary-button" href={loginUrl}>使用 GitHub 登录</a><Link to="/join">首次使用？注册并加入达人榜</Link>
@@ -41,11 +44,11 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
   </div>;
 
   return (
-    <div className={`app-shell dark-shell${isHome ? " home-shell" : ""}`}>
+    <div className={`app-shell dark-shell${isHome ? " home-shell" : isRanking ? " ranking-shell" : ""}`}>
       <a className="skip-link" href="#main-content">跳至内容</a>
       <header className="topbar">
         <a className="brand" href="https://github.com/swiftgorge5-eng/LeaderBoard" target="_blank" rel="noreferrer" aria-label="LeaderBoard GitHub 仓库">
-          <span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 5v14h14M11 5v8h8" stroke="currentColor" strokeWidth="3" strokeLinecap="square"/></svg></span>
+          <img className="brand-logo" src={brandLogo} alt="" width={34} height={34} />
           <span className="brand-copy"><strong>LeaderBoard</strong></span>
         </a>
         <nav className="topnav" aria-label="主导航">
@@ -60,16 +63,16 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
               ? <img src={`https://github.com/${encodeURIComponent(session.login)}.png?size=80`} alt="" />
               : <AppIcon name="user" size={20}/>}
           </Link>
-          <Link className="mobile-home-brand" to="/">LeaderBoard</Link>
+          <Link className="mobile-home-brand" to="/"><img className="brand-logo" src={brandLogo} alt="" width={30} height={30} />LeaderBoard</Link>
           <Link className="mobile-round-link" to="/join" aria-label="加入达人榜"><AppIcon name="plus" size={21}/></Link>
           <Link className="mobile-round-link" to="/projects?search=1" aria-label="搜索项目"><AppIcon name="search" size={21}/></Link>
           {session.authenticated&&(session.isAdmin||session.canTag)&&<Link className="mobile-round-link" to="/admin" aria-label="管理后台"><AppIcon name="settings" size={21}/></Link>}
         </div>
-        <Link className="persistent-account" to={accountUrl} aria-label={`当前登录者 ${session.login}`}><AppIcon name="github" size={17}/><span>{session.login}</span></Link>
+        <Link className="persistent-account" to={accountUrl} aria-current={isAccount ? "page" : undefined} aria-label={`当前登录者 ${session.login}`}><AppIcon name="github" size={17}/><span>{session.login}</span></Link>
       </header>
 
-      <div className="workspace">
-        <aside className="sidebar" aria-label="侧边导航">
+      <div className={isRanking ? "workspace ranking-workspace" : "workspace"}>
+        {!isRanking && <aside className="sidebar" aria-label="侧边导航">
           <nav className="side-section" aria-label="功能导航">
             <NavLink className={navClass} to="/" end><span className="side-nav-icon"><AppIcon name="home"/></span><span className="side-nav-copy"><strong>首页</strong></span></NavLink>
             <NavLink className={navClass} to="/projects"><span className="side-nav-icon"><AppIcon name="grid"/></span><span className="side-nav-copy"><strong>复旦开源项目</strong></span></NavLink>
@@ -78,9 +81,9 @@ function AppContent({ api }: { api: LeadBoardApiClient }) {
             <Link className={navClass({ isActive: isAccount })} aria-current={isAccount ? "page" : undefined} to={accountUrl}><span className="side-nav-icon"><AppIcon name="user"/></span><span className="side-nav-copy"><strong>我的</strong></span></Link>
             {session.authenticated && (session.isAdmin||session.canTag) && <NavLink className={navClass} to="/admin"><span className="side-nav-icon"><AppIcon name="settings"/></span><span className="side-nav-copy"><strong>管理后台</strong></span></NavLink>}
           </nav>
-        </aside>
+        </aside>}
 
-        <main className="content-shell" id="main-content" tabIndex={-1}>
+        <main className={isRanking ? "ranking-main" : "content-shell"} id="main-content" tabIndex={-1}>
           <Routes>
             <Route path="/" element={<HomePage api={api} accountUrl={accountUrl} authenticated={session.authenticated} />} />
             <Route path="/dashboard" element={<HomePage api={api} accountUrl={accountUrl} authenticated={session.authenticated} />} />

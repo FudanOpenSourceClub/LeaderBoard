@@ -53,7 +53,7 @@ PR 必须包含：
 提交 PR 前至少保证：
 
 - 能安装依赖；
-- lint / typecheck / build 通过；
+- `npm run typecheck`、`npm test`、`npm run build` 通过（根目录没有 `lint` 脚本）；
 - 新增逻辑有基本测试；
 - 没有提交 Token、密码、`.env`；
 - README / docs 与行为一致。
@@ -147,3 +147,5 @@ PR Policy / PR metadata and linked issue
 ```
 
 所有 Review thread 应在 Merge 前 resolved。
+
+本地环境与登录问题见 [新成员 FAQ](docs/new-member-faq.md)。
